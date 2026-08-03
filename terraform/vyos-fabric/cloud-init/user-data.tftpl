@@ -1,0 +1,19 @@
+#cloud-config
+# VyOS honors a subset of cloud-config: ssh keys + a first-boot runcmd
+# that drops the real config.boot and reboots into it. See:
+# https://docs.vyos.io/en/latest/automation/cloud-init.html
+hostname: ${hostname}
+ssh_authorized_keys:
+  - ${ssh_key}
+
+write_files:
+  - path: /config/config.boot.new
+    permissions: '0644'
+    content: |
+${indent(6, boot_config)}
+
+runcmd:
+  - [ cp, /config/config.boot, /config/config.boot.pre-terraform.bak ]
+  - [ cp, /config/config.boot.new, /config/config.boot ]
+  - [ /opt/vyatta/sbin/vyatta-boot-config-loader ]
+  - [ reboot ]

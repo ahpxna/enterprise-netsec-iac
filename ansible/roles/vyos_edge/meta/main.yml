@@ -1,0 +1,17 @@
+---
+galaxy_info:
+  role_name: vyos_edge
+  author: nguyan
+  description: >
+    Pushes/reconciles VyOS device config (BGP/OSPF/VRRP/firewall) for the
+    real VM fabric (terraform/vyos-fabric), using vyos.vyos.vyos_config.
+    Idempotent: re-running with an unchanged config.boot is a no-op diff.
+  license: MIT
+  min_ansible_version: "2.15"
+  platforms:
+    - name: VyOS
+      versions: ["1.3", "1.4", "1.5"]
+dependencies: []
+collections:
+  - vyos.vyos
+  - ansible.netcommon

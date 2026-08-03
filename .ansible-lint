@@ -1,0 +1,14 @@
+---
+profile: production
+exclude_paths:
+  - .github/
+  - .venv/
+  - tests/batfish/snapshots/
+  - clab-*/
+skip_list:
+  - yaml[line-length]
+warn_list:
+  - experimental
+enable_list:
+  - no-log-password
+  - no-same-owner

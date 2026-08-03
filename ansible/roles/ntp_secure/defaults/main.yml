@@ -1,0 +1,3 @@
+---
+ntp_upstream_1: "{{ lookup('ansible.builtin.env', 'NTP_UPSTREAM_1') | default('time.cloudflare.com', true) }}"
+ntp_upstream_2: "{{ lookup('ansible.builtin.env', 'NTP_UPSTREAM_2') | default('nts.netnod.se', true) }}"

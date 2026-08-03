@@ -1,0 +1,13 @@
+---
+# Point each network device's logging at the SIEM collector.
+- name: Configure remote syslog target on the device (via rsyslog if present)
+  ansible.builtin.copy:
+    dest: /etc/rsyslog.d/70-cxyz-siem.conf
+    mode: "0644"
+    content: |
+      *.* @@172.16.50.10:1514
+  failed_when: false
+  notify: restart rsyslog
+
+- name: (handler defined in syslog_tls) reload logging
+  ansible.builtin.meta: noop

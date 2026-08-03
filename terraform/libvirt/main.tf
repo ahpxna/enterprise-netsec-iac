@@ -1,0 +1,63 @@
+# =====================================================================
+# Optional heavyweight path: a real KVM VM for the SIEM/DC-services host,
+# for when you outgrow containers (or move to the home Proxmox server).
+# The containerlab + docker path (make up) needs NONE of this — this is
+# here to show the "Terraform provisions infra, Ansible configures it"
+# separation cleanly, which is what reviewers look for.
+# =====================================================================
+
+resource "libvirt_pool" "cxyz" {
+  name = "cxyz"
+  type = "dir"
+  target { path = "/var/lib/libvirt/images/cxyz" }
+}
+
+resource "libvirt_volume" "dc_base" {
+  name   = "dc-base.qcow2"
+  pool   = libvirt_pool.cxyz.name
+  source = var.base_image_url
+  format = "qcow2"
+}
+
+resource "libvirt_volume" "dc_disk" {
+  name           = "dc-services.qcow2"
+  pool           = libvirt_pool.cxyz.name
+  base_volume_id = libvirt_volume.dc_base.id
+  size           = 21474836480 # 20 GiB
+}
+
+data "template_file" "user_data" {
+  template = file("${path.module}/cloud-init/user-data.yml")
+}
+
+resource "libvirt_cloudinit_disk" "dc" {
+  name      = "dc-cloudinit.iso"
+  pool      = libvirt_pool.cxyz.name
+  user_data = data.template_file.user_data.rendered
+}
+
+resource "libvirt_domain" "dc_services" {
+  name   = "cxyz-dc-services"
+  memory = var.siem_ram_mb
+  vcpu   = var.siem_vcpu
+
+  cloudinit = libvirt_cloudinit_disk.dc.id
+
+  network_interface {
+    network_name   = "default"
+    wait_for_lease = true
+  }
+
+  disk { volume_id = libvirt_volume.dc_disk.id }
+
+  console {
+    type        = "pty"
+    target_type = "serial"
+    target_port = "0"
+  }
+}
+
+output "dc_services_ip" {
+  description = "Feed this into ansible/inventory for the VM-based path"
+  value       = try(libvirt_domain.dc_services.network_interface[0].addresses[0], "pending")
+}

@@ -1,0 +1,31 @@
+---
+# Idempotent baseline hardening applied to every node.
+# Kept deliberately small and CIS-mapped; each task maps to a control test.
+
+- name: Ensure telnet server is absent (HRD-02 / CIS 1.6.5)
+  ansible.builtin.package:
+    name: "{{ item }}"
+    state: absent
+  loop: [telnetd, inetutils-telnetd]
+  failed_when: false
+
+- name: Enforce SSH idle timeout and root policy (HRD-01 / CIS 1.8, 5.x)
+  ansible.builtin.copy:
+    dest: /etc/ssh/sshd_config.d/10-cxyz-hardening.conf
+    mode: "0644"
+    content: |
+      # Managed by Ansible — CompanyXYZ-NG common_hardening
+      ClientAliveInterval {{ ssh_client_alive_interval }}
+      ClientAliveCountMax {{ ssh_client_alive_count_max }}
+      PermitRootLogin {{ ssh_permit_root_login }}
+      Protocol 2
+      Banner /etc/issue.net
+  notify: restart sshd
+  failed_when: false
+
+- name: Set login banner
+  ansible.builtin.copy:
+    dest: /etc/issue.net
+    content: "{{ login_banner }}\n"
+    mode: "0644"
+  failed_when: false

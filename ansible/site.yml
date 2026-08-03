@@ -1,0 +1,5 @@
+---
+# Master playbook: order matters (identity + time before logging).
+- import_playbook: playbooks/00-baseline.yml
+- import_playbook: playbooks/10-services.yml
+- import_playbook: playbooks/20-security.yml

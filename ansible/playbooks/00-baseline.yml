@@ -1,0 +1,7 @@
+---
+- name: Baseline hardening on every reachable node
+  hosts: all
+  gather_facts: true
+  roles:
+    - role: common_hardening
+      tags: [baseline, cis]

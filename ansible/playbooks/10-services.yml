@@ -1,0 +1,11 @@
+---
+- name: Data-center identity, time and logging services
+  hosts: servers
+  gather_facts: true
+  roles:
+    - role: radius_secure      # IDM-01, IDM-02  (PBKDF2, strong secret)
+      tags: [identity]
+    - role: ntp_secure         # TIME-01         (NTS/authenticated)
+      tags: [time]
+    - role: syslog_tls         # DET-02          (TLS log transport)
+      tags: [logging]

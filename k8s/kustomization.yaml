@@ -1,0 +1,24 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: cxyz-security
+resources:
+  - 00-namespace.yaml
+  # 01-secrets.yaml   <- copy from 01-secrets.yaml.example first, then uncomment
+  - 10-wazuh.yaml
+  - 20-suricata.yaml
+  - 30-traefik.yaml
+  - 31-authentik.yaml
+  - 32-wireguard.yaml
+configMapGenerator:
+  - name: cxyz-wazuh-decoders
+    files:
+      - ../docker/siem/decoders/cxyz_decoders.xml
+  - name: cxyz-wazuh-rules
+    files:
+      - ../docker/siem/rules/cxyz_rules.xml
+  - name: cxyz-suricata-config
+    files:
+      - suricata.yaml=../docker/ids/suricata.yaml
+  - name: cxyz-suricata-rules
+    files:
+      - ../docker/ids/rules/cxyz.rules

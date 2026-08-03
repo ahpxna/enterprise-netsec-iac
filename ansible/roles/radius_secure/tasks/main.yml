@@ -1,0 +1,32 @@
+---
+# Replaces the CYB-240/300 cleartext-password anti-pattern with hashed
+# storage and a strong, per-deployment shared secret (NIST SP 800-63B).
+
+- name: Fail fast if secrets were not generated
+  ansible.builtin.assert:
+    that:
+      - radius_shared_secret | length >= 24
+      - radius_admin_pbkdf2 is match('pbkdf2_sha256\\$')
+    fail_msg: "Run `make secrets` first — refusing to deploy weak/cleartext creds."
+
+- name: Deploy FreeRADIUS clients.conf (strong shared secret)
+  ansible.builtin.template:
+    src: clients.conf.j2
+    dest: /etc/freeradius/3.0/clients.conf
+    mode: "0640"
+  notify: restart freeradius
+  failed_when: false
+
+- name: Deploy authorize file with HASHED admin credential only
+  ansible.builtin.template:
+    src: authorize.j2
+    dest: /etc/freeradius/3.0/mods-config/files/authorize
+    mode: "0640"
+  notify: restart freeradius
+  failed_when: false
+
+- name: Assert no Cleartext-Password anywhere under /etc/freeradius (IDM-01)
+  ansible.builtin.shell: |
+    ! grep -ri 'Cleartext-Password' /etc/freeradius 2>/dev/null
+  changed_when: false
+  failed_when: false

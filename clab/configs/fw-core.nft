@@ -1,0 +1,43 @@
+#!/usr/sbin/nft -f
+# =====================================================================
+# fw-core  —  perimeter firewall (was ASAv-I)
+# NIST SP 800-41r1: default-deny, least privilege, explicit allow + log.
+# Zones: OUTSIDE(edge) | INSIDE(core/campus) | DC(server1)
+# Every DROP is logged with a prefix so the SIEM can pick it up.
+# =====================================================================
+flush ruleset
+
+table inet cxyz {
+    # named sets keep policy readable and diffable in code review
+    set mgmt_vlan   { type ipv4_addr; flags interval; elements = { 192.168.40.0/24 } }
+    set user_vlans  { type ipv4_addr; flags interval; elements = { 192.168.10.0/24, 192.168.20.0/24, 192.168.30.0/24 } }
+    set dc_hosts    { type ipv4_addr; elements = { 172.16.50.1 } }
+
+    chain inbound {
+        type filter hook input priority 0; policy drop;
+        ct state established,related accept
+        iif "lo" accept
+        # SSH to the firewall ONLY from the management VLAN (CIS 1.6.1 intent)
+        ip saddr @mgmt_vlan tcp dport 22 accept
+        ip protocol icmp icmp type echo-request accept
+        log prefix "CXYZ-FWCORE-IN-DROP " flags all counter drop
+    }
+
+    chain forward {
+        type filter hook forward priority 0; policy drop;
+        ct state established,related accept
+
+        # ---- INTENTIONAL allows (least privilege) ----
+        # Management VLAN -> DC services (SSH/RADIUS/Syslog/NTP/DNS)
+        ip saddr @mgmt_vlan ip daddr @dc_hosts tcp dport { 22 } accept
+        ip saddr @mgmt_vlan ip daddr @dc_hosts udp dport { 53, 123, 514, 1812, 1813 } accept
+        # User VLANs -> DC DNS/NTP only (NOT ssh, NOT radius)
+        ip saddr @user_vlans ip daddr @dc_hosts udp dport { 53, 123 } accept
+        # Anyone internal -> Internet (egress)
+        ip saddr { 192.168.0.0/16, 172.16.0.0/16 } oifname "eth1" accept
+
+        # ---- The CYB-240 "prohibited scan" is denied AND logged here ----
+        # PC1 (user VLAN) -> Server1 tcp/22,23,80  hits this drop:
+        log prefix "CXYZ-FWCORE-FWD-DROP " flags all counter drop
+    }
+}

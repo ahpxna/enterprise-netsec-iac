@@ -1,0 +1,41 @@
+# ---- Secrets: NEVER commit ----
+.env
+*.key
+*.pem
+*.p12
+ansible/group_vars/all/vault.yml
+ansible/inventory/*.local.yml
+wireguard/keys/
+docker/zero-trust-gateway/secrets/
+*.decrypted.*
+
+# ---- Terraform ----
+.terraform/
+.terraform.lock.hcl
+*.tfstate
+*.tfstate.*
+*.tfvars
+!*.tfvars.example
+crash.log
+
+# ---- Ansible ----
+*.retry
+ansible/.facts_cache/
+ansible/collections/
+
+# ---- Containerlab ----
+clab-*/
+.clab.*.bak
+
+# ---- Evidence artifacts (regenerated, not source of truth) ----
+evidence/runs/
+tests/batfish/snapshots/*/batfish_state/
+
+# ---- Python / tooling ----
+__pycache__/
+.venv/
+venv/
+.pytest_cache/
+*.pyc
+.DS_Store
+._*

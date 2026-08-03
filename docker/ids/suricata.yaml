@@ -1,0 +1,22 @@
+%YAML 1.1
+---
+# Trimmed Suricata config for the lab. EVE JSON -> shipped to Wazuh.
+vars:
+  address-groups:
+    HOME_NET: "[192.168.0.0/16,172.16.0.0/16,195.1.1.0/24]"
+    EXTERNAL_NET: "!$HOME_NET"
+default-rule-path: /var/lib/suricata/rules
+rule-files:
+  - cxyz.rules
+af-packet:
+  - interface: any
+outputs:
+  - eve-log:
+      enabled: yes
+      filetype: regular
+      filename: /var/log/suricata/eve.json
+      types:
+        - alert
+        - dns
+        - http
+        - flow

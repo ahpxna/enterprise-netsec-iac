@@ -1,0 +1,10 @@
+<!-- Decode the nftables log prefixes emitted by fw-core / fw-dmz -->
+<decoder name="cxyz-nft">
+  <prefix>CXYZ-</prefix>
+</decoder>
+
+<decoder name="cxyz-nft-fields">
+  <parent>cxyz-nft</parent>
+  <regex>SRC=(\S+) DST=(\S+).*PROTO=(\S+)(?: SPT=(\d+) DPT=(\d+))?</regex>
+  <order>srcip,dstip,protocol,srcport,dstport</order>
+</decoder>

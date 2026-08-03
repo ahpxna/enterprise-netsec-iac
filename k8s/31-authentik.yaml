@@ -1,0 +1,124 @@
+# =====================================================================
+# Authentik (SSO/IdP) on Kubernetes — same images/env as docker-compose,
+# plus an IngressRoute + forward-auth Middleware so any other
+# IngressRoute in this namespace can require login by referencing
+# `cxyz-security-authentik-forwardauth@kubernetescrd` in its middlewares.
+# =====================================================================
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: authentik-postgres
+  namespace: cxyz-security
+spec:
+  serviceName: authentik-postgres
+  replicas: 1
+  selector:
+    matchLabels: { app: authentik-postgres }
+  template:
+    metadata:
+      labels: { app: authentik-postgres }
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:16-alpine
+          env:
+            - name: POSTGRES_PASSWORD
+              valueFrom: { secretKeyRef: { name: cxyz-security-secrets, key: AUTHENTIK_POSTGRES_PASSWORD } }
+            - { name: POSTGRES_DB, value: authentik }
+          volumeMounts: [{ name: data, mountPath: /var/lib/postgresql/data }]
+  volumeClaimTemplates:
+    - metadata: { name: data }
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources: { requests: { storage: 5Gi } }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: authentik-postgres
+  namespace: cxyz-security
+spec:
+  selector: { app: authentik-postgres }
+  ports: [{ port: 5432 }]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: authentik-redis
+  namespace: cxyz-security
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: authentik-redis } }
+  template:
+    metadata: { labels: { app: authentik-redis } }
+    spec:
+      containers:
+        - { name: redis, image: redis:7-alpine, ports: [{ containerPort: 6379 }] }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: authentik-redis
+  namespace: cxyz-security
+spec:
+  selector: { app: authentik-redis }
+  ports: [{ port: 6379 }]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: authentik-server
+  namespace: cxyz-security
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: authentik-server } }
+  template:
+    metadata: { labels: { app: authentik-server } }
+    spec:
+      containers:
+        - name: authentik-server
+          image: ghcr.io/goauthentik/server:2024.8
+          args: ["server"]
+          env:
+            - name: AUTHENTIK_SECRET_KEY
+              valueFrom: { secretKeyRef: { name: cxyz-security-secrets, key: AUTHENTIK_SECRET_KEY } }
+            - { name: AUTHENTIK_POSTGRESQL__HOST, value: authentik-postgres }
+            - name: AUTHENTIK_POSTGRESQL__PASSWORD
+              valueFrom: { secretKeyRef: { name: cxyz-security-secrets, key: AUTHENTIK_POSTGRES_PASSWORD } }
+          ports: [{ containerPort: 9000 }]
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: authentik-server
+  namespace: cxyz-security
+spec:
+  selector: { app: authentik-server }
+  ports: [{ port: 9000 }]
+---
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: authentik-forwardauth
+  namespace: cxyz-security
+spec:
+  forwardAuth:
+    address: "http://authentik-server.cxyz-security.svc:9000/outpost.goauthentik.io/auth/traefik"
+    trustForwardHeader: true
+    authResponseHeaders:
+      - X-authentik-username
+      - X-authentik-groups
+      - X-authentik-email
+---
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: authentik
+  namespace: cxyz-security
+spec:
+  entryPoints: [websecure]
+  routes:
+    - match: "Host(`sso.companyxyz.lab`)"
+      kind: Rule
+      services:
+        - { name: authentik-server, port: 9000 }

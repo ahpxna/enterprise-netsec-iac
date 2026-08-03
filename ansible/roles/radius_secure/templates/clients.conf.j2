@@ -1,0 +1,9 @@
+# Managed by Ansible. Shared secret comes from .env (>=24 chars, unique).
+{% for c in radius_clients %}
+client {{ c.name }} {
+    ipaddr = {{ c.ip }}
+    secret = {{ radius_shared_secret }}
+    require_message_authenticator = yes
+    nas_type = other
+}
+{% endfor %}

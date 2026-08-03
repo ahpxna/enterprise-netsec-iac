@@ -1,0 +1,35 @@
+---
+# Real config push to actual VyOS routers/firewalls over network_cli.
+# Contrast with the container path (clab startup-config, no Ansible
+# needed for FRR/nftables) — this is the "real NOS" path the user asked
+# for, so config changes go through Ansible + git history like everything
+# else in the repo, not clicked in by hand.
+
+- name: Determine this node's config.boot path
+  ansible.builtin.set_fact:
+    _vyos_boot_file: "{{ vyos_boot_config_dir }}/{{ inventory_hostname }}.boot"
+
+- name: Fail fast if there's no config.boot for this inventory_hostname
+  ansible.builtin.stat:
+    path: "{{ _vyos_boot_file }}"
+  delegate_to: localhost
+  become: false
+  register: _vyos_boot_stat
+
+- ansible.builtin.assert:
+    that: _vyos_boot_stat.stat.exists
+    fail_msg: >
+      No {{ _vyos_boot_file }} found. inventory_hostname must match one of
+      the config.boot files under terraform/vyos-fabric/configs/
+      (edge, fw-core, fw-dmz, core, dist1, dist2).
+
+- name: Push declarative config (curly-brace format, matches config.boot)
+  vyos.vyos.vyos_config:
+    src: "{{ _vyos_boot_file }}"
+    save: "{{ vyos_save_config }}"
+  register: _vyos_result
+
+- name: Show what changed (empty on a clean re-run — proves idempotency)
+  ansible.builtin.debug:
+    msg: "{{ _vyos_result.commands | default([]) }}"
+  when: _vyos_result.changed

@@ -1,0 +1,4 @@
+---
+- name: restart chrony
+  ansible.builtin.service: { name: chrony, state: restarted }
+  failed_when: false

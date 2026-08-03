@@ -1,0 +1,11 @@
+# Local IDS rules aligned to the CompanyXYZ threat model.
+alert tcp $HOME_NET any -> 172.16.50.0/24 22 (msg:"CXYZ SSH to DC from campus"; \
+  flow:to_server; sid:1000001; rev:1; classtype:attempted-recon;)
+alert tcp any any -> 172.16.50.0/24 [23] (msg:"CXYZ Telnet attempt (should be disabled)"; \
+  sid:1000002; rev:1; classtype:policy-violation;)
+alert tcp $HOME_NET any -> 172.16.50.1 1812 (msg:"CXYZ direct RADIUS probe"; \
+  sid:1000003; rev:1; classtype:attempted-recon;)
+# Nmap SYN-scan heuristic: many SYNs, few completions
+alert tcp $HOME_NET any -> $HOME_NET any (msg:"CXYZ possible SYN scan"; \
+  flags:S; threshold:type both,track by_src,count 30,seconds 5; \
+  sid:1000004; rev:1; classtype:attempted-recon;)

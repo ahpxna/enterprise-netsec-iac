@@ -1,0 +1,13 @@
+---
+collections:
+  - name: community.docker
+    version: ">=3.10.0"
+  - name: community.general
+    version: ">=9.0.0"
+  - name: ansible.posix
+    version: ">=1.5.0"
+  # Needed only for the real VM fabric (terraform/vyos-fabric) — pushes
+  # config to actual VyOS routers/firewalls over network_cli, not SSH-
+  # into-Linux like the container path.
+  - name: vyos.vyos
+    version: ">=4.0.0"

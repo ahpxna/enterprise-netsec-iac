@@ -1,0 +1,4 @@
+---
+- name: Note — Suricata runs as a container; this role validates rule presence
+  ansible.builtin.debug:
+    msg: "Suricata sensor managed via docker-compose (ids profile). Rules in docker/ids/rules."

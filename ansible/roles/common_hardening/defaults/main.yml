@@ -1,0 +1,5 @@
+---
+ssh_client_alive_interval: 300     # CIS 1.8 — <= 5 min idle
+ssh_client_alive_count_max: 0
+ssh_permit_root_login: "no"
+login_banner: "Authorized access only. Activity is logged and monitored."

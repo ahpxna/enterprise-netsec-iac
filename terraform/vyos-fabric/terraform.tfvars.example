@@ -1,0 +1,12 @@
+# Copy to terraform.tfvars and fill in real values before `terraform apply`.
+libvirt_uri     = "qemu:///system"
+vyos_image_path = "/var/lib/libvirt/images/base/vyos-1.4-rolling-cloud-init.qcow2"
+ssh_public_key  = "ssh-ed25519 AAAA...your-key... you@laptop"
+
+# Per-node overrides only needed if you have a licensed Cisco image to
+# substitute for a specific node, e.g.:
+# nodes = {
+#   edge = { mgmt_ip = "10.1.1.10", vcpu = 2, memory_mb = 4096,
+#            boot_config = "configs/edge.boot",
+#            image = "/var/lib/libvirt/images/base/csr1000v.qcow2" }
+# }

@@ -1,0 +1,14 @@
+---
+- name: Detection + remote-access controls
+  hosts: servers
+  roles:
+    - role: suricata           # IDS sensor config
+      tags: [ids]
+    - role: wireguard_vpn      # VPN-01
+      tags: [vpn]
+
+- name: Ship device logs to the SIEM
+  hosts: routers:firewalls
+  roles:
+    - role: wazuh_agent
+      tags: [siem]

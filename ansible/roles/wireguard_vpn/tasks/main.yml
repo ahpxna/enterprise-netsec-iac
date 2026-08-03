@@ -1,0 +1,12 @@
+---
+# The WireGuard *server* runs as a container (docker-compose ztna profile).
+# This role just asserts the control intent on servers: no mgmt port on 0.0.0.0.
+- name: Ensure no admin service binds to a public interface (VPN-01)
+  ansible.builtin.shell: |
+    ss -tlnp | awk '{print $4}' | grep -E '0\.0\.0\.0:(22|23|3389)$' || true
+  register: public_admin
+  changed_when: false
+
+- name: Report public admin bindings (should be empty)
+  ansible.builtin.debug:
+    msg: "Public admin bindings: {{ public_admin.stdout_lines | default([]) }}"

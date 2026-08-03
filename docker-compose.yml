@@ -1,0 +1,156 @@
+# =====================================================================
+# Security services plane (SIEM / IDS / Zero-Trust gateway / DMZ app).
+# Profiles let you bring up only what you need:
+#   docker compose --profile siem up -d
+#   docker compose --profile ztna up -d
+# The network fabric itself is containerlab (see clab/); this file is the
+# "blue team + edge services" layer that consumes its logs.
+# =====================================================================
+name: cxyz-security
+
+networks:
+  cxyz_dc:      # data-center services network (SIEM lives here, 172.16.50.0/24)
+    driver: bridge
+    ipam: { config: [{ subnet: 172.16.50.0/24 }] }
+  cxyz_edge:    # public-facing edge network for the gateway
+    driver: bridge
+
+services:
+  # -------------------- SIEM: Wazuh single-node --------------------
+  wazuh.manager:
+    profiles: ["siem"]
+    image: wazuh/wazuh-manager:4.9.0
+    hostname: wazuh.manager
+    restart: unless-stopped
+    environment:
+      - INDEXER_URL=https://wazuh.indexer:9200
+      - INDEXER_USERNAME=admin
+      - INDEXER_PASSWORD=${WAZUH_INDEXER_PASSWORD:-changeme}
+    ports: ["1514:1514/udp", "1515:1515", "514:514/udp", "55000:55000"]
+    volumes:
+      - ./docker/siem/decoders:/var/ossec/etc/decoders/local:ro
+      - ./docker/siem/rules:/var/ossec/etc/rules/local:ro
+      - ./docker/siem/ossec.conf:/wazuh-config-mount/etc/ossec.conf:ro
+    networks: { cxyz_dc: { ipv4_address: 172.16.50.10 } }
+
+  wazuh.indexer:
+    profiles: ["siem"]
+    image: wazuh/wazuh-indexer:4.9.0
+    hostname: wazuh.indexer
+    restart: unless-stopped
+    environment:
+      - OPENSEARCH_JAVA_OPTS=-Xms1g -Xmx1g
+    ulimits: { memlock: { soft: -1, hard: -1 } }
+    networks: [cxyz_dc]
+
+  wazuh.dashboard:
+    profiles: ["siem"]
+    image: wazuh/wazuh-dashboard:4.9.0
+    hostname: wazuh.dashboard
+    restart: unless-stopped
+    depends_on: [wazuh.indexer]
+    ports: ["5601:5601"]
+    environment:
+      - INDEXER_USERNAME=admin
+      - INDEXER_PASSWORD=${WAZUH_INDEXER_PASSWORD:-changeme}
+      - DASHBOARD_PASSWORD=${WAZUH_DASHBOARD_PASSWORD:-changeme}
+    networks: [cxyz_dc]
+
+  # -------------------- IDS: Suricata (AF-PACKET) ------------------
+  suricata:
+    profiles: ["ids"]
+    image: jasonish/suricata:latest
+    hostname: suricata
+    restart: unless-stopped
+    cap_add: [NET_ADMIN, NET_RAW, SYS_NICE]
+    network_mode: host          # mirror/monitor the host bridge span
+    volumes:
+      - ./docker/ids/suricata.yaml:/etc/suricata/suricata.yaml:ro
+      - ./docker/ids/rules:/var/lib/suricata/rules:ro
+      - ./docker/ids/logs:/var/log/suricata
+    command: ["-i", "any", "-v"]
+
+  # -------------------- Zero-Trust gateway -------------------------
+  traefik:
+    profiles: ["ztna"]
+    image: traefik:v3.1
+    hostname: traefik
+    restart: unless-stopped
+    command:
+      - --providers.docker=true
+      - --providers.docker.exposedbydefault=false
+      - --entrypoints.web.address=:80
+      - --entrypoints.websecure.address=:443
+      - --api.dashboard=true
+    ports: ["80:80", "443:443", "8080:8080"]
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./docker/zero-trust-gateway/dynamic.yml:/etc/traefik/dynamic.yml:ro
+    networks: [cxyz_edge]
+
+  authentik-server:
+    profiles: ["ztna"]
+    image: ghcr.io/goauthentik/server:2024.8
+    hostname: authentik
+    restart: unless-stopped
+    command: server
+    environment:
+      AUTHENTIK_SECRET_KEY: ${AUTHENTIK_SECRET_KEY:-changeme}
+      AUTHENTIK_POSTGRESQL__HOST: authentik-postgres
+      AUTHENTIK_POSTGRESQL__PASSWORD: ${AUTHENTIK_POSTGRES_PASSWORD:-changeme}
+    depends_on: [authentik-postgres, authentik-redis]
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.authentik.rule=Host(`sso.${ORG_DOMAIN:-companyxyz.lab}`)
+      - traefik.http.routers.authentik.entrypoints=websecure
+    networks: [cxyz_edge]
+
+  authentik-postgres:
+    profiles: ["ztna"]
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_PASSWORD: ${AUTHENTIK_POSTGRES_PASSWORD:-changeme}
+      POSTGRES_DB: authentik
+    volumes: ["authentik_db:/var/lib/postgresql/data"]
+    networks: [cxyz_edge]
+
+  authentik-redis:
+    profiles: ["ztna"]
+    image: redis:7-alpine
+    restart: unless-stopped
+    networks: [cxyz_edge]
+
+  wireguard:
+    profiles: ["ztna"]
+    image: linuxserver/wireguard:latest
+    hostname: wireguard
+    restart: unless-stopped
+    cap_add: [NET_ADMIN, SYS_MODULE]
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - SERVERPORT=${WG_SERVER_PORT:-51820}
+      - PEERS=${WG_PEER_COUNT:-4}
+      - SERVERURL=${WG_ENDPOINT:-auto}
+    ports: ["51820:51820/udp"]
+    sysctls: ["net.ipv4.conf.all.src_valid_mark=1"]
+    volumes: ["./wireguard/config:/config"]
+    networks: [cxyz_edge]
+
+  # -------------------- DMZ demo app (behind gateway) --------------
+  dmz-web:
+    profiles: ["dmz"]
+    image: nginxinc/nginx-unprivileged:stable-alpine
+    hostname: dmz-web
+    restart: unless-stopped
+    ports: ["8081:8080"]
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.dmzweb.rule=Host(`app.${ORG_DOMAIN:-companyxyz.lab}`)
+      - traefik.http.routers.dmzweb.entrypoints=websecure
+      - traefik.http.routers.dmzweb.middlewares=authentik@docker
+    networks: [cxyz_edge]
+
+volumes:
+  authentik_db:
