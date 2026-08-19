@@ -12,7 +12,7 @@ af-packet:
   - interface: any
 outputs:
   - eve-log:
-      enabled: yes
+      enabled: true
       filetype: regular
       filename: /var/log/suricata/eve.json
       types:

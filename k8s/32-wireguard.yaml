@@ -4,6 +4,7 @@
 # mirrors real-world practice of binding it to a node's host network
 # directly, same as most bare-metal WireGuard-on-k8s setups).
 # =====================================================================
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:

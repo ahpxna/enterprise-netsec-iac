@@ -16,6 +16,7 @@
 #   severity      risk if this control fails
 # =====================================================================
 
+---
 controls:
   - id: SEG-01
     framework: [NIST-800-41r1, ISO-27002-8.22]

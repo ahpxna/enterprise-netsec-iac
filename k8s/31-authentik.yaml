@@ -4,6 +4,7 @@
 # IngressRoute in this namespace can require login by referencing
 # `cxyz-security-authentik-forwardauth@kubernetescrd` in its middlewares.
 # =====================================================================
+---
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:

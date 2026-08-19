@@ -13,5 +13,8 @@ rules:
     check-keys: false
   comments:
     min-spaces-from-content: 1
+    # Cloud-init requires the exact first-line marker `#cloud-config`.
+    ignore: |
+      terraform/libvirt/cloud-init/user-data.yml
   braces:
     max-spaces-inside: 1

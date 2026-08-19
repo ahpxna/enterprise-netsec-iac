@@ -6,6 +6,7 @@
 # The network fabric itself is containerlab (see clab/); this file is the
 # "blue team + edge services" layer that consumes its logs.
 # =====================================================================
+---
 name: cxyz-security
 
 networks:

@@ -8,6 +8,7 @@
 # file (see k8s/README.md for the exact command):
 #   kubectl apply -f https://raw.githubusercontent.com/traefik/traefik/v3.1/docs/content/reference/dynamic-configuration/kubernetes-crd-definition-v1.yml
 # =====================================================================
+---
 apiVersion: v1
 kind: ServiceAccount
 metadata:

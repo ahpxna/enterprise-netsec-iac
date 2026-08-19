@@ -1,6 +1,7 @@
 # Traefik dynamic config: forward-auth middleware sends every request to
 # Authentik before it reaches an internal app. This is the "zero trust"
 # gate for the home-cloud / SME use case (parents upload to NAS via SSO+VPN).
+---
 http:
   middlewares:
     authentik:

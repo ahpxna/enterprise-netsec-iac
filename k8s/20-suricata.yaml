@@ -4,6 +4,7 @@
 # network_mode: host). ConfigMaps generated from docker/ids/ (see
 # k8s/README.md) — same rule file (cxyz.rules), not re-authored.
 # =====================================================================
+---
 apiVersion: apps/v1
 kind: DaemonSet
 metadata:

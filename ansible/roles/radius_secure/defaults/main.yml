@@ -4,5 +4,5 @@ radius_shared_secret: "{{ lookup('ansible.builtin.env', 'RADIUS_SHARED_SECRET') 
 radius_admin_pbkdf2: "{{ lookup('ansible.builtin.env', 'RADIUS_ADMIN_PBKDF2') }}"
 radius_clients:
   - { name: fw-core, ip: 10.1.1.20 }
-  - { name: core,    ip: 10.1.1.1 }
-  - { name: edge,    ip: 10.1.1.10 }
+  - { name: core, ip: 10.1.1.1 }
+  - { name: edge, ip: 10.1.1.10 }

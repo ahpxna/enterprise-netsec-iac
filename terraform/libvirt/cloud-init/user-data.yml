@@ -1,5 +1,6 @@
 #cloud-config
 # Minimal, hardened base. Real config is pushed by Ansible afterwards.
+---
 hostname: cxyz-dc-services
 users:
   - name: ansible
