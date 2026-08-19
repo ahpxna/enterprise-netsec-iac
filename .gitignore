@@ -31,6 +31,9 @@ clab-*/
 evidence/runs/
 tests/batfish/snapshots/*/batfish_state/
 
+# ---- Local reference documents ----
+docs/*.pdf
+
 # ---- Python / tooling ----
 __pycache__/
 .venv/
