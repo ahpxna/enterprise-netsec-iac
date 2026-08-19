@@ -3,7 +3,12 @@
  */
 interfaces {
     ethernet eth0 { address 10.255.0.6/30;   description "to-edge" }
-    ethernet eth1 { address 195.1.1.161/29;  description "to-dmz-web" }
+    ethernet eth1 { address 195.1.1.162/29;  description "to-dmz-web" }
+    ethernet eth2 {
+        address dhcp
+        description "management"
+        dhcp-options { no-default-route }
+    }
 }
 firewall {
     group {

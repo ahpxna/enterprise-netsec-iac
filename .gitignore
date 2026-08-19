@@ -29,10 +29,11 @@ clab-*/
 
 # ---- Evidence artifacts (regenerated, not source of truth) ----
 evidence/runs/
+evidence/COMPLIANCE-REPORT.md
 tests/batfish/snapshots/*/batfish_state/
 
 # ---- Local reference documents ----
-docs/*.pdf
+docs/
 
 # ---- Python / tooling ----
 __pycache__/

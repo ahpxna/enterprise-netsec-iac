@@ -10,5 +10,10 @@ interfaces {
             }
         }
     }
+    ethernet eth1 {
+        address dhcp
+        description "management"
+        dhcp-options { no-default-route }
+    }
 }
 system { host-name dist1 }

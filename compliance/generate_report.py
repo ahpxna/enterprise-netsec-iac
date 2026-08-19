@@ -52,7 +52,7 @@ def status_for(control, evidence):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--out", default="docs/COMPLIANCE-REPORT.md")
+    ap.add_argument("--out", default="evidence/COMPLIANCE-REPORT.md")
     args = ap.parse_args()
 
     controls = yaml.safe_load((ROOT / "compliance" / "controls.yaml").read_text())["controls"]

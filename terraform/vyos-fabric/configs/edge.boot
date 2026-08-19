@@ -25,6 +25,11 @@ interfaces {
         address 10.255.0.5/30       /* to fw-dmz */
         description "to-fw-dmz"
     }
+    ethernet eth4 {
+        address dhcp
+        description "management"
+        dhcp-options { no-default-route }
+    }
 }
 protocols {
     bgp 65001 {
@@ -44,7 +49,7 @@ protocols {
         address-family {
             ipv4-unicast {
                 network 195.1.1.0/24 { }
-                /* outbound filter: never leak internal routes beyond ours */
+                /* outbound filter: advertise only the approved enterprise prefixes */
                 route-map { export ONLY-OURS }
             }
         }

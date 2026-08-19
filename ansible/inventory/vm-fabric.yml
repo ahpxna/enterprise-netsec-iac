@@ -1,25 +1,41 @@
-# Inventory for the REAL VM fabric (terraform/vyos-fabric). Uses
-# network_cli over SSH to talk to actual VyOS CLI — different connection
-# model from inventory/hosts.yml (which uses the docker connection
-# plugin against containerlab nodes).
+# Inventory for the complete Path B VM topology. VyOS nodes use network_cli;
+# Linux endpoint VMs use regular SSH with the cloud-init `ansible` account.
 #
 # IPs here must match `terraform output node_mgmt_ips` after `terraform
 # apply` in terraform/vyos-fabric/. Update these values after changing var.nodes.
 ---
 all:
   vars:
-    ansible_connection: ansible.netcommon.network_cli
-    ansible_network_os: vyos.vyos.vyos
-    ansible_user: vyos
     ansible_ssh_common_args: '-o StrictHostKeyChecking=no'
   children:
-    vyos_routers:
-      hosts:
-        edge: { ansible_host: 10.1.1.10 }
-        core: { ansible_host: 10.1.1.1 }
-        dist1: { ansible_host: 10.1.1.2 }
-        dist2: { ansible_host: 10.1.1.3 }
-    vyos_firewalls:
-      hosts:
-        fw-core: { ansible_host: 10.1.1.20 }
-        fw-dmz: { ansible_host: 10.1.1.30 }
+    vyos_fabric:
+      vars:
+        ansible_connection: ansible.netcommon.network_cli
+        ansible_network_os: vyos.vyos.vyos
+        ansible_user: vyos
+      children:
+        vyos_routers:
+          hosts:
+            edge: { ansible_host: 10.1.1.10 }
+            core: { ansible_host: 10.1.1.11 }
+            dist1: { ansible_host: 10.1.1.2 }
+            dist2: { ansible_host: 10.1.1.3 }
+            isp1: { ansible_host: 10.1.1.201 }
+            isp2: { ansible_host: 10.1.1.202 }
+        vyos_firewalls:
+          hosts:
+            fw-core: { ansible_host: 10.1.1.20 }
+            fw-dmz: { ansible_host: 10.1.1.30 }
+    linux_endpoints:
+      vars:
+        ansible_connection: ssh
+        ansible_user: ansible
+      children:
+        clients:
+          hosts:
+            pc1: { ansible_host: 10.1.1.111 }
+            pc4: { ansible_host: 10.1.1.144 }
+            dmz-web: { ansible_host: 10.1.1.61 }
+        servers:
+          hosts:
+            server1: { ansible_host: 10.1.1.50 }

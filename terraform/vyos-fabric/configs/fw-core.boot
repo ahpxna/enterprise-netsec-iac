@@ -7,6 +7,11 @@
 interfaces {
     ethernet eth0 { address 10.255.0.2/30; description "to-edge" }
     ethernet eth1 { address 10.255.0.9/30;  description "to-core" }
+    ethernet eth2 {
+        address dhcp
+        description "management"
+        dhcp-options { no-default-route }
+    }
 }
 firewall {
     group {

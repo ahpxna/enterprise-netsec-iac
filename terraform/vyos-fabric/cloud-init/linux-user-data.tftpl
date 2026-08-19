@@ -1,0 +1,23 @@
+#cloud-config
+hostname: ${hostname}
+manage_etc_hosts: true
+
+users:
+  - default
+  - name: ansible
+    groups: [sudo]
+    shell: /bin/bash
+    sudo: ALL=(ALL) NOPASSWD:ALL
+    ssh_authorized_keys:
+      - ${ssh_key}
+
+ssh_pwauth: false
+package_update: true
+packages:
+  - curl
+  - netcat-openbsd
+  - python3
+  - rsyslog
+
+runcmd:
+  - [systemctl, enable, --now, ssh]

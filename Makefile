@@ -111,7 +111,7 @@ k8s-status: ## Show pod/service status for the k8s security plane
 
 .PHONY: report
 report: ## Generate compliance report from controls.yaml + latest evidence
-	python compliance/generate_report.py --out docs/COMPLIANCE-REPORT.md
+	python compliance/generate_report.py --out evidence/COMPLIANCE-REPORT.md
 
 .PHONY: audit
 audit: batfish validate attack report ## Everything an auditor would ask for

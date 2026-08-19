@@ -1,136 +1,161 @@
 # CompanyXYZ-NG — Enterprise Network Security as Code
 
-> A production-shaped, fully virtual enterprise network with a real blue-team
-> stack (SIEM + IDS + Zero-Trust gateway), hardened by Ansible, provisioned by
-> Terraform, and **validated by tests that emit evidence** — so every
-> compliance claim is reproducible, not asserted.
+CompanyXYZ-NG is a reproducible enterprise network-security lab built from
+open-source infrastructure components. The repository combines a three-tier
+routed fabric, DMZ isolation, dual-ISP edge routing, centralized logging,
+intrusion detection, zero-trust access, infrastructure provisioning,
+configuration management, and evidence-backed compliance checks.
 
-Implements a three-tier + DMZ + dual-ISP enterprise design using open,
-laptop-friendly tooling: **containerlab + FRRouting +
-nftables** for the fabric, and **Wazuh / Suricata / Traefik / Authentik /
-WireGuard** for security.
+The default fabric uses containerlab, FRRouting, and nftables. The security
+plane uses Wazuh, Suricata, Traefik, Authentik, and WireGuard. Terraform and
+Ansible provide optional VM-based deployment and day-2 configuration paths.
 
-> **Validation status (2026-08-18): Path A is complete.** It was deployed on
-> an external Linux lab host, Ansible completed with `failed=0`, the live
-> validation suite passed **10/10**, and that host's generated compliance
-> report showed **10/10 PASS**. The evidence bundle remains on that host, so
-> the generated report committed in this checkout intentionally remains the
-> no-evidence baseline. Path B is still in progress; Path C is unverified.
+## Validation status
+
+| Path | Scope | Status |
+|---|---|---|
+| A | containerlab fabric + Docker Compose security plane | Complete on an external Linux lab host |
+| B | Terraform/libvirt + VyOS VM fabric | In progress |
+| C | Kubernetes security plane | Manifests implemented; live deployment unverified |
+
+The Path A validation run completed on 2026-08-18. Ansible reported
+`failed=0`, the live validation suite passed 10/10 checks, and the compliance
+report generated on the lab host showed 10/10 PASS. The corresponding evidence
+bundle remains on that host. Generated reports remain local evidence artifacts
+and are excluded from Git.
+
+Path B reached libvirt network creation during a live apply. The legacy
+provider rejected `/30` CIDRs in `libvirt_network.addresses`; the module now
+creates addressless isolated Layer-2 networks and assigns point-to-point
+addresses inside VyOS. VyOS first-boot validation remains pending.
+
+Path C has schema-valid manifests but has not completed live-cluster
+validation. Resource sizing, readiness probes, and security-policy behavior
+remain open validation items.
+
+## Quick start
+
+Prerequisites for the default path are Docker, Docker Compose, containerlab,
+Ansible Core, Terraform, and Python 3.11 or newer.
 
 ```bash
-git clone <this-repo> && cd enterprise-netsec-iac
-make preflight        # check docker / containerlab / ansible / terraform
-make secrets          # generate .env + WireGuard keys + PBKDF2 hashes
-make up               # build the routed fabric + security services
-make configure        # push CIS-aligned config with Ansible
-make audit            # batfish + live validation + attack replay + report
+git clone <repository-url>
+cd enterprise-netsec-iac
+make preflight
+make secrets
+make up
+make configure
+make audit
 ```
 
-Then open the compliance report at [`docs/COMPLIANCE-REPORT.md`](docs/COMPLIANCE-REPORT.md)
-and the SIEM at `https://localhost:5601`.
+The lifecycle is:
 
-**Full step-by-step run/test instructions (including the real-VyOS-VM and
-Kubernetes paths below): [`docs/TESTING-GUIDE.md`](docs/TESTING-GUIDE.md).**
+1. `make preflight` checks required tooling.
+2. `make secrets` creates local credentials and keys excluded from Git.
+3. `make up` starts the routed fabric and security services.
+4. `make configure` applies CIS-aligned Ansible roles.
+5. `make audit` runs policy tests, live validation, attack replay, and report generation.
 
----
+The generated compliance report is written to
+`evidence/COMPLIANCE-REPORT.md`. The Wazuh dashboard is served at
+`https://localhost:5601` when the SIEM profile is running.
 
-## Three deployment paths, pick per component
+## Deployment paths
 
-The commands above are the fastest path (containers + Docker Compose). Two
-more are available, independent of each other and of the fast path:
+The fabric and security-plane targets are independent.
 
-| Path | Fabric | Security plane | Status |
-|---|---|---|---|
-| **A — Fast (default)** | containerlab + FRR/nftables | docker-compose | ✅ Complete; external lab 10/10 |
-| **B — Real NOS** | Terraform + libvirt + **real VyOS VMs** — [`terraform/vyos-fabric/`](terraform/vyos-fabric/), [ADR 0004](docs/adr/0004-vm-fabric-real-nos.md) | docker-compose | 🚧 In progress |
-| **C — Kubernetes** | either fabric | **k8s** — [`k8s/`](k8s/), [ADR 0005](docs/adr/0005-kubernetes-security-plane.md) | ⚪ Unverified |
+| Path | Fabric | Security plane |
+|---|---|---|
+| A — default | containerlab + FRR/nftables | Docker Compose |
+| B — real NOS | Terraform + libvirt + VyOS VMs | Docker Compose |
+| C — Kubernetes | Path A or Path B fabric | Kubernetes |
 
-Note on "real Cisco/ASA": genuine Cisco IOS/ASA images are proprietary and
-gated behind Cisco licensing — no automation here can legally fetch them.
-The VyOS path is the real, open-source NOS substitute. Appropriately licensed
-Cisco images can also be supplied per node to `terraform/vyos-fabric` (see that
-directory's README).
+Path B is documented in
+[terraform/vyos-fabric/README.md](terraform/vyos-fabric/README.md). Path C is
+documented in [k8s/README.md](k8s/README.md).
 
----
-
-## Design rationale
-
-Earlier project iterations described security testing without retaining
-machine-checkable output. The current architecture addresses that limitation:
-**a control is only marked compliant when a test produced a machine-checkable
-evidence file.** See [ADR 0002](docs/adr/0002-evidence-first-compliance.md).
-
-The full old→new mapping is in
-[`compliance/mappings/cyb-to-repo.md`](compliance/mappings/cyb-to-repo.md).
-
-## What's inside
-
-| Layer | Tech | Purpose |
-|-------|------|---------|
-| Fabric | containerlab, FRRouting, nftables | 3-tier campus, DMZ, dual-ISP edge |
-| Provisioning | Terraform (libvirt / Proxmox) | VM path for the DC-services host |
-| Config mgmt | Ansible roles | CIS-aligned hardening, RADIUS, NTP, syslog-TLS |
-| SIEM | Wazuh | ingest firewall/device logs → alerts |
-| IDS | Suricata | packet-level detection |
-| ZTNA | Traefik + Authentik + WireGuard | secure remote access / home-cloud gateway |
-| Assurance | pytest + Batfish + `controls.yaml` | evidence-first compliance |
-| CI | GitHub Actions | lint, secret-scan, Batfish policy, TF validate |
+Cisco IOS and ASA images are proprietary and are not downloaded or distributed
+by this repository. Licensed images may be supplied through the optional
+per-node image override in the VyOS fabric module, with corresponding
+configuration translation.
 
 ## Architecture
 
-Full diagram and data-flow walkthrough: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
-A text sketch suitable for importing into draw.io lives at the top of that file.
+The logical design contains:
+
+- dual external routing through ISP1 and ISP2;
+- an edge BGP router;
+- a core OSPF routing layer;
+- redundant distribution gateways with VRRP;
+- a default-deny core firewall;
+- an isolated DMZ firewall and web segment;
+- centralized Wazuh logging and alerting;
+- Suricata network detection;
+- Traefik and Authentik application access control;
+- WireGuard remote-access transport.
+
+The full topology and data flows are documented in
+[ARCHITECTURE.md](ARCHITECTURE.md).
+
+## Evidence model
+
+Compliance state is derived from machine-readable evidence rather than prose.
+`compliance/controls.yaml` is the source of truth. Each control references a
+validation test, and `compliance/generate_report.py` marks a control PASS only
+when the latest evidence bundle contains a successful result for that test.
+
+Expected states are:
+
+- `PASS`: the current evidence satisfies the control;
+- `FAIL`: the test ran and observed a violation;
+- `UNVERIFIED`: no valid evidence exists for the current report.
+
+Evidence bundles and generated reports under `evidence/` remain outside
+version control.
 
 ## Repository layout
 
-```
+```text
 .
-├── clab/                     # containerlab topology + device configs (FRR/nftables)
+├── clab/                     # containerlab topology and FRR/nftables configs
 ├── terraform/
-│   ├── libvirt/               # VM path for the DC-services host
-│   ├── proxmox/                # notes only — not yet a built module
-│   └── vyos-fabric/           # REAL VyOS VMs replacing the container fabric
-├── ansible/                  # roles: hardening, radius, ntp, syslog-tls, ids, vpn, vyos_edge
-├── docker/                   # siem (Wazuh), ids (Suricata), zero-trust-gateway
-├── k8s/                      # Kubernetes alternative to docker-compose for the security plane
-├── compliance/               # controls.yaml (source of truth) + report generator
+│   ├── libvirt/              # VM path for the DC-services host
+│   ├── proxmox/              # design notes; module not yet implemented
+│   └── vyos-fabric/          # optional real-VyOS fabric
+├── ansible/                  # hardening and network/service configuration
+├── docker/                   # SIEM, IDS, and zero-trust configuration
+├── k8s/                      # Kubernetes security-plane alternative
+├── compliance/               # controls, mappings, and report generation
 ├── tests/
-│   ├── validation/           # LIVE tests against the running lab (emit evidence)
-│   └── batfish/              # OFFLINE config-policy tests (run in CI, no lab)
-├── scripts/                  # attack_chain.sh, gen-secrets.sh, mkhash.sh, ...
-├── evidence/runs/            # timestamped evidence bundles (gitignored)
-├── docs/                     # ARCHITECTURE, ADRs, runbooks, generated report
+│   ├── validation/           # live checks that emit evidence
+│   └── batfish/              # offline policy tests used in CI
+├── scripts/                  # deployment, secret, URL, and attack utilities
+├── evidence/                 # generated evidence and reports; gitignored
 └── .github/workflows/        # NetDevOps CI
 ```
 
-## The security lifecycle this repo models
+## Security lifecycle
 
-**Build → Harden → Validate → Attack → Report**, all reproducible:
+The repository models the following repeatable workflow:
 
-1. **Build** — `make net` boots the fabric.
-2. **Harden** — `make configure` applies Ansible roles mapped to CIS/NIST.
-3. **Validate** — `make validate` runs live tests (segmentation, hardening,
-   routing) that each write an evidence JSON.
-4. **Attack** — `make attack` replays the CYB-240 chain (recon → scan → fallback
-   → escalation-guard → failover) and captures what the SIEM saw.
-5. **Report** — `make report` regenerates `docs/COMPLIANCE-REPORT.md`, where a
-   control is PASS only if its evidence exists.
+1. Build the fabric and security plane.
+2. Apply hardened configuration through Ansible.
+3. Validate routing, segmentation, and host controls.
+4. Replay the documented attack chain.
+5. Generate a compliance report from captured evidence.
 
-## Roadmap / upgrade ideas
+Offline Batfish checks run without a live lab and guard segmentation policy
+before merge. Live pytest checks verify behavior against running nodes.
+`scripts/attack_chain.sh` exercises recon, scanning, escalation controls, and
+failover while collecting SIEM-visible evidence.
 
-Three paths extend the project toward operational use. Full details, technology
-choices, and implementation/validation status are documented in
-[`docs/PROJECT-IDEAS.md`](docs/PROJECT-IDEAS.md). **Priority: #1 and #2.**
+## Technical references
 
-1. **Automated SOC (Network-as-Code)** — clone → fabric + pre-wired Wazuh SIEM
-   collecting from every device. (This repo already ships the core of it.)
-2. **Zero-Trust home-cloud gateway** — the `ztna` profile + WireGuard is a real,
-   usable secure gateway for a Pi/NAS. See [homecloud runbook](docs/runbooks/homecloud.md).
-3. **DMZ vulnerability lab** — extend `docker/dmz-app` with deliberately
-   vulnerable targets under Suricata watch, for pentest-tool testing / team
-   training. (Detection rules already present, not yet a standalone build.)
+- [Architecture](ARCHITECTURE.md)
+- [VyOS VM fabric](terraform/vyos-fabric/README.md)
+- [Kubernetes security plane](k8s/README.md)
+- [Control-to-test mapping](compliance/mappings/cyb-to-repo.md)
 
-## License and third-party notices
+## License
 
-The project is MIT licensed. Required third-party notices and attribution are
-retained in [`LICENSE`](LICENSE).
+The project is distributed under the [MIT License](LICENSE).

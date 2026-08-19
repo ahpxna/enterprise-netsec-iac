@@ -1,24 +1,23 @@
 # terraform/vyos-fabric — real VM path (Terraform + libvirt/KVM + VyOS)
 
-This replaces the containerlab FRR/nftables devices with **actual routed VMs**
-running [VyOS](https://vyos.io) — a real, open-source network OS (Debian-based,
-Linux kernel routing/firewalling, BGP/OSPF/VRRP, CLI closely modeled on
-Cisco/Juniper). This path validates the design against real router/firewall
-software rather than the lightweight container implementation.
+This recreates the complete 12-node Path A topology as VMs: eight routed nodes
+run [VyOS](https://vyos.io), while `pc1`, `pc4`, `server1`, and `dmz-web` run a
+cloud-init-enabled Linux image. This path validates the design against real
+router/firewall software and retains endpoint hosts for end-to-end testing.
 
 ## Supported image paths
 
-- ✅ **VyOS**: fully real, free, downloadable, works. This module provisions it.
+- ✅ **VyOS**: used by edge, core, distribution, firewall, and ISP nodes.
+- ✅ **Linux cloud image**: used by client, server, and DMZ endpoint nodes.
 - ⚠️ **Cisco IOS/IOS-XE (vIOS), ASA/ASAv**: proprietary Cisco software. It is
   distributed only through licensed channels (Cisco CML/VIRL, dCloud, or a
   support contract with CCO login), so these images are not downloaded or
   bundled. Appropriately licensed vIOS/ASAv qcow2 exports are supported by
-  setting `nodes.<name>.image` to the local file path (see
+  setting `node_image_overrides.<name>` to the local file path (see
   `terraform.tfvars.example`); the disk/network/cloud-init wiring is generic.
   Using Cisco images also requires translating `configs/<name>.boot` into
-  IOS/ASA config syntax
-  (the intent — same IPs, same ACLs, same BGP/OSPF/VRRP — carries over 1:1,
-  see `docs/ARCHITECTURE.md`).
+  IOS/ASA config syntax. The addressing, ACL, BGP, OSPF, and VRRP intent remains
+  unchanged.
 
 ## Getting a VyOS image
 
@@ -27,16 +26,29 @@ software rather than the lightweight container implementation.
    https://docs.vyos.io/en/latest/installation/virtual/libvirt.html
 2. LTS release (more stable, requires a free/paid support.vyos.io account):
    https://support.vyos.io/
-3. Either image works — pick cloud-init-enabled qcow2, put the path in
-   `terraform.tfvars` as `vyos_image_path`.
+3. Pick a cloud-init-enabled VyOS qcow2 and set `vyos_image_path`.
+4. Supply a cloud-init-enabled Ubuntu 24.04 (or compatible) image through
+   `linux_image_path` for the four endpoint VMs.
 
 ## Sizing
 
-6 VMs × 1 vCPU / 1GB RAM = minimum ~6 vCPU / 6GB RAM just for the fabric,
-in addition to the resources allocated to SIEM/IDS/Kubernetes. A laptop with 16GB RAM can run
-the fabric alone comfortably; running fabric + docker-compose security stack
-+ Kubernetes simultaneously realistically needs 32GB+. See
-`docs/TESTING-GUIDE.md` for the recommended phased test order.
+The default topology creates 12 VMs: eight 1GB VyOS nodes, three 512MB Linux
+endpoints, and one 1GB Linux server. Budget approximately 11GB RAM plus host
+overhead for Path B alone. Running the fabric with the security stack or
+Kubernetes realistically requires 32GB or more.
+
+## Stable interface model
+
+Data-plane NICs are attached first and map to `eth0..ethN`; the management NIC
+is attached last. Every interface also receives a deterministic MAC address.
+Linux cloud-init matches and renames interfaces by MAC, while each VyOS
+`config.boot` declares its final management interface as DHCP with no imported
+default route. The plan displays the proposed `node_interface_plan`; after
+apply, inspect the same mapping with:
+
+```bash
+terraform output node_interface_plan
+```
 
 ## Usage
 
@@ -59,8 +71,8 @@ ansible-playbook -i inventory/vm-fabric.yml playbooks/30-vyos-fabric.yml
 
 ## Current validation status and known gaps
 
-- **A live apply is in progress on an external KVM host, but the six VyOS VMs
-  have not yet reached the first-boot checkpoint.** Config.boot syntax is written
+- **A live apply is in progress on an external KVM host, but the expanded
+  12-node topology has not yet reached the first-boot checkpoint.** Config.boot syntax is written
   from VyOS 1.3 documentation and may need small fixes for the target
   version — especially `firewall{}`, which was rewritten to a zone-based
   model in 1.4/1.5. Boot one node, run `configure && load config.boot && commit`,

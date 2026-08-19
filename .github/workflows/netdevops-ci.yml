@@ -64,3 +64,5 @@ jobs:
       - uses: hashicorp/setup-terraform@v3
       - run: terraform -chdir=terraform/libvirt init -backend=false
       - run: terraform -chdir=terraform/libvirt validate
+      - run: terraform -chdir=terraform/vyos-fabric init -backend=false
+      - run: terraform -chdir=terraform/vyos-fabric validate
