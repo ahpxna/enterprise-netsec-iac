@@ -1,9 +1,54 @@
 # =====================================================================
-# Point-to-point libvirt networks — one per link in the topology, no
-# switch/bridge sharing, so this is a routed fabric exactly like the
-# containerlab version (each link = its own /30 or /24 broadcast domain).
-# IPs match Brezula's original plan / clab/companyxyz.clab.yml.
+# Data-plane libvirt networks — one isolated Layer-2 segment per link in the
+# topology. The CIDRs remain declared Terraform data in local.link_plan,
+# while addressing is applied only inside the VyOS guests.
+#
+# Do not pass these CIDRs through libvirt_network.addresses. The legacy
+# dmacvicar/libvirt 0.8 provider reserves a network, broadcast, and host-bridge
+# address before it evaluates dhcp.enabled; a /30 therefore fails validation
+# and would also make the host bridge consume one of the two router addresses.
 # =====================================================================
+
+locals {
+  link_plan = {
+    isp1_link = {
+      name = "cxyz-isp1"
+      cidr = "198.10.10.0/30"
+    }
+    isp2_link = {
+      name = "cxyz-isp2"
+      cidr = "197.10.10.0/30"
+    }
+    edge_fwcore = {
+      name = "cxyz-edge-fwcore"
+      cidr = "10.255.0.0/30"
+    }
+    edge_fwdmz = {
+      name = "cxyz-edge-fwdmz"
+      cidr = "10.255.0.4/30"
+    }
+    fwcore_core = {
+      name = "cxyz-fwcore-core"
+      cidr = "10.255.0.8/30"
+    }
+    fwdmz_dmzweb = {
+      name = "cxyz-fwdmz-dmzweb"
+      cidr = "195.1.1.160/29"
+    }
+    core_dist1 = {
+      name = "cxyz-core-dist1"
+      cidr = "192.168.10.0/24"
+    }
+    core_dist2 = {
+      name = "cxyz-core-dist2"
+      cidr = "192.168.40.0/24"
+    }
+    core_dc = {
+      name = "cxyz-core-dc"
+      cidr = "172.16.50.0/24"
+    }
+  }
+}
 
 resource "libvirt_network" "mgmt" {
   name      = var.management_network
@@ -14,55 +59,51 @@ resource "libvirt_network" "mgmt" {
 }
 
 resource "libvirt_network" "isp1_link" {
-  name      = "cxyz-isp1"
-  mode      = "none" # isolated P2P segment, addressing done in VyOS config.boot
-  addresses = ["198.10.10.0/30"]
+  name = local.link_plan.isp1_link.name
+  mode = "none" # isolated L2 segment; addressing is owned by VyOS
 }
 
 resource "libvirt_network" "isp2_link" {
-  name      = "cxyz-isp2"
-  mode      = "none"
-  addresses = ["197.10.10.0/30"]
+  name = local.link_plan.isp2_link.name
+  mode = "none"
 }
 
 resource "libvirt_network" "edge_fwcore" {
-  name      = "cxyz-edge-fwcore"
-  mode      = "none"
-  addresses = ["10.255.0.0/30"]
+  name = local.link_plan.edge_fwcore.name
+  mode = "none"
 }
 
 resource "libvirt_network" "edge_fwdmz" {
-  name      = "cxyz-edge-fwdmz"
-  mode      = "none"
-  addresses = ["10.255.0.4/30"]
+  name = local.link_plan.edge_fwdmz.name
+  mode = "none"
 }
 
 resource "libvirt_network" "fwcore_core" {
-  name      = "cxyz-fwcore-core"
-  mode      = "none"
-  addresses = ["10.255.0.8/30"]
+  name = local.link_plan.fwcore_core.name
+  mode = "none"
 }
 
 resource "libvirt_network" "fwdmz_dmzweb" {
-  name      = "cxyz-fwdmz-dmzweb"
-  mode      = "none"
-  addresses = ["195.1.1.160/29"] # matches Part 7 DMZ /29 for VLAN10-equivalent segment
+  name = local.link_plan.fwdmz_dmzweb.name
+  mode = "none"
 }
 
 resource "libvirt_network" "core_dist1" {
-  name      = "cxyz-core-dist1"
-  mode      = "none"
-  addresses = ["192.168.10.0/24"]
+  name = local.link_plan.core_dist1.name
+  mode = "none"
 }
 
 resource "libvirt_network" "core_dist2" {
-  name      = "cxyz-core-dist2"
-  mode      = "none"
-  addresses = ["192.168.40.0/24"]
+  name = local.link_plan.core_dist2.name
+  mode = "none"
 }
 
 resource "libvirt_network" "core_dc" {
-  name      = "cxyz-core-dc"
-  mode      = "none"
-  addresses = ["172.16.50.0/24"]
+  name = local.link_plan.core_dc.name
+  mode = "none"
+}
+
+output "data_plane_link_plan" {
+  description = "Declared data-plane libvirt network names and guest-owned CIDRs"
+  value       = local.link_plan
 }

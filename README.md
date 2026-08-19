@@ -5,11 +5,17 @@
 > Terraform, and **validated by tests that emit evidence** — so every
 > compliance claim is reproducible, not asserted.
 
-Re-implements the classic three-tier + DMZ + dual-ISP enterprise design
-(originally a GNS3 lab by [Radovan Brezula](https://brezular.com), reused with
-permission) using open, laptop-friendly tooling: **containerlab + FRRouting +
+Implements a three-tier + DMZ + dual-ISP enterprise design using open,
+laptop-friendly tooling: **containerlab + FRRouting +
 nftables** for the fabric, and **Wazuh / Suricata / Traefik / Authentik /
 WireGuard** for security.
+
+> **Validation status (2026-08-18): Path A is complete.** It was deployed on
+> an external Linux lab host, Ansible completed with `failed=0`, the live
+> validation suite passed **10/10**, and that host's generated compliance
+> report showed **10/10 PASS**. The evidence bundle remains on that host, so
+> the generated report committed in this checkout intentionally remains the
+> no-evidence baseline. Path B is still in progress; Path C is unverified.
 
 ```bash
 git clone <this-repo> && cd enterprise-netsec-iac
@@ -33,25 +39,24 @@ Kubernetes paths below): [`docs/TESTING-GUIDE.md`](docs/TESTING-GUIDE.md).**
 The commands above are the fastest path (containers + Docker Compose). Two
 more are available, independent of each other and of the fast path:
 
-| | Fabric | Security plane |
-|---|---|---|
-| **Fast (default)** | containerlab + FRR/nftables | docker-compose |
-| **Real NOS** | Terraform + libvirt + **real VyOS VMs** — [`terraform/vyos-fabric/`](terraform/vyos-fabric/), [ADR 0004](docs/adr/0004-vm-fabric-real-nos.md) | docker-compose |
-| **Kubernetes** | either fabric | **k8s** — [`k8s/`](k8s/), [ADR 0005](docs/adr/0005-kubernetes-security-plane.md) |
+| Path | Fabric | Security plane | Status |
+|---|---|---|---|
+| **A — Fast (default)** | containerlab + FRR/nftables | docker-compose | ✅ Complete; external lab 10/10 |
+| **B — Real NOS** | Terraform + libvirt + **real VyOS VMs** — [`terraform/vyos-fabric/`](terraform/vyos-fabric/), [ADR 0004](docs/adr/0004-vm-fabric-real-nos.md) | docker-compose | 🚧 In progress |
+| **C — Kubernetes** | either fabric | **k8s** — [`k8s/`](k8s/), [ADR 0005](docs/adr/0005-kubernetes-security-plane.md) | ⚪ Unverified |
 
 Note on "real Cisco/ASA": genuine Cisco IOS/ASA images are proprietary and
 gated behind Cisco licensing — no automation here can legally fetch them.
-The VyOS path is the real, open-source NOS substitute; if you hold a Cisco
-license yourself, `terraform/vyos-fabric` accepts your own image per node
-(see that directory's README).
+The VyOS path is the real, open-source NOS substitute. Appropriately licensed
+Cisco images can also be supplied per node to `terraform/vyos-fabric` (see that
+directory's README).
 
 ---
 
-## Why this exists (the honest version)
+## Design rationale
 
-The earlier student version of this project built a GNS3 lab and then *described*
-security testing in a report — claims like *"a dictionary attack would succeed"*
-with no captured output. This rebuild fixes that at the architecture level:
+Earlier project iterations described security testing without retaining
+machine-checkable output. The current architecture addresses that limitation:
 **a control is only marked compliant when a test produced a machine-checkable
 evidence file.** See [ADR 0002](docs/adr/0002-evidence-first-compliance.md).
 
@@ -74,7 +79,7 @@ The full old→new mapping is in
 ## Architecture
 
 Full diagram and data-flow walkthrough: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
-A text sketch you can paste into draw.io lives at the top of that file.
+A text sketch suitable for importing into draw.io lives at the top of that file.
 
 ## Repository layout
 
@@ -113,8 +118,8 @@ A text sketch you can paste into draw.io lives at the top of that file.
 
 ## Roadmap / upgrade ideas
 
-Three ways to push this from "great portfolio" toward "used in anger" —
-full detail, tech stack, and honest built-vs-tested status for each in
+Three paths extend the project toward operational use. Full details, technology
+choices, and implementation/validation status are documented in
 [`docs/PROJECT-IDEAS.md`](docs/PROJECT-IDEAS.md). **Priority: #1 and #2.**
 
 1. **Automated SOC (Network-as-Code)** — clone → fabric + pre-wired Wazuh SIEM
@@ -125,6 +130,7 @@ full detail, tech stack, and honest built-vs-tested status for each in
    vulnerable targets under Suricata watch, for pentest-tool testing / team
    training. (Detection rules already present, not yet a standalone build.)
 
-## Attribution & license
-Topology/IP-plan derived from Brezula's GNS3 series with attribution (see
-`LICENSE`). All automation, tests and tooling are original. MIT licensed.
+## License and third-party notices
+
+The project is MIT licensed. Required third-party notices and attribution are
+retained in [`LICENSE`](LICENSE).

@@ -1,9 +1,9 @@
 # =====================================================================
 # Optional heavyweight path: a real KVM VM for the SIEM/DC-services host,
-# for when you outgrow containers (or move to the home Proxmox server).
+# for deployments that outgrow containers or move to a home Proxmox server.
 # The containerlab + docker path (make up) needs NONE of this — this is
-# here to show the "Terraform provisions infra, Ansible configures it"
-# separation cleanly, which is what reviewers look for.
+# here to preserve a clean separation between Terraform provisioning and
+# Ansible configuration.
 # =====================================================================
 
 resource "libvirt_pool" "cxyz" {

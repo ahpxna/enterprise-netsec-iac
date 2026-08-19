@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
-"""Fail CI if any control's `verified_by` names a test file that doesn't exist.
-Cheap guard that keeps controls.yaml honest as tests move around."""
+"""Fail CI if any control's `verified_by` names a test file that does not exist.
+This guard keeps control-to-test references valid as tests move."""
 import pathlib, sys, yaml
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent

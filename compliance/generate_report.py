@@ -2,14 +2,13 @@
 """
 generate_report.py — build a compliance report where PASS is earned, not asserted.
 
-For each control in controls.yaml we look for evidence produced by its
+For each control in controls.yaml, the generator looks for evidence produced by its
 `verified_by` test in the most recent evidence/runs/* directory. A control is:
   PASS       if evidence exists AND its recorded assertion held
   FAIL       if evidence exists but the assertion did not hold
   UNVERIFIED if no evidence was produced (test never ran)
 
-This is the mechanism that makes "bịa" structurally impossible: you cannot
-mark a control green without a machine-checkable artifact behind it.
+A control cannot be marked green without a machine-checkable artifact.
 """
 import argparse
 import glob

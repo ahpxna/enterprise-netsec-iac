@@ -78,4 +78,4 @@
   alerts (`docker/siem/rules/cxyz_rules.xml`).
 - **IDS (Suricata)** is packet-centric: it watches the span/host interface and
   raises signature alerts (SSH-to-DC, Telnet, RADIUS probe, SYN-scan). Its EVE
-  JSON is also read by Wazuh, so you get one pane of glass.
+  JSON is also read by Wazuh, providing a unified monitoring view.

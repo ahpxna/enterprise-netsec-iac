@@ -1,6 +1,6 @@
 # From the old CYB-240 / CYB-300 papers to this repo
 
-This table is the honest bridge: it takes each *finding* the two academic
+This table maps each *finding* from the two academic
 papers described (many of which were asserted rather than demonstrated) and
 shows where it is now (a) implemented in code and (b) proven by a test.
 

@@ -1,5 +1,5 @@
 # =====================================================================
-# controls.yaml — the single source of truth that kills "bịa" for good.
+# controls.yaml — the single source of truth for evidence-backed controls.
 #
 # Old projects: a report *claimed* a control was met, in prose.
 # This project: every control row points at a `verified_by` test id. The

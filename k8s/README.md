@@ -4,14 +4,14 @@ Alternative to `docker-compose.yml` for the SIEM/IDS/ZTNA layer, same
 images and config as the compose file, restructured into real k8s
 primitives (StatefulSets for stateful stores, DaemonSet for the IDS
 sensor, Traefik's native Kubernetes CRD provider instead of its Docker
-provider). Use this if you specifically want the security plane running
-on Kubernetes rather than plain Docker Compose — the network fabric
+provider). This path runs the security plane on Kubernetes rather than plain
+Docker Compose; the network fabric
 (containerlab or `terraform/vyos-fabric`) is unaffected either way.
 
 ## Recommended cluster for testing
 
 **k3s** (single binary, low overhead, ships Traefik by default — disable
-the bundled Traefik with `--disable=traefik` since we deploy our own
+the bundled Traefik with `--disable=traefik` because this repository deploys a
 pinned version here). A single VM/laptop with 4 vCPU / 8GB RAM free
 (on top of whatever the network fabric is using) is enough for this
 manifest set at rest; Wazuh's indexer is the heaviest single pod
@@ -56,15 +56,14 @@ kubectl -n cxyz-security get svc
 # traefik         NodePort 30080/30443
 ```
 
-## Known gaps / not yet tested
+## Current validation status and known gaps
 
-- **Never applied to a real cluster in this session** (no k8s available
-  in the sandbox that built this) — manifests are schema-valid YAML
-  (checked) but not proven against the actual Wazuh/Authentik/Traefik
-  container entrypoints on k8s. Expect at least one iteration on
-  resource limits / readiness probes once you run it.
-- No `PriorityClass`, `NetworkPolicy`, or `PodDisruptionBudget` yet —
-  fine for a lab, not for anything you'd call production.
+- **Live-cluster validation is pending.** The manifests are schema-valid YAML
+  but are not yet proven against the Wazuh, Authentik, and Traefik container
+  entrypoints on Kubernetes. Resource limits and readiness probes may require
+  iteration during the first deployment.
+- No `PriorityClass`, `NetworkPolicy`, or `PodDisruptionBudget` yet. This is
+  acceptable for the lab scope but not for production.
 - WireGuard runs `privileged: true` + `hostNetwork: true`, which is
   normal for a VPN concentrator but means the cluster's PodSecurity
   admission must allow `privileged` in this namespace (k3s default does).

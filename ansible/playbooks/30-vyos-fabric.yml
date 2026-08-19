@@ -1,7 +1,7 @@
 ---
 # Configure the REAL VM fabric (terraform/vyos-fabric). Run this instead
-# of / in addition to site.yml when you're on the VyOS-VM path rather than
-# the containerlab path.
+# of, or in addition to, site.yml for the VyOS-VM path rather than the
+# containerlab path.
 #
 #   ansible-playbook -i ../inventory/vm-fabric.yml playbooks/30-vyos-fabric.yml
 #

@@ -2,15 +2,11 @@
 # terraform/vyos-fabric — REAL VM path (libvirt/KVM), replaces the
 # containerlab FRR/nftables devices with actual VyOS routers/firewalls.
 #
-# HONESTY NOTE: this module provisions VyOS (open source, BSD-2-Clause,
-# freely downloadable). It does NOT and cannot provision genuine Cisco
-# IOS/IOS-XE (vIOS) or ASA/ASAv images — those are proprietary Cisco
-# software distributed under license (CML / VIRL / dCloud / CCO login).
-# I have no legal way to fetch or bundle them for you. If you already
-# hold a Cisco license and have your own vIOS/ASAv qcow2/vmdk exports,
-# this module's `node_image` variable is generic enough to point at
-# them instead of the VyOS image — the wiring (networks, disks,
-# cloud-init) works the same either way. See README.md.
+# This module provisions VyOS, an open-source network operating system.
+# Cisco IOS/IOS-XE and ASA/ASAv images are proprietary and are therefore not
+# downloaded or bundled. Appropriately licensed qcow2/vmdk images can be
+# supplied through the per-node image setting; network, disk, and cloud-init
+# wiring remain generic. See README.md.
 # =====================================================================
 
 terraform {

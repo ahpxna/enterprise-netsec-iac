@@ -1,7 +1,7 @@
 """
 IDM/HRD/TIME/DET-02/VPN controls. These read the *rendered* live config or
-service state from the running nodes/containers — not a static file we hope
-matches reality.
+service state from the running nodes/containers rather than assuming that a
+static file matches the live state.
 """
 import re
 import pytest

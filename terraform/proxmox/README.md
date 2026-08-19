@@ -1,7 +1,7 @@
 # Proxmox path (home server)
 
-When you build the physical home-cloud (Raspberry Pi / mini-PC / NAS as
-discussed), point Terraform at Proxmox instead of local libvirt:
+For a physical home-cloud (Raspberry Pi, mini-PC, or NAS), point Terraform at
+Proxmox instead of local libvirt:
 
 - provider: `telmate/proxmox`
 - clone a hardened Ubuntu/Debian template

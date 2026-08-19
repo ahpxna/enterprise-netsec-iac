@@ -1,38 +1,47 @@
 # =====================================================================
 # CompanyXYZ-NG — routed enterprise fabric in containerlab
-# Re-implements Brezula's GNS3 three-tier + DMZ + dual-ISP design using
-# FOSS NOS images that actually boot on a laptop:
-#   Cisco vIOS/ASAv/Arista vEOS  ->  FRRouting (frr) + Linux + nftables
+# Implements a three-tier + DMZ + dual-ISP design using FOSS NOS images
+# verified on the Path A lab host:
+#   Cisco vIOS/ASAv/Arista vEOS  ->  FRRouting on Linux + nftables
 # The *design* (zones, VLANs, IP plan, security intent) is preserved 1:1.
 # The *implementation* is now free, scriptable and CI-testable.
+# Path A live validation result (external host, 2026-08-18): 10/10 passed.
 # =====================================================================
 name: companyxyz
 
 mgmt:
   network: cxyz_mgmt
-  ipv4-subnet: 10.1.1.0/24        # matches Brezula loopback/mgmt plan
+  ipv4-subnet: 10.1.1.0/24        # management plane
+  ipv4-gw: 10.1.1.254             # keep 10.1.1.1 available for core
 
 topology:
   kinds:
     linux:
       image: wbitt/network-multitool:latest   # ip, tcpdump, nmap, curl, ncat
-    frr:
-      image: quay.io/frrouting/frr:9.1.0
 
   nodes:
     # ---------------- EDGE / ISP (dual-homed, Part 6) ----------------
     isp1:
-      kind: frr
+      kind: linux
+      image: quay.io/frrouting/frr:9.1.0
       mgmt-ipv4: 10.1.1.201
-      startup-config: configs/isp1.frr.conf
+      binds:
+        - configs/isp1.frr.conf:/etc/frr/frr.conf:ro
+        - configs/frr-daemons:/etc/frr/daemons:ro
     isp2:
-      kind: frr
+      kind: linux
+      image: quay.io/frrouting/frr:9.1.0
       mgmt-ipv4: 10.1.1.202
-      startup-config: configs/isp2.frr.conf
+      binds:
+        - configs/isp2.frr.conf:/etc/frr/frr.conf:ro
+        - configs/frr-daemons:/etc/frr/daemons:ro
     edge:                                   # vIOS-EDGE-I  (BGP, dual ISP)
-      kind: frr
+      kind: linux
+      image: quay.io/frrouting/frr:9.1.0
       mgmt-ipv4: 10.1.1.10
-      startup-config: configs/edge.frr.conf
+      binds:
+        - configs/edge.frr.conf:/etc/frr/frr.conf:ro
+        - configs/frr-daemons:/etc/frr/daemons:ro
 
     # ---------------- PERIMETER FIREWALL (ASAv-I) -------------------
     fw-core:                                # nftables "default deny" firewall
@@ -41,38 +50,58 @@ topology:
       binds:
         - configs/fw-core.nft:/etc/nftables/policy.nft:ro
       exec:
+        - apk add --no-cache python3 rsyslog rsyslog-tls nftables
+        - mkdir -p /etc/rsyslog.d /etc/ssh/sshd_config.d
         - sysctl -w net.ipv4.ip_forward=1
         - nft -f /etc/nftables/policy.nft
 
     # ---------------- CORE / DISTRIBUTION (L3) ---------------------
     core:                                   # vIOS-Core (OSPF, MD5 auth)
-      kind: frr
+      kind: linux
+      image: quay.io/frrouting/frr:9.1.0
       mgmt-ipv4: 10.1.1.1
-      startup-config: configs/core.frr.conf
+      binds:
+        - configs/core.frr.conf:/etc/frr/frr.conf:ro
+        - configs/frr-daemons:/etc/frr/daemons:ro
     dist1:                                  # vEOS-Dis-I  (VRRP master, prio 150)
-      kind: frr
+      kind: linux
+      image: quay.io/frrouting/frr:9.1.0
       mgmt-ipv4: 10.1.1.2
-      startup-config: configs/dist1.frr.conf
+      binds:
+        - configs/dist1.frr.conf:/etc/frr/frr.conf:ro
+        - configs/frr-daemons:/etc/frr/daemons:ro
     dist2:                                  # vEOS-Dis-II (VRRP backup, prio 100)
-      kind: frr
+      kind: linux
+      image: quay.io/frrouting/frr:9.1.0
       mgmt-ipv4: 10.1.1.3
-      startup-config: configs/dist2.frr.conf
+      binds:
+        - configs/dist2.frr.conf:/etc/frr/frr.conf:ro
+        - configs/frr-daemons:/etc/frr/daemons:ro
 
     # ---------------- ACCESS LAYER + CLIENTS -----------------------
     pc1:                                    # VLAN10 user  (untrusted)
       kind: linux
       mgmt-ipv4: 10.1.1.111
-      exec: ["ip addr add 192.168.10.1/24 dev eth1 || true"]
+      exec:
+        - apk add --no-cache python3 rsyslog rsyslog-tls
+        - mkdir -p /etc/rsyslog.d /etc/ssh/sshd_config.d
+        - sh -c "ip addr add 192.168.10.1/24 dev eth1 || true"
     pc4:                                    # VLAN40 mgmt  (admin station)
       kind: linux
       mgmt-ipv4: 10.1.1.144
-      exec: ["ip addr add 192.168.40.1/24 dev eth1 || true"]
+      exec:
+        - apk add --no-cache python3 rsyslog rsyslog-tls
+        - mkdir -p /etc/rsyslog.d /etc/ssh/sshd_config.d
+        - sh -c "ip addr add 192.168.40.1/24 dev eth1 || true"
 
     # ---------------- DATA CENTER (Server1) ------------------------
     server1:                                # DNS/DHCP/NTP/RADIUS/Syslog host
       kind: linux
       mgmt-ipv4: 10.1.1.50
-      exec: ["ip addr add 172.16.50.1/24 dev eth1 || true"]
+      exec:
+        - apk add --no-cache python3 rsyslog rsyslog-tls
+        - mkdir -p /etc/rsyslog.d /etc/ssh/sshd_config.d
+        - sh -c "ip addr add 172.16.50.1/24 dev eth1 || true"
 
     # ---------------- DMZ (Part 7) --------------------------------
     fw-dmz:                                 # ASAv-DMZ-I -> nftables
@@ -81,12 +110,17 @@ topology:
       binds:
         - configs/fw-dmz.nft:/etc/nftables/policy.nft:ro
       exec:
+        - apk add --no-cache python3 rsyslog rsyslog-tls nftables
+        - mkdir -p /etc/rsyslog.d /etc/ssh/sshd_config.d
         - sysctl -w net.ipv4.ip_forward=1
         - nft -f /etc/nftables/policy.nft
     dmz-web:                                # Serv-DMZ-I public web 195.1.1.161
       kind: linux
       mgmt-ipv4: 10.1.1.61
-      exec: ["ip addr add 195.1.1.161/29 dev eth1 || true"]
+      exec:
+        - apk add --no-cache python3 rsyslog rsyslog-tls
+        - mkdir -p /etc/rsyslog.d /etc/ssh/sshd_config.d
+        - sh -c "ip addr add 195.1.1.161/29 dev eth1 || true"
 
   links:
     # edge <-> ISPs (dual homing)
@@ -94,7 +128,7 @@ topology:
     - endpoints: ["edge:eth2", "isp2:eth1"]
     # edge <-> perimeter firewall
     - endpoints: ["edge:eth3", "fw-core:eth1"]
-    # edge <-> dmz firewall (DMZ hangs off the edge, per Brezula)
+    # edge <-> dmz firewall
     - endpoints: ["edge:eth4", "fw-dmz:eth1"]
     # fw-core <-> core
     - endpoints: ["fw-core:eth2", "core:eth1"]

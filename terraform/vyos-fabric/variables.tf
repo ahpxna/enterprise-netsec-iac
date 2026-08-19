@@ -15,7 +15,7 @@ variable "vyos_image_path" {
 }
 
 variable "management_network" {
-  description = "libvirt network name for the 10.1.1.0/24 mgmt plane (matches Brezula's mgmt/loopback plan)"
+  description = "libvirt network name for the 10.1.1.0/24 management plane"
   type        = string
   default     = "cxyz-mgmt"
 }
@@ -26,9 +26,8 @@ variable "ssh_public_key" {
 }
 
 # ---------------------------------------------------------------------
-# One entry per device in the original topology. `image` may be
-# overridden per node to point at a real Cisco image path if you have
-# a licensed one (e.g. node "edge" -> your vIOS-EDGE-I export).
+# One entry per fabric device. `image` may be overridden per node with
+# an appropriately licensed Cisco image path (for example, a vIOS edge image).
 # `boot_config` points at the VyOS config.boot this module injects.
 # ---------------------------------------------------------------------
 variable "nodes" {

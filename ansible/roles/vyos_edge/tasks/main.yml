@@ -1,9 +1,8 @@
 ---
 # Real config push to actual VyOS routers/firewalls over network_cli.
-# Contrast with the container path (clab startup-config, no Ansible
-# needed for FRR/nftables) — this is the "real NOS" path the user asked
-# for, so config changes go through Ansible + git history like everything
-# else in the repo, not clicked in by hand.
+# Unlike the container path (clab startup-config with no Ansible requirement
+# for FRR/nftables), the real-NOS path applies configuration through Ansible
+# and records changes in git history.
 
 - name: Determine this node's config.boot path
   ansible.builtin.set_fact:

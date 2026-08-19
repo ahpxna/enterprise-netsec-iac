@@ -1,12 +1,12 @@
 /* edge — VyOS translation of vIOS-EDGE-I (dual-ISP BGP edge).
  * SYNTAX NOTE: written against VyOS 1.3 (equuleus) classic CLI syntax.
- * VyOS 1.4/1.5 (rolling) rewired `firewall` to a zone-based model — if
- * you're on rolling, port the firewall{} stanza per:
+ * VyOS 1.4/1.5 (rolling) rewired `firewall` to a zone-based model. For a
+ * rolling build, port the firewall{} stanza per:
  * https://docs.vyos.io/en/latest/configuration/firewall/index.html
  * Everything else (interfaces/protocols bgp) is stable across versions.
  * VALIDATE with `configure && load /config/config.boot && commit` and
- * fix anything the parser rejects for your exact build — this file has
- * NOT been booted against a real VyOS image yet (see TESTING-GUIDE.md).
+ * resolve any parser errors for the target build. This file has not yet been
+ * boot-validated against a real VyOS image (see TESTING-GUIDE.md).
  */
 interfaces {
     ethernet eth0 {

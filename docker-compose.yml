@@ -1,6 +1,6 @@
 # =====================================================================
 # Security services plane (SIEM / IDS / Zero-Trust gateway / DMZ app).
-# Profiles let you bring up only what you need:
+# Profiles allow selective startup of required components:
 #   docker compose --profile siem up -d
 #   docker compose --profile ztna up -d
 # The network fabric itself is containerlab (see clab/); this file is the
