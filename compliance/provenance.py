@@ -30,13 +30,16 @@ def git_sha() -> str:
     configured = os.environ.get("GIT_SHA")
     if configured:
         return configured
-    result = subprocess.run(
-        ["git", "rev-parse", "HEAD"],
-        cwd=ROOT,
-        capture_output=True,
-        text=True,
-        check=False,
-    )
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            cwd=ROOT,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except FileNotFoundError:
+        return "unknown"
     return result.stdout.strip() or "unknown"
 
 
