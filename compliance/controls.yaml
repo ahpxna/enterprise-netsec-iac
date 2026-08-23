@@ -113,3 +113,11 @@ controls:
     implemented_by: docker-compose.yml#wireguard,clab/configs/fw-core.nft
     verified_by: test_hardening.py::test_no_mgmt_exposed_to_internet
     severity: high
+
+  - id: ZTNA-01
+    framework: [NIST-800-53r5-AC-3]
+    ref: "application access enforcement"
+    objective: "Unauthenticated requests to the protected web application redirect to Authentik."
+    implemented_by: docker-compose.yml#traefik,docker/zero-trust-gateway/dynamic.yml
+    verified_by: test_hardening.py::test_ztna_redirects_unauthenticated_request
+    severity: high

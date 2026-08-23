@@ -165,6 +165,21 @@ services:
       - traefik.http.routers.authentik.entrypoints=websecure
     networks: [cxyz_edge]
 
+  # Background jobs, blueprints, and embedded-outpost lifecycle require a
+  # worker in addition to the web server.
+  authentik-worker:
+    profiles: ["ztna"]
+    image: ghcr.io/goauthentik/server:2024.8
+    hostname: authentik-worker
+    restart: unless-stopped
+    command: worker
+    environment:
+      AUTHENTIK_SECRET_KEY: ${AUTHENTIK_SECRET_KEY:-changeme}
+      AUTHENTIK_POSTGRESQL__HOST: authentik-postgres
+      AUTHENTIK_POSTGRESQL__PASSWORD: ${AUTHENTIK_POSTGRES_PASSWORD:-changeme}
+    depends_on: [authentik-postgres, authentik-redis]
+    networks: [cxyz_edge]
+
   authentik-postgres:
     profiles: ["ztna"]
     image: postgres:16-alpine

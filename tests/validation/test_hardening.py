@@ -5,6 +5,8 @@ from __future__ import annotations
 import re
 import subprocess
 import os
+import time
+import uuid
 from pathlib import Path
 
 from conftest import in_node
@@ -84,8 +86,45 @@ def test_syslog_transport_is_tls(evidence):
     result = in_node("server1", "sh", "-c", "cat /etc/rsyslog.d/*.conf 2>/dev/null")
     tls = all(token in result.stdout for token in ("gtls", 'port="6514"', 'StreamDriverMode="1"'))
     cleartext = 'port="514"' in result.stdout
-    evidence(control="DET-02", assertion="rsyslog forwards with authenticated TLS/6514 only", observed={"tls_configured": tls, "cleartext_514": cleartext})
+    marker = f"CXYZ-DET02-TLS-MARKER-{uuid.uuid4()}"
+    submitted = in_node("server1", "logger", "-p", "local0.notice", "-t", "cxyz-det02", marker)
+    relay_received = False
+    wazuh_alert_received = False
+    for _ in range(10):
+        relay = subprocess.run(
+            ["docker", "compose", "exec", "-T", "syslog-relay", "grep", "-F", marker, "/var/log/cxyz/remote.log"],
+            cwd=ROOT,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        alert = subprocess.run(
+            ["docker", "compose", "exec", "-T", "wazuh.manager", "sh", "-c", f"grep -Fq '{marker}' /var/ossec/logs/alerts/alerts.json"],
+            cwd=ROOT,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        relay_received = relay.returncode == 0
+        wazuh_alert_received = alert.returncode == 0
+        if relay_received and wazuh_alert_received:
+            break
+        time.sleep(1)
+    evidence(
+        control="DET-02",
+        assertion="unique marker traverses authenticated TLS syslog relay and creates a Wazuh alert",
+        observed={
+            "tls_configured": tls,
+            "cleartext_514": cleartext,
+            "marker_submitted": submitted.returncode == 0,
+            "relay_received": relay_received,
+            "wazuh_alert_received": wazuh_alert_received,
+        },
+        enforcement_node="server1,syslog-relay,wazuh.manager",
+    )
     assert tls and not cleartext, "device-to-relay logging is not TLS-only"
+    assert submitted.returncode == 0, "unable to submit DET-02 marker"
+    assert relay_received and wazuh_alert_received, "TLS marker did not reach relay and Wazuh"
 
 
 def test_ssh_idle_timeout(evidence):
@@ -157,3 +196,40 @@ def test_no_mgmt_exposed_to_internet(evidence):
     assert service.returncode == 0, "DC SSH positive precondition failed"
     assert wg_ready, "WireGuard positive control failed"
     assert negative.returncode != 0 and counter_delta > 0, "WAN SSH was not denied by fw-core"
+
+
+def test_ztna_redirects_unauthenticated_request(evidence):
+    """ZTNA-01: a browser without a session must be sent to Authentik."""
+    domain = _local_secret("ORG_DOMAIN") or "companyxyz.lab"
+    host = f"app.{domain}"
+    response = subprocess.run(
+        [
+            "curl", "--silent", "--show-error", "--insecure",
+            "--output", "/dev/null", "--dump-header", "-",
+            "--resolve", f"{host}:443:127.0.0.1", f"https://{host}/",
+        ],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=15,
+    )
+    status = re.search(r"^HTTP/\S+\s+(\d{3})", response.stdout, re.MULTILINE)
+    location = re.search(r"^location:\s*(.+)$", response.stdout, re.MULTILINE | re.IGNORECASE)
+    status_code = int(status.group(1)) if status else None
+    redirect_target = location.group(1).strip() if location else ""
+    is_redirect = status_code in {301, 302, 303, 307, 308}
+    to_authentik = "sso." in redirect_target or "/if/flow/" in redirect_target
+    evidence(
+        control="ZTNA-01",
+        assertion="unauthenticated HTTPS request is redirected by Traefik/Authentik before reaching the app",
+        observed={
+            "curl_returncode": response.returncode,
+            "status_code": status_code,
+            "redirect_target": redirect_target,
+            "redirects_to_authentik": to_authentik,
+        },
+        enforcement_node="traefik,authentik-server",
+    )
+    assert response.returncode == 0, f"ZTNA endpoint unavailable: {response.stderr}"
+    assert is_redirect and to_authentik, "unauthenticated request was not redirected to Authentik"

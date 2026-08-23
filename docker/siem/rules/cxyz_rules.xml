@@ -25,4 +25,10 @@
     <mitre><id>T1210</id></mitre>
     <group>attack,lateral_movement,</group>
   </rule>
+
+  <rule id="100203" level="3">
+    <match>CXYZ-DET02-TLS-MARKER</match>
+    <description>Authenticated TLS syslog transport marker received (DET-02)</description>
+    <group>syslog,</group>
+  </rule>
 </group>
