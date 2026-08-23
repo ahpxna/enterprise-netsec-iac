@@ -20,7 +20,7 @@ preflight: ## Check host prerequisites (docker, clab, ansible, terraform)
 	@bash scripts/preflight.sh
 
 .PHONY: secrets
-secrets: ## Generate .env + WireGuard keys + RADIUS hashes (idempotent)
+secrets: ## Generate .env + RADIUS hashes (idempotent)
 	@bash scripts/gen-secrets.sh
 
 # ---------------------------------------------------------------- build
@@ -145,7 +145,7 @@ k8s-status: ## Show pod/service status for the k8s security plane
 
 .PHONY: report
 report: ## Generate compliance report from controls.yaml + latest evidence
-	python compliance/generate_report.py --run $(EVIDENCE) --strict \
+	python compliance/generate_report.py --strict \
 		--out evidence/COMPLIANCE-REPORT.md
 
 .PHONY: audit

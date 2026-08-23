@@ -1,5 +1,6 @@
 ---
 galaxy_info:
+  author: CompanyXYZ-NG
   role_name: wazuh_agent
   description: CompanyXYZ-NG wazuh_agent role
   license: MIT

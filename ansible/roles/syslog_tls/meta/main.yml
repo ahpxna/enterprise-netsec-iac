@@ -1,5 +1,6 @@
 ---
 galaxy_info:
+  author: CompanyXYZ-NG
   role_name: syslog_tls
   description: CompanyXYZ-NG syslog_tls role
   license: MIT

@@ -1,5 +1,6 @@
 ---
 galaxy_info:
+  author: CompanyXYZ-NG
   role_name: vyos_edge
   description: >
     Pushes/reconciles VyOS device config (BGP/OSPF/VRRP/firewall) for the

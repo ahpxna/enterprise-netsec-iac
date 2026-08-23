@@ -6,6 +6,15 @@ cd "$ROOT"
 
 [ -f .env ] || { cp .env.example .env; echo "created .env from template"; }
 
+# Add fields introduced after an operator's initial bootstrap without replacing
+# any existing local values.
+for required in \
+  'RADIUS_TEST_PASSWORD=CHANGE_ME_ephemeral_integration_password' \
+  'RADIUS_TEST_CRYPT=CHANGE_ME_see_scripts_mkhash'; do
+  key="${required%%=*}"
+  grep -q "^${key}=" .env || printf '\n%s\n' "$required" >> .env
+done
+
 gen() { openssl rand -base64 36 | tr -d '\n'; }
 
 # Replace CHANGE_ME_* placeholders in .env with real random values, once.
@@ -13,6 +22,7 @@ while IFS='=' read -r k v; do
   [[ "$v" == CHANGE_ME* ]] || continue
   case "$k" in
     RADIUS_ADMIN_CRYPT) new="$(bash scripts/mkhash.sh "$(gen)")";;
+    RADIUS_TEST_CRYPT) continue;;
     *) new="$(gen)";;
   esac
   # portable in-place edit
@@ -20,6 +30,18 @@ while IFS='=' read -r k v; do
     $1==key{$2=val} {print}' .env > .env.tmp && mv .env.tmp .env
   echo "  set $k"
 done < <(grep '=' .env)
+
+# Keep the positive RADIUS test credential only in ignored .env; FreeRADIUS
+# receives the one-way verifier below.  This proves both Accept and Reject
+# behavior without placing a reusable password in source control.
+test_password="$(awk -F= '$1 == "RADIUS_TEST_PASSWORD" {sub(/^[^=]*=/, ""); gsub(/^"|"$/, ""); print; exit}' .env)"
+test_crypt="$(awk -F= '$1 == "RADIUS_TEST_CRYPT" {print $2; exit}' .env)"
+if [[ "$test_crypt" == CHANGE_ME* ]]; then
+  test_hash="$(bash scripts/mkhash.sh "$test_password")"
+  awk -v val="$test_hash" -F= 'BEGIN{OFS="="}
+    $1 == "RADIUS_TEST_CRYPT" {$2=val} {print}' .env > .env.tmp && mv .env.tmp .env
+  echo "  set RADIUS_TEST_CRYPT"
+fi
 
 # TLS identity for the dedicated syslog relay. Private material stays local.
 relay_certs="docker/syslog-relay/certs"
@@ -40,12 +62,7 @@ if [ ! -f "$relay_certs/ca.crt" ]; then
   echo "  generated syslog relay CA and server certificate"
 fi
 
-# WireGuard server + peer keys
-mkdir -p wireguard/keys && chmod 700 wireguard/keys
-if [ ! -f wireguard/keys/server.key ]; then
-  wg genkey | tee wireguard/keys/server.key | wg pubkey > wireguard/keys/server.pub 2>/dev/null \
-    || { echo "wg not installed; skipping WG keygen (install wireguard-tools)"; }
-  chmod 600 wireguard/keys/* 2>/dev/null || true
-  echo "  generated WireGuard server keypair"
-fi
-echo "secrets ready (values NOT shown; stored in .env / wireguard/keys, both gitignored)"
+# The LinuxServer WireGuard container owns its persisted configuration and
+# peer keys beneath wireguard/config/.  Keeping a second unused key lifecycle
+# here was misleading and risked testing the wrong credentials.
+echo "secrets ready (values NOT shown; stored in .env and local service config)"

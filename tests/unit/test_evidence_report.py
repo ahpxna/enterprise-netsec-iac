@@ -1,7 +1,7 @@
 import json
 import pathlib
 
-from compliance.generate_report import load_evidence, status_for
+from compliance.generate_report import load_evidence, status_for, validate_provenance
 
 
 def artifact(result: str) -> dict:
@@ -49,3 +49,11 @@ def test_invalid_artifact_is_rejected(tmp_path: pathlib.Path):
 def test_missing_artifact_is_unverified():
     status, _ = status_for(CONTROL, [])
     assert status == "UNVERIFIED"
+
+
+def test_mixed_provenance_is_rejected(tmp_path: pathlib.Path):
+    first = artifact("PASS")
+    second = artifact("PASS")
+    second["git_sha"] = "different"
+    errors = validate_provenance([first, second], tmp_path / "unit")
+    assert any("mixed provenance field git_sha" in error for error in errors)

@@ -110,6 +110,6 @@ controls:
     framework: [NIST-800-53-AC-17, ISO-27002-6.7]
     ref: "secure remote access"
     objective: "Remote admin path is WireGuard only; no management port on the Internet."
-    implemented_by: ansible/roles/wireguard_vpn
+    implemented_by: docker-compose.yml#wireguard,clab/configs/fw-core.nft
     verified_by: test_hardening.py::test_no_mgmt_exposed_to_internet
     severity: high

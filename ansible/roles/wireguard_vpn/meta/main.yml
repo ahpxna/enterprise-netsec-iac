@@ -1,5 +1,6 @@
 ---
 galaxy_info:
+  author: CompanyXYZ-NG
   role_name: wireguard_vpn
   description: CompanyXYZ-NG wireguard_vpn role
   license: MIT

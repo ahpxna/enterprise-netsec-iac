@@ -4,8 +4,6 @@
   roles:
     - role: suricata           # IDS sensor config
       tags: [ids]
-    - role: wireguard_vpn      # VPN-01
-      tags: [vpn]
 
 - name: Ship device logs through the authenticated TLS relay
   hosts: routers:firewalls

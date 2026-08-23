@@ -60,6 +60,12 @@ def node_definition(name: str, node: dict) -> dict:
             "sysctl -w net.ipv4.ip_forward=1",
             *shell_commands(node),
         ]
+        if name in {"dist1", "dist2"}:
+            # FRR requires its VRRP macvlan interfaces before vrrpd starts.
+            rendered["binds"].append(
+                "configs/frr-vrrp-bootstrap.sh:/usr/local/bin/cxyz-frr-start:ro"
+            )
+            rendered["cmd"] = "bash /usr/local/bin/cxyz-frr-start"
     elif role == "firewall":
         rendered["image"] = TOOLS_IMAGE
         rendered["binds"] = [

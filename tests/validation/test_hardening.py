@@ -4,11 +4,25 @@ from __future__ import annotations
 
 import re
 import subprocess
+import os
 from pathlib import Path
 
 from conftest import in_node
 
 ROOT = Path(__file__).resolve().parents[2]
+
+
+def _local_secret(name: str) -> str:
+    if os.environ.get(name):
+        return os.environ[name]
+    env_file = ROOT / ".env"
+    if not env_file.exists():
+        return ""
+    for raw in env_file.read_text().splitlines():
+        key, separator, value = raw.partition("=")
+        if separator and key == name:
+            return value.strip().strip('"').strip("'")
+    return ""
 
 
 def test_no_cleartext_radius_password(evidence):
@@ -20,13 +34,35 @@ def test_no_cleartext_radius_password(evidence):
     )
     hits = [line for line in result.stdout.splitlines() if "Cleartext-Password" in line]
     sha512_crypt = bool(re.search(r'Crypt-Password\s*:=\s*"\$6\$', result.stdout))
+    secret = _local_secret("RADIUS_SECRET_PC4")
+    password = _local_secret("RADIUS_TEST_PASSWORD")
+    assert secret and password, "local RADIUS integration credentials are unavailable"
+    accepted = in_node(
+        "pc4", "sh", "-c",
+        "printf '%%s\\n' 'User-Name = cxyztest' 'User-Password = %s' | "
+        "radclient -x 172.16.50.1 auth '%s'" % (password, secret),
+    )
+    rejected = in_node(
+        "pc4", "sh", "-c",
+        "printf '%%s\\n' 'User-Name = cxyztest' 'User-Password = incorrect-password' | "
+        "radclient -x 172.16.50.1 auth '%s'" % secret,
+    )
+    accept = "Access-Accept" in (accepted.stdout + accepted.stderr)
+    reject = "Access-Reject" in (rejected.stdout + rejected.stderr)
     evidence(
         control="IDM-01",
-        assertion="RADIUS user store uses SHA-512-crypt and contains no cleartext password attribute",
-        observed={"cleartext_hits": hits, "sha512_crypt_present": sha512_crypt},
+        assertion="RADIUS stores only SHA-512-crypt verifier and accepts only the controlled credential",
+        observed={
+            "cleartext_hits": hits,
+            "sha512_crypt_present": sha512_crypt,
+            "access_accept": accept,
+            "access_reject": reject,
+        },
+        enforcement_node="server1",
     )
     assert not hits, f"cleartext credential found: {hits}"
     assert sha512_crypt, "salted SHA-512-crypt RADIUS verifier is missing"
+    assert accept and reject, "RADIUS credential verification did not enforce both outcomes"
 
 
 def test_radius_shared_secret_strength(evidence):
@@ -88,7 +124,14 @@ def test_ntp_authenticated(evidence):
 
 
 def test_no_mgmt_exposed_to_internet(evidence):
-    negative = in_node("isp1", "nc", "-z", "-w", "3", "10.1.1.10", "22")
+    service = in_node("server1", "sh", "-c", "ss -H -tln | grep -E ':22([[:space:]]|$)'")
+    before = in_node("fw-core", "nft", "list", "counter", "inet", "cxyz", "vpn01_wan_ssh_drop")
+    before_match = re.search(r"packets\s+(\d+)", before.stdout)
+    assert before.returncode == 0 and before_match, "VPN-01 firewall counter is unavailable"
+    negative = in_node("isp1", "nc", "-z", "-w", "3", "172.16.50.1", "22")
+    after = in_node("fw-core", "nft", "list", "counter", "inet", "cxyz", "vpn01_wan_ssh_drop")
+    after_match = re.search(r"packets\s+(\d+)", after.stdout)
+    assert after.returncode == 0 and after_match, "VPN-01 firewall counter cannot be read"
     positive = subprocess.run(
         ["docker", "compose", "exec", "-T", "wireguard", "wg", "show", "interfaces"],
         cwd=ROOT,
@@ -97,6 +140,20 @@ def test_no_mgmt_exposed_to_internet(evidence):
         check=False,
     )
     wg_ready = positive.returncode == 0 and bool(positive.stdout.strip())
-    evidence(control="VPN-01", assertion="WireGuard is operational and Internet cannot reach management SSH", observed={"wireguard_ready": wg_ready, "internet_mgmt_ssh": negative.returncode == 0})
+    counter_delta = int(after_match.group(1)) - int(before_match.group(1))
+    evidence(
+        control="VPN-01",
+        assertion="WireGuard service is operational; routed WAN cannot reach the healthy DC SSH service",
+        observed={
+            "ssh_service_healthy": service.returncode == 0,
+            "wireguard_ready": wg_ready,
+            "wan_ssh_reachable": negative.returncode == 0,
+            "wan_deny_counter_delta": counter_delta,
+        },
+        enforcement_node="fw-core",
+        counter_before=int(before_match.group(1)),
+        counter_after=int(after_match.group(1)),
+    )
+    assert service.returncode == 0, "DC SSH positive precondition failed"
     assert wg_ready, "WireGuard positive control failed"
-    assert negative.returncode != 0, "management SSH is reachable from Internet"
+    assert negative.returncode != 0 and counter_delta > 0, "WAN SSH was not denied by fw-core"

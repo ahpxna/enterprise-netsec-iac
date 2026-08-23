@@ -9,6 +9,8 @@ import pathlib
 
 import yaml
 
+from compliance.provenance import current_provenance
+
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 VALID_RESULTS = {"PASS", "FAIL", "ERROR"}
@@ -50,6 +52,28 @@ def load_evidence(run: pathlib.Path | None) -> tuple[list[dict], list[str]]:
     return evidence, errors
 
 
+def validate_provenance(evidence: list[dict], run: pathlib.Path | None) -> list[str]:
+    """Reject mixed, stale, or incorrectly labelled evidence runs."""
+    if not evidence:
+        return []
+    expected = current_provenance()
+    run_id = run.name if run else None
+    errors: list[str] = []
+    baseline = evidence[0]
+    fields = ("git_sha", "control_catalog_sha256", "topology_sha256", "test_suite_sha256", "environment")
+    for item in evidence:
+        label = item["test_id"]
+        if run_id and item["run_id"] != run_id:
+            errors.append(f"{label}: run_id does not match evidence directory")
+        for field in fields:
+            if item[field] != baseline[field]:
+                errors.append(f"{label}: mixed provenance field {field}")
+        for field, value in expected.items():
+            if item[field] != value:
+                errors.append(f"{label}: stale {field}")
+    return errors
+
+
 def verified_test_suffix(verified_by: str) -> str:
     filename, test_name = verified_by.split("::", 1)
     return f"/{filename}::{test_name}"
@@ -81,6 +105,7 @@ def main() -> int:
     if run is not None and not run.is_absolute():
         run = ROOT / run
     evidence, artifact_errors = load_evidence(run)
+    artifact_errors.extend(validate_provenance(evidence, run))
 
     counts = {"PASS": 0, "FAIL": 0, "ERROR": 0, "UNVERIFIED": 0}
     badges = {"PASS": "✅", "FAIL": "❌", "ERROR": "⚠️", "UNVERIFIED": "⚪"}

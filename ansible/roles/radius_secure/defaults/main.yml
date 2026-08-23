@@ -1,6 +1,7 @@
 ---
 # Pulled from .env at runtime; NEVER hard-code a real secret here.
 radius_secure_admin_crypt: "{{ lookup('ansible.builtin.env', 'RADIUS_ADMIN_CRYPT') }}"
+radius_secure_test_crypt: "{{ lookup('ansible.builtin.env', 'RADIUS_TEST_CRYPT') }}"
 radius_secure_clients:
   - name: fw-core
     ip: 10.255.0.5

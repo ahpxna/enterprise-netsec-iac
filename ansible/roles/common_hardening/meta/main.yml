@@ -1,5 +1,6 @@
 ---
 galaxy_info:
+  author: CompanyXYZ-NG
   role_name: common_hardening
   description: CompanyXYZ-NG common_hardening role
   license: MIT
