@@ -23,11 +23,45 @@
       the config.boot files under terraform/vyos-fabric/configs/
       (edge, fw-core, fw-dmz, core, dist1, dist2).
 
-- name: Push declarative config (curly-brace format, matches config.boot)
+- name: Assert routing secrets are supplied before Day-2 reconciliation
+  ansible.builtin.assert:
+    that:
+      - vyos_edge_ospf_md5 | length >= 24
+      - vyos_edge_bgp_isp1 | length >= 24
+      - vyos_edge_bgp_isp2 | length >= 24
+      - not vyos_edge_ospf_md5.startswith('CHANGE_ME')
+      - not vyos_edge_bgp_isp1.startswith('CHANGE_ME')
+      - not vyos_edge_bgp_isp2.startswith('CHANGE_ME')
+    fail_msg: "Path B routing secrets must be supplied through ignored .env or an approved secret backend."
+  no_log: true
+
+- name: Render a secret-injected Day-2 configuration on the controller
+  ansible.builtin.copy:
+    content: >-
+      {{ lookup('ansible.builtin.file', vyos_edge_boot_file)
+         | replace('CHANGE_ME_ospf_key', vyos_edge_ospf_md5)
+         | replace('CHANGE_ME_bgp_isp1', vyos_edge_bgp_isp1)
+         | replace('CHANGE_ME_bgp_isp2', vyos_edge_bgp_isp2) }}
+    dest: "/tmp/cxyz-{{ inventory_hostname }}.boot"
+    mode: "0600"
+  delegate_to: localhost
+  become: false
+  no_log: true
+
+- name: Reconcile declarative VyOS configuration and save a rollback backup
   vyos.vyos.vyos_config:
-    src: "{{ vyos_edge_boot_file }}"
+    src: "/tmp/cxyz-{{ inventory_hostname }}.boot"
+    backup: true
     save: "{{ vyos_edge_save_config }}"
   register: vyos_edge_result
+
+- name: Remove secret-injected Day-2 configuration from the controller
+  ansible.builtin.file:
+    path: "/tmp/cxyz-{{ inventory_hostname }}.boot"
+    state: absent
+  delegate_to: localhost
+  become: false
+  no_log: true
 
 - name: Show what changed (empty on a clean re-run — proves idempotency)
   ansible.builtin.debug:

@@ -6,12 +6,22 @@ variable "libvirt_uri" {
 
 variable "vyos_image_path" {
   description = <<-DESC
-    Absolute path to a VyOS qcow2 image on the libvirt host (rolling or LTS,
-    cloud-init enabled). Download instructions are in README.md. Used as the
-    default base image for VyOS nodes unless overridden in
+    Absolute path to the pinned, cloud-init-enabled VyOS qcow2 image on the
+    libvirt host. The exact version and digest are mandatory for a
+    reproducible deployment. Used as the default base image unless overridden in
     var.node_image_overrides.
   DESC
   type        = string
+}
+
+variable "vyos_image_sha256" {
+  description = "SHA-256 digest of the exact VyOS qcow2 selected for this deployment"
+  type        = string
+
+  validation {
+    condition     = can(regex("^[0-9a-fA-F]{64}$", var.vyos_image_sha256))
+    error_message = "vyos_image_sha256 must be a 64-character SHA-256 hexadecimal digest."
+  }
 }
 
 variable "linux_image_path" {
@@ -34,6 +44,23 @@ variable "ssh_public_key" {
   type        = string
 }
 
+variable "routing_secrets" {
+  description = "Per-protocol routing authentication material, supplied from ignored terraform.tfvars or a secret backend"
+  type = object({
+    ospf_md5 = string
+    bgp_isp1 = string
+    bgp_isp2 = string
+  })
+  sensitive = true
+
+  validation {
+    condition = alltrue([
+      for secret in values(var.routing_secrets) : length(secret) >= 24 && !startswith(secret, "CHANGE_ME")
+    ])
+    error_message = "All routing secrets must be unique non-placeholder values of at least 24 characters."
+  }
+}
+
 variable "node_image_overrides" {
   description = "Optional node-name to qcow2 path overrides; unspecified nodes use their platform base image"
   type        = map(string)
@@ -41,15 +68,15 @@ variable "node_image_overrides" {
 }
 
 # ---------------------------------------------------------------------
-# One entry per topology node. `boot_config` is required for VyOS nodes;
-# Linux endpoint addressing is generated from local.interface_plan.
+# One entry per topology node containing only infrastructure-specific sizing
+# and image information. Node role, management IP, attachment order, guest
+# addresses, and routes are canonical in intent/fabric.yaml.
 # ---------------------------------------------------------------------
 variable "nodes" {
   description = "Complete Path B topology: VyOS network nodes and Linux endpoints"
   type = map(object({
     node_id     = number
     platform    = string
-    mgmt_ip     = string
     vcpu        = number
     memory_mb   = number
     boot_config = optional(string)
@@ -85,7 +112,6 @@ variable "nodes" {
     edge = {
       node_id     = 10
       platform    = "vyos"
-      mgmt_ip     = "10.1.1.10"
       vcpu        = 1
       memory_mb   = 1024
       boot_config = "configs/edge.boot"
@@ -93,7 +119,6 @@ variable "nodes" {
     fw-core = {
       node_id     = 20
       platform    = "vyos"
-      mgmt_ip     = "10.1.1.20"
       vcpu        = 1
       memory_mb   = 1024
       boot_config = "configs/fw-core.boot"
@@ -101,7 +126,6 @@ variable "nodes" {
     fw-dmz = {
       node_id     = 30
       platform    = "vyos"
-      mgmt_ip     = "10.1.1.30"
       vcpu        = 1
       memory_mb   = 1024
       boot_config = "configs/fw-dmz.boot"
@@ -109,7 +133,6 @@ variable "nodes" {
     core = {
       node_id     = 11
       platform    = "vyos"
-      mgmt_ip     = "10.1.1.11"
       vcpu        = 1
       memory_mb   = 1024
       boot_config = "configs/core.boot"
@@ -117,7 +140,6 @@ variable "nodes" {
     dist1 = {
       node_id     = 12
       platform    = "vyos"
-      mgmt_ip     = "10.1.1.2"
       vcpu        = 1
       memory_mb   = 1024
       boot_config = "configs/dist1.boot"
@@ -125,7 +147,6 @@ variable "nodes" {
     dist2 = {
       node_id     = 13
       platform    = "vyos"
-      mgmt_ip     = "10.1.1.3"
       vcpu        = 1
       memory_mb   = 1024
       boot_config = "configs/dist2.boot"
@@ -133,7 +154,6 @@ variable "nodes" {
     isp1 = {
       node_id     = 201
       platform    = "vyos"
-      mgmt_ip     = "10.1.1.201"
       vcpu        = 1
       memory_mb   = 1024
       boot_config = "configs/isp1.boot"
@@ -141,7 +161,6 @@ variable "nodes" {
     isp2 = {
       node_id     = 202
       platform    = "vyos"
-      mgmt_ip     = "10.1.1.202"
       vcpu        = 1
       memory_mb   = 1024
       boot_config = "configs/isp2.boot"
@@ -149,28 +168,24 @@ variable "nodes" {
     pc1 = {
       node_id   = 111
       platform  = "linux"
-      mgmt_ip   = "10.1.1.111"
       vcpu      = 1
       memory_mb = 512
     }
     pc4 = {
       node_id   = 144
       platform  = "linux"
-      mgmt_ip   = "10.1.1.144"
       vcpu      = 1
       memory_mb = 512
     }
     server1 = {
       node_id   = 50
       platform  = "linux"
-      mgmt_ip   = "10.1.1.50"
       vcpu      = 1
       memory_mb = 1024
     }
     dmz-web = {
       node_id   = 61
       platform  = "linux"
-      mgmt_ip   = "10.1.1.61"
       vcpu      = 1
       memory_mb = 512
     }

@@ -69,6 +69,8 @@ harden: ## Apply CIS-aligned hardening only
 lint: ## Static checks: yamllint, ansible-lint, terraform, gitleaks
 	python scripts/render_fabric.py --check
 	python scripts/render_batfish_snapshot.py --check
+	python scripts/render_vm_inventory.py --check
+	python scripts/check_vyos_boot.py
 	python compliance/check_wiring.py
 	python -m pytest tests/unit -q
 	docker compose --profile siem --profile ids --profile ztna --profile dmz config --quiet
@@ -115,13 +117,27 @@ vm-plan: ## Plan the VyOS VM fabric (requires terraform.tfvars, see .example)
 	cd terraform/vyos-fabric && terraform plan
 
 .PHONY: vm-up
-vm-up: ## Apply: boot real VyOS VMs (edge, fw-core, fw-dmz, core, dist1, dist2)
+vm-up: ## Apply: boot the complete 12-node Path B real-NOS fabric
 	cd terraform/vyos-fabric && terraform apply
 	@echo "==> Wait ~2 min for cloud-init first-boot config load, then: make vm-configure"
 
+.PHONY: vm-inventory
+vm-inventory: ## Render the Path B inventory from intent/fabric.yaml
+	python scripts/render_vm_inventory.py --check
+
 .PHONY: vm-configure
-vm-configure: ## Re-push/reconcile config to the real VyOS VMs via Ansible
-	cd ansible && ansible-playbook -i inventory/vm-fabric.yml playbooks/30-vyos-fabric.yml
+vm-configure: vm-inventory ## Reconcile VyOS and Linux Day-2 configuration for Path B
+	@test -s ansible/inventory/known_hosts || (echo "missing verified ansible/inventory/known_hosts; verify VM SSH host keys before configuration" >&2; exit 1)
+	cd ansible && set -a && source ../.env && set +a && ansible-playbook -i inventory/vm-fabric.yml playbooks/31-path-b.yml
+
+.PHONY: vm-health
+vm-health: vm-inventory ## Block if Path B management SSH/network_cli bootstrap is unhealthy
+	@test -s ansible/inventory/known_hosts || (echo "missing verified ansible/inventory/known_hosts" >&2; exit 1)
+	cd ansible && ansible-playbook -i inventory/vm-fabric.yml playbooks/32-vm-health.yml
+
+.PHONY: vm-audit
+vm-audit: vm-health ## Path B VM/bootstrap health evidence gate (semantic controls remain separately pending)
+	@echo "==> Path B management and bootstrap gate passed; run Path B semantic controls only after their VyOS backend is implemented."
 
 .PHONY: vm-down
 vm-down: ## Destroy the real VyOS VM fabric

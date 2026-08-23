@@ -1,8 +1,16 @@
 # Copy to terraform.tfvars and fill in real values before `terraform apply`.
 libvirt_uri     = "qemu:///system"
-vyos_image_path = "/var/lib/libvirt/images/base/vyos-1.4-rolling-cloud-init.qcow2"
+# Select one exact, cloud-init-enabled VyOS release after validating all
+# config.boot files against it. Never use a rolling filename here.
+vyos_image_path   = "/var/lib/libvirt/images/base/vyos-1.4.2-cloud-init.qcow2"
+vyos_image_sha256 = "REPLACE_WITH_THE_REVIEWED_64_HEX_SHA256_OF_THE_QCOW2"
 linux_image_path = "/var/lib/libvirt/images/base/ubuntu-24.04-server-cloudimg-amd64.img"
 ssh_public_key  = "ssh-ed25519 AAAA...deployment-key... operator@laptop"
+routing_secrets = {
+  ospf_md5 = "REPLACE_WITH_24_PLUS_CHARACTERS"
+  bgp_isp1 = "REPLACE_WITH_24_PLUS_CHARACTERS"
+  bgp_isp2 = "REPLACE_WITH_24_PLUS_CHARACTERS"
+}
 
 # Optional image overrides do not replace the 12-node topology map.
 # A replacement NOS image must accept the corresponding boot configuration.

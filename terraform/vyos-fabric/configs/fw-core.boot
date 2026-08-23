@@ -46,3 +46,4 @@ firewall {
     interface eth2 { in { name DC-IN } }
 }
 system { host-name fw-core }
+service { ssh { port 22 } }

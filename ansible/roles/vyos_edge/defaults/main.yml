@@ -1,9 +1,14 @@
 ---
 # Root of the repo relative to this role — used to find the config.boot
 # files that terraform/vyos-fabric already injected at first boot. This
-# role re-applies them via vyos_config so day-2 changes are idempotent
+# role re-applies them via vyos_config so day-2 changes are idempotent.
+# vyos_config explicitly supports both bracket and `set` source formats; this
+# keeps first boot and day-2 review on one declarative artifact.
 # and go through the same review path as the rest of the repo (PR ->
 # CI -> ansible-playbook), instead of hand-editing VMs.
 vyos_edge_repo_root: "{{ playbook_dir }}/../.."
 vyos_edge_boot_config_dir: "{{ vyos_edge_repo_root }}/terraform/vyos-fabric/configs"
 vyos_edge_save_config: true
+vyos_edge_ospf_md5: "{{ lookup('ansible.builtin.env', 'OSPF_MD5_SECRET') }}"
+vyos_edge_bgp_isp1: "{{ lookup('ansible.builtin.env', 'BGP_ISP1_SECRET') }}"
+vyos_edge_bgp_isp2: "{{ lookup('ansible.builtin.env', 'BGP_ISP2_SECRET') }}"

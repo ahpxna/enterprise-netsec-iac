@@ -1,0 +1,31 @@
+---
+# Blocking bootstrap/management health gate for Path B.  It intentionally
+# proves the VM backend rather than reusing Containerlab's docker-exec tests.
+- name: Verify management access to every real VyOS node
+  hosts: vyos_routers:vyos_firewalls
+  gather_facts: false
+  tasks:
+    - name: Collect VyOS version and interface state through network_cli
+      vyos.vyos.vyos_command:
+        commands:
+          - show version
+          - show interfaces
+      register: vyos_bootstrap
+      changed_when: false
+
+    - name: Assert VyOS answered operational commands
+      ansible.builtin.assert:
+        that:
+          - vyos_bootstrap.stdout | length == 2
+          - vyos_bootstrap.stdout[0] | length > 0
+          - vyos_bootstrap.stdout[1] | length > 0
+        fail_msg: "{{ inventory_hostname }} did not complete the VyOS SSH/network_cli bootstrap gate."
+
+- name: Verify management access to every real Linux endpoint
+  hosts: linux_nodes
+  gather_facts: true
+  tasks:
+    - name: Assert the expected cloud-init hostname is active
+      ansible.builtin.assert:
+        that: ansible_hostname == inventory_hostname
+        fail_msg: "{{ inventory_hostname }} management IP resolves to the wrong Linux guest."

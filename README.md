@@ -15,7 +15,7 @@ Ansible provide optional VM-based deployment and day-2 configuration paths.
 | Path | Scope | Status |
 |---|---|---|
 | A | containerlab fabric + Docker Compose security plane | Architecture remediated; live revalidation required |
-| B | Terraform/libvirt + VyOS VM fabric | Complete topology generated from shared intent; VyOS boot validation pending |
+| B | Terraform/libvirt + VyOS VM fabric | Infrastructure topology implemented; VyOS configuration, Day-2 security controls, HA, and Path-B-specific evidence remain unvalidated |
 | C | Kubernetes security plane | Manifests implemented; live deployment unverified |
 
 An earlier Path A run completed on 2026-08-18 on an external Linux host, but it
@@ -29,7 +29,10 @@ all 12 nodes. Libvirt creates addressless isolated Layer-2 networks, while
 point-to-point addresses are assigned inside the guests; this avoids treating
 small transit networks as libvirt-managed DHCP networks. Data-plane NICs are
 created first with stable MAC addresses and management is always appended last.
-VyOS first-boot validation remains pending.
+The inventory is rendered from the same intent, and `vm-configure` requires a
+verified local `ansible/inventory/known_hosts` file before it will connect.
+`make vm-health` is the current Path-B bootstrap gate; it is deliberately not
+an alias for the Containerlab `make audit` suite.
 
 Path C has schema-valid manifests but has not completed live-cluster
 validation. Resource sizing, readiness probes, and security-policy behavior

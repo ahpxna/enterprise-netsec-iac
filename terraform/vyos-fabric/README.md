@@ -61,22 +61,24 @@ terraform apply
 terraform output node_mgmt_ips
 ```
 
-Then configure via Ansible (network_cli, not SSH-into-Linux like the
-container path):
+Before any Ansible connection, verify each VM SSH host key from its console or
+trusted hypervisor inventory and store it in `ansible/inventory/known_hosts`.
+The file is intentionally local-only; the automation refuses to disable host
+verification. Then run the complete Path-B lifecycle:
 
 ```bash
-cd ../../ansible
-ansible-playbook -i inventory/vm-fabric.yml playbooks/30-vyos-fabric.yml
+cd ../..
+make vm-configure
+make vm-health
 ```
 
 ## Current validation status and known gaps
 
-- **A live apply is in progress on an external KVM host, but the expanded
-  12-node topology has not yet reached the first-boot checkpoint.** Config.boot syntax is written
-  from VyOS 1.3 documentation and may need small fixes for the target
-  version — especially `firewall{}`, which was rewritten to a zone-based
-  model in 1.4/1.5. Boot one node, run `configure && load config.boot && commit`,
-  and fix whatever the parser rejects before scripting the rest.
+- **The expanded 12-node topology has not yet passed a live first-boot
+  checkpoint.** `terraform validate` cannot validate VyOS grammar. Pin one
+  exact VyOS qcow2 version and checksum in `terraform.tfvars`, boot one node,
+  then run `configure && load /config/config.boot && commit` before deploying
+  the full fabric.
 - The first live apply exposed the legacy dmacvicar/libvirt 0.8 `/30`
   validation limit. Data-plane CIDRs now live in `local.link_plan`, while
   `mode = "none"` creates addressless isolated Layer-2 networks. This avoids

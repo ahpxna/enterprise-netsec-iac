@@ -33,3 +33,4 @@ firewall {
     interface eth1 { in { name DMZ-IN } }
 }
 system { host-name fw-dmz }
+service { ssh { port 22 } }

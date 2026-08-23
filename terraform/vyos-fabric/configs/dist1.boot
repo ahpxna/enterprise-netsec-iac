@@ -25,3 +25,4 @@ protocols {
     }
 }
 system { host-name dist1 }
+service { ssh { port 22 } }

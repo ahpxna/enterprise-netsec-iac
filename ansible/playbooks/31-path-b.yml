@@ -1,0 +1,31 @@
+---
+# Authoritative Day-2 lifecycle for the real-NOS VM fabric.  Linux roles are
+# deliberately scoped to Linux guests; VyOS is configured only through its
+# network_cli role in 30-vyos-fabric.yml.
+- name: Apply Path B VyOS fabric configuration
+  import_playbook: 30-vyos-fabric.yml
+
+- name: Harden Path B Linux endpoints
+  hosts: linux_nodes
+  gather_facts: true
+  roles:
+    - role: common_hardening
+      tags: [baseline, cis]
+
+- name: Configure Path B identity, time, and logging endpoint
+  hosts: servers
+  gather_facts: true
+  roles:
+    - role: radius_secure
+      tags: [identity]
+    - role: ntp_secure
+      tags: [time]
+    - role: syslog_tls
+      tags: [logging]
+
+- name: Configure Path B IDS endpoint
+  hosts: servers
+  gather_facts: true
+  roles:
+    - role: suricata
+      tags: [ids]

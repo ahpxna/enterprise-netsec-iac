@@ -23,3 +23,4 @@ protocols {
     }
 }
 system { host-name isp2 }
+service { ssh { port 22 } }

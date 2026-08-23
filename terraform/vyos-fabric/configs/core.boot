@@ -21,3 +21,4 @@ protocols {
     }
 }
 system { host-name core }
+service { ssh { port 22 } }

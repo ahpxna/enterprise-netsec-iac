@@ -1,12 +1,7 @@
-/* edge — VyOS translation of vIOS-EDGE-I (dual-ISP BGP edge).
- * SYNTAX NOTE: written against VyOS 1.3 (equuleus) classic CLI syntax.
- * VyOS 1.4/1.5 (rolling) rewired `firewall` to a zone-based model. For a
- * rolling build, port the firewall{} stanza per:
- * https://docs.vyos.io/en/latest/configuration/firewall/index.html
- * Everything else (interfaces/protocols bgp) is stable across versions.
- * VALIDATE with `configure && load /config/config.boot && commit` and
- * resolve any parser errors for the target build. This file has not yet been
- * boot-validated against a real VyOS image (see TESTING-GUIDE.md).
+/* edge — VyOS Path B dual-ISP BGP edge.
+ * Target baseline: the exact image pinned in terraform.tfvars (the example
+ * uses 1.4.2). This config must pass `load /config/config.boot && commit` on
+ * that image before a full fabric apply; Terraform cannot validate VyOS CLI.
  */
 interfaces {
     ethernet eth0 {
@@ -78,10 +73,6 @@ policy {
 }
 system {
     host-name edge
-    login {
-        user vyos {
-            authentication { plaintext-password "CHANGE_ME_ON_FIRST_BOOT" }
-        }
-    }
     config-management { commit-revisions 20 }
 }
+service { ssh { port 22 } }

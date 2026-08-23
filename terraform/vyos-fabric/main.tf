@@ -65,7 +65,7 @@ resource "libvirt_cloudinit_disk" "node_ci" {
     {
       hostname    = each.key
       ssh_key     = var.ssh_public_key
-      boot_config = file("${path.module}/${each.value.boot_config}")
+      boot_config = local.vyos_boot_configs[each.key]
     }
     ) : templatefile(
     "${path.module}/cloud-init/linux-user-data.tftpl",
@@ -144,8 +144,11 @@ resource "libvirt_domain" "node" {
   network_interface {
     network_name   = libvirt_network.mgmt.name
     mac            = local.management_plan[each.key].mac
-    hostname       = each.key
-    addresses      = [each.value.mgmt_ip]
+      hostname       = each.key
+      # IP ownership belongs only to intent/fabric.yaml.  Libvirt uses this
+      # address to create the deterministic DHCP reservation for the stable
+      # management MAC below.
+      addresses      = [local.management_plan[each.key].address]
     wait_for_lease = false
   }
 
@@ -192,12 +195,22 @@ locals {
   }
 
   management_plan = {
-    for node_name, node in var.nodes : node_name => {
+    for node_name, node in local.fabric_intent.nodes : node_name => {
       device       = "eth${length(local.data_links[node_name])}"
-      mac          = format("52:54:00:%02x:00:ff", node.node_id)
+      mac          = format("52:54:00:%02x:00:ff", var.nodes[node_name].node_id)
       network_name = var.management_network
       address      = node.mgmt_ip
     }
+  }
+
+  # Source configs are reviewed without secret material.  Terraform injects
+  # values only into the cloud-init payload from ignored tfvars/secret input.
+  vyos_boot_configs = {
+    for node_name, node in var.nodes : node_name => node.platform == "vyos" ? replace(
+      replace(
+        replace(file("${path.module}/${node.boot_config}"), "CHANGE_ME_ospf_key", var.routing_secrets.ospf_md5),
+        "CHANGE_ME_bgp_isp1", var.routing_secrets.bgp_isp1),
+      "CHANGE_ME_bgp_isp2", var.routing_secrets.bgp_isp2) : null
   }
 }
 
@@ -208,6 +221,13 @@ check "complete_topology" {
   }
 }
 
+check "intent_management_complete" {
+  assert {
+    condition     = toset(keys(var.nodes)) == toset(keys(local.fabric_intent.nodes))
+    error_message = "Path B sizing entries and intent/fabric.yaml nodes must be identical."
+  }
+}
+
 check "known_image_override_nodes" {
   assert {
     condition     = length(setsubtract(toset(keys(var.node_image_overrides)), toset(keys(var.nodes)))) == 0
@@ -215,8 +235,15 @@ check "known_image_override_nodes" {
   }
 }
 
+check "pinned_vyos_image" {
+  assert {
+    condition     = lower(filesha256(var.vyos_image_path)) == lower(var.vyos_image_sha256)
+    error_message = "vyos_image_path does not match vyos_image_sha256; use the exact reviewed VyOS image."
+  }
+}
+
 output "node_mgmt_ips" {
-  value = { for k, v in var.nodes : k => v.mgmt_ip }
+  value = { for k, v in local.management_plan : k => v.address }
 }
 
 output "node_interface_plan" {

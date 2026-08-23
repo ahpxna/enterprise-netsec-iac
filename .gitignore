@@ -5,6 +5,7 @@
 *.p12
 ansible/group_vars/all/vault.yml
 ansible/inventory/*.local.yml
+ansible/inventory/known_hosts
 wireguard/keys/
 wireguard/config/
 docker/zero-trust-gateway/secrets/
