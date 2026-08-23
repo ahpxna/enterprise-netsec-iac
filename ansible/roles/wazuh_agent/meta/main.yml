@@ -1,7 +1,6 @@
 ---
 galaxy_info:
   role_name: wazuh_agent
-  author: nguyan
   description: CompanyXYZ-NG wazuh_agent role
   license: MIT
   min_ansible_version: "2.15"

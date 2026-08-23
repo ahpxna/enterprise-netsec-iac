@@ -19,13 +19,27 @@ jobs:
         with: { python-version: "3.12" }
 
       - name: Install linters
-        run: pip install ansible-core ansible-lint yamllint
+        run: pip install ansible-core ansible-lint pytest pyyaml yamllint
+
+      - name: Install Ansible collections
+        run: ansible-galaxy collection install -r ansible/requirements.yml
+
+      - name: Check generated topology models
+        run: |
+          python scripts/render_fabric.py --check
+          python scripts/render_batfish_snapshot.py --check
+
+      - name: Unit-test evidence semantics
+        run: pytest tests/unit -q
+
+      - name: Validate Docker Compose model
+        run: docker compose --profile siem --profile ids --profile ztna --profile dmz config --quiet
 
       - name: yamllint
         run: yamllint .
 
       - name: ansible-lint
-        run: cd ansible && ansible-lint || true   # advisory until roles stabilize
+        run: cd ansible && ansible-lint
 
       - name: Validate controls.yaml <-> tests wiring
         run: python compliance/check_wiring.py
@@ -35,10 +49,11 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with: { fetch-depth: 0 }
-      - name: gitleaks
-        uses: gitleaks/gitleaks-action@v3
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Scan every reachable commit with gitleaks
+        run: >-
+          docker run --rm -v "$GITHUB_WORKSPACE:/repo"
+          ghcr.io/gitleaks/gitleaks:v8.24.3 detect
+          --source=/repo --redact --log-opts=--all
 
   # --- Batfish offline policy tests: catches firewall regressions pre-merge ---
   batfish-policy:
@@ -52,9 +67,11 @@ jobs:
       - uses: actions/setup-python@v7
         with: { python-version: "3.12" }
       - run: pip install pybatfish pytest
+      - name: Verify generated snapshot is current
+        run: python scripts/render_batfish_snapshot.py --check
       - name: Run Batfish policy tests
         env: { BATFISH_SERVICE: localhost }
-        run: pytest tests/batfish -v || true
+        run: pytest tests/batfish -v
 
   # --- Terraform validate (no apply in CI) ---
   terraform:
@@ -63,6 +80,8 @@ jobs:
       - uses: actions/checkout@v7
       - uses: hashicorp/setup-terraform@v4
       - run: terraform -chdir=terraform/libvirt init -backend=false
+      - run: terraform -chdir=terraform/libvirt fmt -check -recursive
       - run: terraform -chdir=terraform/libvirt validate
       - run: terraform -chdir=terraform/vyos-fabric init -backend=false
+      - run: terraform -chdir=terraform/vyos-fabric fmt -check -recursive
       - run: terraform -chdir=terraform/vyos-fabric validate

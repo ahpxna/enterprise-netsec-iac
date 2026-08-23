@@ -22,7 +22,7 @@ interfaces {
         description "to-fw-core"
     }
     ethernet eth3 {
-        address 10.255.0.5/30       /* to fw-dmz */
+        address 10.255.0.9/30       /* to fw-dmz */
         description "to-fw-dmz"
     }
     ethernet eth4 {
@@ -32,6 +32,12 @@ interfaces {
     }
 }
 protocols {
+    static {
+        route 172.16.50.0/24 { next-hop 10.255.0.2 }
+        route 192.168.0.0/16 { next-hop 10.255.0.2 }
+        route 195.1.1.160/29 { next-hop 10.255.0.10 }
+        route 195.1.1.0/24 { blackhole }
+    }
     bgp 65001 {
         parameters {
             router-id 195.1.1.2

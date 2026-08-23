@@ -3,7 +3,6 @@
 # Directly remediates the CYB-300 "NTP authentication missing" finding.
 - name: Install chrony
   ansible.builtin.package: { name: chrony, state: present }
-  failed_when: false
 
 - name: Configure chrony with NTS upstreams
   ansible.builtin.copy:
@@ -11,8 +10,8 @@
     mode: "0644"
     content: |
       # Managed by Ansible — NTS authenticated time (TIME-01)
-      server {{ ntp_upstream_1 }} iburst nts
-      server {{ ntp_upstream_2 }} iburst nts
+      server {{ ntp_secure_upstream_1 }} iburst nts
+      server {{ ntp_secure_upstream_2 }} iburst nts
       driftfile /var/lib/chrony/chrony.drift
       makestep 1.0 3
       rtcsync

@@ -15,17 +15,24 @@
     mode: "0644"
     content: |
       # Managed by Ansible — CompanyXYZ-NG common_hardening
-      ClientAliveInterval {{ ssh_client_alive_interval }}
-      ClientAliveCountMax {{ ssh_client_alive_count_max }}
-      PermitRootLogin {{ ssh_permit_root_login }}
+      ClientAliveInterval {{ common_hardening_ssh_client_alive_interval }}
+      ClientAliveCountMax {{ common_hardening_ssh_client_alive_count_max }}
+      PermitRootLogin {{ common_hardening_ssh_permit_root_login }}
       Protocol 2
       Banner /etc/issue.net
   notify: restart sshd
-  failed_when: false
+
+- name: Enforce interactive shell timeout
+  ansible.builtin.copy:
+    dest: /etc/profile.d/cxyz-timeout.sh
+    mode: "0644"
+    content: |
+      TMOUT={{ common_hardening_ssh_client_alive_interval }}
+      readonly TMOUT
+      export TMOUT
 
 - name: Set login banner
   ansible.builtin.copy:
     dest: /etc/issue.net
-    content: "{{ login_banner }}\n"
+    content: "{{ common_hardening_login_banner }}\n"
     mode: "0644"
-  failed_when: false

@@ -1,7 +1,6 @@
 ---
 galaxy_info:
   role_name: suricata
-  author: nguyan
   description: CompanyXYZ-NG suricata role
   license: MIT
   min_ansible_version: "2.15"

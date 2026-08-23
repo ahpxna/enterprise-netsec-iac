@@ -4,6 +4,6 @@
 # role re-applies them via vyos_config so day-2 changes are idempotent
 # and go through the same review path as the rest of the repo (PR ->
 # CI -> ansible-playbook), instead of hand-editing VMs.
-vyos_repo_root: "{{ playbook_dir }}/../.."
-vyos_boot_config_dir: "{{ vyos_repo_root }}/terraform/vyos-fabric/configs"
-vyos_save_config: true
+vyos_edge_repo_root: "{{ playbook_dir }}/../.."
+vyos_edge_boot_config_dir: "{{ vyos_edge_repo_root }}/terraform/vyos-fabric/configs"
+vyos_edge_save_config: true

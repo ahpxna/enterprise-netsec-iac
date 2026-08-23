@@ -12,6 +12,13 @@ table inet cxyz {
     set mgmt_vlan   { type ipv4_addr; flags interval; elements = { 192.168.40.0/24 } }
     set user_vlans  { type ipv4_addr; flags interval; elements = { 192.168.10.0/24, 192.168.20.0/24, 192.168.30.0/24 } }
     set dc_hosts    { type ipv4_addr; elements = { 172.16.50.1 } }
+    set dc_logging  { type ipv4_addr; elements = { 172.16.50.11 } }
+    set infra_nets  { type ipv4_addr; flags interval; elements = { 10.255.0.0/16 } }
+
+    counter seg01_radius_drop { }
+    counter seg01_ssh_drop { }
+    counter det01_scan_drop { }
+    counter forward_default_drop { }
 
     chain inbound {
         type filter hook input priority 0; policy drop;
@@ -29,15 +36,35 @@ table inet cxyz {
 
         # ---- INTENTIONAL allows (least privilege) ----
         # Management VLAN -> DC services (SSH/RADIUS/Syslog/NTP/DNS)
-        ip saddr @mgmt_vlan ip daddr @dc_hosts tcp dport { 22 } accept
-        ip saddr @mgmt_vlan ip daddr @dc_hosts udp dport { 53, 123, 514, 1812, 1813 } accept
+        iifname "eth2" oifname "eth3" ip saddr @mgmt_vlan ip daddr @dc_hosts \
+            tcp dport 22 accept
+        iifname "eth2" oifname "eth3" ip saddr @mgmt_vlan ip daddr @dc_hosts \
+            udp dport { 53, 123, 1812, 1813 } accept
+        iifname "eth2" oifname "eth3" ip saddr @mgmt_vlan ip daddr @dc_hosts \
+            tcp dport 6514 accept
         # User VLANs -> DC DNS/NTP only (NOT ssh, NOT radius)
-        ip saddr @user_vlans ip daddr @dc_hosts udp dport { 53, 123 } accept
+        iifname "eth2" oifname "eth3" ip saddr @user_vlans ip daddr @dc_hosts \
+            udp dport { 53, 123 } accept
+        # Infrastructure devices ship logs to the dedicated TLS relay.
+        ip saddr @infra_nets ip daddr @dc_logging tcp dport 6514 accept
+
+        # Attribution counters distinguish an enforced deny from a dead service.
+        iifname "eth2" oifname "eth3" ip saddr @user_vlans ip daddr @dc_hosts \
+            udp dport { 1812, 1813 } counter name seg01_radius_drop \
+            log prefix "CXYZ-SEG01-RADIUS-DROP " flags all drop
+        iifname "eth2" oifname "eth3" ip saddr @user_vlans ip daddr @dc_hosts \
+            tcp dport 22 counter name seg01_ssh_drop \
+            log prefix "CXYZ-SEG01-SSH-DROP " flags all drop
+        iifname "eth2" oifname "eth3" ip saddr @user_vlans ip daddr @dc_hosts \
+            tcp dport { 22, 23, 80 } counter name det01_scan_drop \
+            log prefix "CXYZ-FWCORE-FWD-DROP " flags all drop
         # Anyone internal -> Internet (egress)
-        ip saddr { 192.168.0.0/16, 172.16.0.0/16 } oifname "eth1" accept
+        iifname { "eth2", "eth3" } oifname "eth1" \
+            ip saddr { 192.168.0.0/16, 172.16.0.0/16 } accept
 
         # ---- The CYB-240 "prohibited scan" is denied AND logged here ----
         # PC1 (user VLAN) -> Server1 tcp/22,23,80  hits this drop:
-        log prefix "CXYZ-FWCORE-FWD-DROP " flags all counter drop
+        counter name forward_default_drop \
+            log prefix "CXYZ-FWCORE-FWD-DROP " flags all drop
     }
 }

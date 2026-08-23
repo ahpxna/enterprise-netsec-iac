@@ -1,7 +1,6 @@
 ---
 galaxy_info:
   role_name: common_hardening
-  author: nguyan
   description: CompanyXYZ-NG common_hardening role
   license: MIT
   min_ansible_version: "2.15"

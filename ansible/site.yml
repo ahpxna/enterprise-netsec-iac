@@ -1,5 +1,8 @@
 ---
 # Master playbook: order matters (identity + time before logging).
-- import_playbook: playbooks/00-baseline.yml
-- import_playbook: playbooks/10-services.yml
-- import_playbook: playbooks/20-security.yml
+- name: Apply baseline configuration
+  import_playbook: playbooks/00-baseline.yml
+- name: Configure identity, time, and logging services
+  import_playbook: playbooks/10-services.yml
+- name: Apply security controls
+  import_playbook: playbooks/20-security.yml

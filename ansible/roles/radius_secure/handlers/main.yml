@@ -1,4 +1,5 @@
 ---
-- name: restart freeradius
-  ansible.builtin.service: { name: freeradius, state: restarted }
-  failed_when: false
+- name: Restart freeradius
+  ansible.builtin.command: supervisorctl restart freeradius  # noqa command-instead-of-module
+  changed_when: true
+  listen: restart freeradius

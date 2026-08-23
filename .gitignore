@@ -7,6 +7,9 @@ ansible/group_vars/all/vault.yml
 ansible/inventory/*.local.yml
 wireguard/keys/
 docker/zero-trust-gateway/secrets/
+docker/syslog-relay/certs/
+docker/wazuh/certs/
+docker/wazuh/generated/
 *.decrypted.*
 
 # ---- Terraform ----

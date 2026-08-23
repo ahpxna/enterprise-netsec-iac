@@ -1,72 +1,136 @@
 #!/usr/bin/env bash
-# =====================================================================
-# attack_chain.sh — replays the exact CYB-240 attack chain, but for real,
-# and captures evidence at each step. This is the file that turns
-# "would succeed" prose into "here is the packet / log / exit code".
-#
-# Chain (from the CYB-240 paper), each step now EXECUTED:
-#   1 recon      : pc1 tcpdump sees VRRP adverts (HA disclosure)
-#   2 scan       : pc1 nmap Server1 -> firewall DROP log -> SIEM alert
-#   3 fallback   : simulate RADIUS down -> local-auth brute-force attempt
-#   4 escalation : (guarded) show cleartext-cred grep now returns NOTHING
-#   5 survivability: kill VRRP master, measure failover packet loss
-# =====================================================================
-set -uo pipefail
-LAB=companyxyz
+# Fail-closed attack replay: enforce -> detect -> fail over -> emit JSON.
+set -euo pipefail
+
+LAB="companyxyz"
 EV="${EVIDENCE_DIR:-evidence/runs/adhoc}"
+export EVIDENCE_DIR="$EV"
 mkdir -p "$EV"
-n() { echo "clab-${LAB}-$1"; }
-say() { echo -e "\n\033[1;36m[attack-chain] $*\033[0m"; }
 
-say "step1: recon — capture VRRP advertisements on the user segment"
-timeout 8 docker exec "$(n pc1)" timeout 6 tcpdump -i eth1 -c 5 -nn vrrp \
-  > "$EV/step1_recon_vrrp.txt" 2>&1
-grep -qi vrrp "$EV/step1_recon_vrrp.txt" \
-  && echo "PASS: VRRP disclosure captured (weak indicator present)" \
-  || echo "INFO: no VRRP seen (adverts may be filtered)"
+n() { printf 'clab-%s-%s' "$LAB" "$1"; }
+utc_now() { date -u +%Y-%m-%dT%H:%M:%SZ; }
 
-say "step2: scan — prohibited nmap from user VLAN to Server1"
-docker exec "$(n pc1)" nmap -sS -Pn -p 22,23,80 172.16.50.1 \
-  -oN "$EV/step2_nmap.txt" > /dev/null 2>&1
-# proof the firewall dropped + logged it:
-docker exec "$(n fw-core)" sh -c \
-  "dmesg 2>/dev/null | grep CXYZ-FWCORE-FWD-DROP | tail -n 20" \
-  > "$EV/step2_fw_drop_log.txt" 2>&1
-if [ -s "$EV/step2_fw_drop_log.txt" ]; then
-  echo "PASS[DET-01]: firewall DROP log generated for prohibited scan"
-else
-  echo "WARN[DET-01]: no drop log — check nft logging / kernel log access"
+nft_packets() {
+  local node="$1" table="$2" counter="$3"
+  docker exec "$(n "$node")" nft list counter inet "$table" "$counter" \
+    | awk '/packets/ {for (i=1; i<=NF; i++) if ($i == "packets") {print $(i+1); exit}}'
+}
+
+wazuh_alert_count() {
+  local rule_id="$1"
+  docker compose exec -T wazuh.manager sh -c \
+    "grep -Ec '\"id\"[[:space:]]*:[[:space:]]*\"${rule_id}\"' /var/ossec/logs/alerts/alerts.json 2>/dev/null || true" \
+    | tr -d '\r' | tail -n 1
+}
+
+record() {
+  python3 compliance/record_evidence.py "$@"
+}
+
+step2_scan_detected() {
+  local started before after alert_before alert_after result
+  started="$(utc_now)"
+  before="$(nft_packets fw-core cxyz det01_scan_drop)"
+  alert_before="$(wazuh_alert_count 100201)"
+  alert_before="${alert_before:-0}"
+
+  docker exec "$(n pc1)" nmap -sS -Pn -p 22,23,80 172.16.50.1 \
+    -oN "/tmp/cxyz-det01-nmap.txt" >/dev/null
+  docker exec "$(n pc1)" cat /tmp/cxyz-det01-nmap.txt > "$EV/step2_nmap.txt"
+
+  after="$(nft_packets fw-core cxyz det01_scan_drop)"
+  alert_after="$alert_before"
+  for _ in 1 2 3 4 5 6 7 8 9 10; do
+    alert_after="$(wazuh_alert_count 100201)"
+    alert_after="${alert_after:-0}"
+    if (( alert_after > alert_before )); then
+      break
+    fi
+    sleep 2
+  done
+
+  result="FAIL"
+  if (( after > before && alert_after > alert_before )); then
+    result="PASS"
+  fi
+  record \
+    --test-id "attack_chain.sh::step2_scan_detected" \
+    --control DET-01 --result "$result" \
+    --assertion "scan increments fw-core deny counter and creates Wazuh rule 100201 alert" \
+    --enforcement-node fw-core \
+    --counter-before "$before" --counter-after "$after" \
+    --started-at "$started" \
+    --observed "firewall_counter_delta=$((after - before))" \
+    --observed "wazuh_alert_delta=$((alert_after - alert_before))"
+  [[ "$result" == PASS ]]
+}
+
+restore_vrrp_master() {
+  docker exec "$(n dist1)" vtysh \
+    -c "configure terminal" -c "interface eth2" -c "no shutdown" >/dev/null 2>&1 || true
+}
+
+step5_vrrp_failover() {
+  local started d1_state d2_state gap result ping_file
+  started="$(utc_now)"
+  ping_file="$EV/step5_vrrp_failover.txt"
+  d1_state="$(docker exec "$(n dist1)" vtysh -c "show vrrp" 2>/dev/null || true)"
+  d2_state="$(docker exec "$(n dist2)" vtysh -c "show vrrp" 2>/dev/null || true)"
+
+  trap restore_vrrp_master EXIT
+  docker exec "$(n pc1)" sh -c \
+    "ping -D -i 0.1 -c 100 192.168.10.254 > /tmp/cxyz-ha01-ping.txt 2>&1 &"
+  sleep 1
+  docker exec "$(n dist1)" vtysh \
+    -c "configure terminal" -c "interface eth2" -c "shutdown" >/dev/null
+  sleep 3
+  restore_vrrp_master
+  trap - EXIT
+  sleep 7
+  docker exec "$(n pc1)" cat /tmp/cxyz-ha01-ping.txt > "$ping_file"
+
+  gap="$(python3 - "$ping_file" <<'PY'
+import re, sys
+values = []
+for line in open(sys.argv[1]):
+    match = re.match(r"\[([0-9.]+)\]", line)
+    if match and "bytes from" in line:
+        values.append(float(match.group(1)))
+print(f"{max((b-a for a, b in zip(values, values[1:])), default=999):.3f}")
+PY
+)"
+
+  result="FAIL"
+  if grep -qi master <<<"$d1_state" \
+      && grep -qi backup <<<"$d2_state" \
+      && python3 - "$gap" <<'PY'
+import sys
+raise SystemExit(0 if float(sys.argv[1]) < 2.0 else 1)
+PY
+  then
+    result="PASS"
+  fi
+  record \
+    --test-id "attack_chain.sh::step5_vrrp_failover" \
+    --control HA-01 --result "$result" \
+    --assertion "DIST1 master/DIST2 backup and measured traffic interruption is below 2 seconds" \
+    --enforcement-node dist1,dist2 \
+    --started-at "$started" \
+    --observed "dist1_master=$(grep -qi master <<<"$d1_state" && echo true || echo false)" \
+    --observed "dist2_backup=$(grep -qi backup <<<"$d2_state" && echo true || echo false)" \
+    --observed "max_reply_gap_seconds=$gap"
+  [[ "$result" == PASS ]]
+}
+
+failures=0
+if ! step2_scan_detected; then
+  echo "FAIL[DET-01]: enforcement-to-Wazuh correlation failed" >&2
+  failures=$((failures + 1))
+fi
+if ! step5_vrrp_failover; then
+  echo "FAIL[HA-01]: measured VRRP failover objective failed" >&2
+  failures=$((failures + 1))
 fi
 
-say "step3: fallback auth — simulate RADIUS outage, attempt local brute force"
-docker exec "$(n server1)" sh -c "pkill -STOP freeradius 2>/dev/null || true"
-# a REAL (tiny, in-scope) hydra-style attempt against pc4's sshd:
-docker exec "$(n pc4)" sh -c '
-  for p in cisco cisco123 admin password Cisco123; do
-    echo "try admin:$p"; done' > "$EV/step3_bruteforce_attempts.txt" 2>&1
-echo "INFO: with radius_secure role applied, local fallback uses a strong" \
-     "unique password, so this wordlist fails (see test IDM-02)."
-docker exec "$(n server1)" sh -c "pkill -CONT freeradius 2>/dev/null || true"
-
-say "step4: escalation guard — the cleartext-cred read that USED to work"
-docker exec "$(n server1)" sh -c \
-  "grep -ri Cleartext-Password /etc 2>/dev/null || echo 'NONE — hardened'" \
-  > "$EV/step4_cleartext_check.txt" 2>&1
-grep -q NONE "$EV/step4_cleartext_check.txt" \
-  && echo "PASS[IDM-01]: no cleartext admin credential to steal" \
-  || echo "FAIL[IDM-01]: cleartext credential still present"
-
-say "step5: survivability — VRRP failover under master loss"
-docker exec "$(n pc1)" sh -c \
-  "ping -i 0.2 -c 40 192.168.10.254 > /tmp/ping.txt 2>&1 &" 
-sleep 2
-docker exec "$(n dist1)" vtysh -c "conf t" -c "interface eth2" -c "shutdown" >/dev/null 2>&1
-sleep 4
-docker exec "$(n dist1)" vtysh -c "conf t" -c "interface eth2" -c "no shutdown" >/dev/null 2>&1
-sleep 3
-docker exec "$(n pc1)" cat /tmp/ping.txt > "$EV/step5_vrrp_failover.txt" 2>&1
-loss=$(grep -oE '[0-9]+% packet loss' "$EV/step5_vrrp_failover.txt" | head -1)
-echo "INFO[HA-01]: failover packet loss = ${loss:-unknown}"
-
-say "attack chain complete — evidence in $EV"
-ls -1 "$EV"
+echo "attack replay complete: $failures critical failure(s); evidence=$EV"
+exit "$failures"

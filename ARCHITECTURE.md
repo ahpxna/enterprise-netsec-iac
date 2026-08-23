@@ -20,15 +20,14 @@
                             /            \
                    +-------+              +--------+
                    |                               |
-           [ FW-CORE ]                        [ FW-DMZ ]     ASAv -> nftables
-           default-deny                       default-deny   (default-deny, logged)
-           logs every DROP                    only 80/443 in
-                   |                               |
-            OSPF (MD5)                         [ DMZ-WEB ]    195.1.1.161
-                   |                            (public app)  no inward pivot
-              [ CORE ]  vIOS-Core -> FRR
-              passive-int on user VLANs
-              /          \
+           [ FW-CORE ]                        [ FW-DMZ ]     nftables boundaries
+         outside/campus/DC                    outside/DMZ
+              /       \                           |
+             /         +--- DATA CENTER           [ DMZ-WEB ]
+            /               172.16.50.0/24         195.1.1.161
+       [ CORE ]              [ SERVER1 ]
+       OSPF (MD5)
+          /    \
        [ DIST1 ]        [ DIST2 ]      Arista vEOS -> FRR
        VRRP master      VRRP backup    virtual gw .254, failover < 2s
        (prio 150)       (prio 100)
@@ -40,7 +39,7 @@
                     DATA CENTER  172.16.50.0/24
                     +------------------------------+
                     | [ SERVER1 ]  DNS DHCP NTP    |
-                    |  - RADIUS (PBKDF2 hashes)    |
+                    |  - RADIUS (SHA-512-crypt)    |
                     |  - NTP via NTS (authenticated)|
                     |  - rsyslog -> TLS 6514       |
                     +---------------+--------------+

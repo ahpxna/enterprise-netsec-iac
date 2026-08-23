@@ -1,8 +1,16 @@
 ---
 # Pulled from .env at runtime; NEVER hard-code a real secret here.
-radius_shared_secret: "{{ lookup('ansible.builtin.env', 'RADIUS_SHARED_SECRET') }}"
-radius_admin_pbkdf2: "{{ lookup('ansible.builtin.env', 'RADIUS_ADMIN_PBKDF2') }}"
-radius_clients:
-  - { name: fw-core, ip: 10.1.1.20 }
-  - { name: core, ip: 10.1.1.1 }
-  - { name: edge, ip: 10.1.1.10 }
+radius_secure_admin_crypt: "{{ lookup('ansible.builtin.env', 'RADIUS_ADMIN_CRYPT') }}"
+radius_secure_clients:
+  - name: fw-core
+    ip: 10.255.0.5
+    secret: "{{ lookup('ansible.builtin.env', 'RADIUS_SECRET_FW_CORE') }}"
+  - name: core
+    ip: 10.255.0.6
+    secret: "{{ lookup('ansible.builtin.env', 'RADIUS_SECRET_CORE') }}"
+  - name: edge
+    ip: 10.255.0.1
+    secret: "{{ lookup('ansible.builtin.env', 'RADIUS_SECRET_EDGE') }}"
+  - name: pc4
+    ip: 192.168.40.1
+    secret: "{{ lookup('ansible.builtin.env', 'RADIUS_SECRET_PC4') }}"

@@ -14,20 +14,22 @@ Ansible provide optional VM-based deployment and day-2 configuration paths.
 
 | Path | Scope | Status |
 |---|---|---|
-| A | containerlab fabric + Docker Compose security plane | Complete on an external Linux lab host |
-| B | Terraform/libvirt + VyOS VM fabric | In progress |
+| A | containerlab fabric + Docker Compose security plane | Architecture remediated; live revalidation required |
+| B | Terraform/libvirt + VyOS VM fabric | Complete topology generated from shared intent; VyOS boot validation pending |
 | C | Kubernetes security plane | Manifests implemented; live deployment unverified |
 
-The Path A validation run completed on 2026-08-18. Ansible reported
-`failed=0`, the live validation suite passed 10/10 checks, and the compliance
-report generated on the lab host showed 10/10 PASS. The corresponding evidence
-bundle remains on that host. Generated reports remain local evidence artifacts
-and are excluded from Git.
+An earlier Path A run completed on 2026-08-18 on an external Linux host, but it
+predates the current topology, firewall, identity, logging, and evidence-engine
+changes. It is historical information, not current compliance evidence. Run
+`make audit` again before claiming PASS for the present revision. Generated
+reports remain local evidence artifacts and are excluded from Git.
 
-Path B reached libvirt network creation during a live apply. The legacy
-provider rejected `/30` CIDRs in `libvirt_network.addresses`; the module now
-creates addressless isolated Layer-2 networks and assigns point-to-point
-addresses inside VyOS. VyOS first-boot validation remains pending.
+Path B consumes the same `intent/fabric.yaml` topology as Path A and includes
+all 12 nodes. Libvirt creates addressless isolated Layer-2 networks, while
+point-to-point addresses are assigned inside the guests; this avoids treating
+small transit networks as libvirt-managed DHCP networks. Data-plane NICs are
+created first with stable MAC addresses and management is always appended last.
+VyOS first-boot validation remains pending.
 
 Path C has schema-valid manifests but has not completed live-cluster
 validation. Resource sizing, readiness probes, and security-policy behavior
@@ -108,6 +110,7 @@ Expected states are:
 
 - `PASS`: the current evidence satisfies the control;
 - `FAIL`: the test ran and observed a violation;
+- `ERROR`: the test or evidence artifact was invalid;
 - `UNVERIFIED`: no valid evidence exists for the current report.
 
 Evidence bundles and generated reports under `evidence/` remain outside

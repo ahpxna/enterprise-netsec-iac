@@ -25,15 +25,35 @@ secrets: ## Generate .env + WireGuard keys + RADIUS hashes (idempotent)
 
 # ---------------------------------------------------------------- build
 .PHONY: up
-up: preflight secrets net security ## FULL STACK: network fabric + security services
+up: preflight secrets images dc-network wazuh-config net security ## FULL STACK: network fabric + security services
 	@echo "==> Stack is up.  Dashboards:  make urls"
 
+.PHONY: dc-network
+dc-network: ## Create the shared Docker/containerlab DC bridge
+	bash scripts/ensure_dc_network.sh
+
+.PHONY: images
+images: ## Build deterministic local service images used by Path A
+	docker build -t cxyz/server1:local docker/server1
+	docker build -t cxyz/syslog-relay:local docker/syslog-relay
+
+.PHONY: wazuh-config
+wazuh-config: secrets ## Generate Wazuh TLS certificates and password hashes
+	@test -f docker/wazuh/certs/root-ca.pem || \
+		docker compose -f docker/wazuh/generate-indexer-certs.yml run --rm generator
+	bash scripts/render_wazuh_users.sh
+
+.PHONY: render
+render: ## Render Path A and Batfish models from canonical fabric intent
+	python scripts/render_fabric.py
+	python scripts/render_batfish_snapshot.py
+
 .PHONY: net
-net: ## Deploy the routed network fabric (containerlab + FRR/VyOS)
+net: dc-network ## Deploy the routed network fabric (containerlab + FRR/VyOS)
 	sudo containerlab deploy -t $(CLAB_TOPO) --reconfigure
 
 .PHONY: security
-security: ## Deploy SIEM + IDS + Zero-Trust gateway + DMZ app
+security: images dc-network wazuh-config ## Deploy SIEM + IDS + Zero-Trust gateway + DMZ app
 	docker compose --profile siem --profile ids --profile ztna --profile dmz up -d
 
 .PHONY: configure
@@ -47,21 +67,35 @@ harden: ## Apply CIS-aligned hardening only
 # ------------------------------------------------------------ validate
 .PHONY: lint
 lint: ## Static checks: yamllint, ansible-lint, terraform, gitleaks
+	python scripts/render_fabric.py --check
+	python scripts/render_batfish_snapshot.py --check
+	python compliance/check_wiring.py
+	python -m pytest tests/unit -q
+	docker compose --profile siem --profile ids --profile ztna --profile dmz config --quiet
 	yamllint .
 	cd $(ANSIBLE_DIR) && ansible-lint
 	terraform -chdir=terraform/libvirt fmt -check -recursive
 	terraform -chdir=terraform/libvirt validate
+	terraform -chdir=terraform/vyos-fabric fmt -check -recursive
+	terraform -chdir=terraform/vyos-fabric validate
 	gitleaks detect --no-banner --redact
 
 .PHONY: batfish
 batfish: ## Offline network-config policy tests (pre-merge safety net)
 	python -m pytest tests/batfish -v --junitxml=$(EVIDENCE)/batfish.xml
 
-.PHONY: validate
-validate: ## LIVE control validation: segmentation + detection + hardening
+.PHONY: health
+health: ## Blocking routing health gate before security validation
 	@mkdir -p $(EVIDENCE)
-	EVIDENCE_DIR=$(EVIDENCE) python -m pytest tests/validation -v \
-		--junitxml=$(EVIDENCE)/validation.xml
+	EVIDENCE_DIR=$(EVIDENCE) python -m pytest tests/validation/test_routing.py -v \
+		--junitxml=$(EVIDENCE)/routing-health.xml
+
+.PHONY: validate
+validate: health ## LIVE controls; skipped entirely if routing health fails
+	EVIDENCE_DIR=$(EVIDENCE) python -m pytest \
+		tests/validation/test_segmentation.py \
+		tests/validation/test_hardening.py -v \
+		--junitxml=$(EVIDENCE)/security-validation.xml
 
 .PHONY: attack
 attack: ## Replay the CYB-240 attack chain and prove the SIEM sees it
@@ -111,7 +145,8 @@ k8s-status: ## Show pod/service status for the k8s security plane
 
 .PHONY: report
 report: ## Generate compliance report from controls.yaml + latest evidence
-	python compliance/generate_report.py --out evidence/COMPLIANCE-REPORT.md
+	python compliance/generate_report.py --run $(EVIDENCE) --strict \
+		--out evidence/COMPLIANCE-REPORT.md
 
 .PHONY: audit
 audit: batfish validate attack report ## Everything an auditor would ask for

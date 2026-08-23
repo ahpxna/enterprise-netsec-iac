@@ -6,29 +6,29 @@
 
 - name: Determine this node's config.boot path
   ansible.builtin.set_fact:
-    _vyos_boot_file: "{{ vyos_boot_config_dir }}/{{ inventory_hostname }}.boot"
+    vyos_edge_boot_file: "{{ vyos_edge_boot_config_dir }}/{{ inventory_hostname }}.boot"
 
 - name: Fail fast if there's no config.boot for this inventory_hostname
   ansible.builtin.stat:
-    path: "{{ _vyos_boot_file }}"
+    path: "{{ vyos_edge_boot_file }}"
   delegate_to: localhost
   become: false
-  register: _vyos_boot_stat
+  register: vyos_edge_boot_stat
 
-- ansible.builtin.assert:
-    that: _vyos_boot_stat.stat.exists
+- name: Assert the node has a declarative boot configuration
+  ansible.builtin.assert:
+    that: vyos_edge_boot_stat.stat.exists
     fail_msg: >
-      No {{ _vyos_boot_file }} found. inventory_hostname must match one of
+      No {{ vyos_edge_boot_file }} found. inventory_hostname must match one of
       the config.boot files under terraform/vyos-fabric/configs/
       (edge, fw-core, fw-dmz, core, dist1, dist2).
 
 - name: Push declarative config (curly-brace format, matches config.boot)
   vyos.vyos.vyos_config:
-    src: "{{ _vyos_boot_file }}"
-    save: "{{ vyos_save_config }}"
-  register: _vyos_result
+    src: "{{ vyos_edge_boot_file }}"
+    save: "{{ vyos_edge_save_config }}"
+  register: vyos_edge_result
 
 - name: Show what changed (empty on a clean re-run — proves idempotency)
   ansible.builtin.debug:
-    msg: "{{ _vyos_result.commands | default([]) }}"
-  when: _vyos_result.changed
+    msg: "{{ vyos_edge_result.commands | default([]) }}"

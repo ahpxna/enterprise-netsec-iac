@@ -1,7 +1,6 @@
 ---
 galaxy_info:
   role_name: radius_secure
-  author: nguyan
   description: CompanyXYZ-NG radius_secure role
   license: MIT
   min_ansible_version: "2.15"

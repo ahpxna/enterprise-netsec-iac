@@ -1,6 +1,6 @@
 <!-- Decode the nftables log prefixes emitted by fw-core / fw-dmz -->
 <decoder name="cxyz-nft">
-  <prefix>CXYZ-</prefix>
+  <prematch>^CXYZ-</prematch>
 </decoder>
 
 <decoder name="cxyz-nft-fields">

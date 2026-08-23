@@ -1,4 +1,3 @@
-# Managed by Ansible. Admin credential stored as a PBKDF2 hash, NOT cleartext.
-# FreeRADIUS verifies against Crypt-Password (crypt/PBKDF2), never plain text.
-raadmin15  Crypt-Password := "{{ radius_admin_pbkdf2 }}"
+# Managed by Ansible. SHA-512 crypt is salted and verified by FreeRADIUS 3.
+raadmin15  Crypt-Password := "{{ radius_secure_admin_crypt }}"
            Service-Type = Administrative-User

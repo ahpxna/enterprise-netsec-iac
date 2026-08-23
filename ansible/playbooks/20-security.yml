@@ -7,8 +7,8 @@
     - role: wireguard_vpn      # VPN-01
       tags: [vpn]
 
-- name: Ship device logs to the SIEM
+- name: Ship device logs through the authenticated TLS relay
   hosts: routers:firewalls
   roles:
-    - role: wazuh_agent
-      tags: [siem]
+    - role: syslog_tls
+      tags: [logging, siem]

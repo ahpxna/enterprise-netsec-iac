@@ -9,6 +9,8 @@ flush ruleset
 
 table inet dmz {
     set web { type ipv4_addr; elements = { 195.1.1.161 } }
+    counter dmz_pivot_drop { }
+    counter forward_default_drop { }
 
     chain inbound {
         type filter hook input priority 0; policy drop;
@@ -20,15 +22,19 @@ table inet dmz {
     chain forward {
         type filter hook forward priority 0; policy drop;
         ct state established,related accept
+        # Specific pivot deny must precede broad DMZ egress.
+        iifname "eth2" oifname "eth1" ip saddr @web \
+            ip daddr { 172.16.0.0/16, 192.168.0.0/16 } \
+            counter name dmz_pivot_drop \
+            log prefix "CXYZ-FWDMZ-PIVOT-DROP " flags all drop
         # Internet -> web host: HTTP/HTTPS only
-        ip daddr @web tcp dport { 80, 443 } accept
+        iifname "eth1" oifname "eth2" ip daddr @web \
+            tcp dport { 80, 443 } accept
         # edge -> web host: DNS
-        ip daddr @web udp dport 53 accept
-        # DMZ egress to Internet allowed (established handles the return)
-        ip saddr @web accept
-        # Explicitly deny + log DMZ -> internal (no pivot to campus/DC)
-        ip saddr @web ip daddr { 172.16.0.0/16, 192.168.0.0/16 } \
-            log prefix "CXYZ-FWDMZ-PIVOT-DROP " flags all counter drop
-        log prefix "CXYZ-FWDMZ-FWD-DROP " flags all counter drop
+        iifname "eth1" oifname "eth2" ip daddr @web udp dport 53 accept
+        # DMZ egress to non-internal destinations.
+        iifname "eth2" oifname "eth1" ip saddr @web accept
+        counter name forward_default_drop \
+            log prefix "CXYZ-FWDMZ-FWD-DROP " flags all drop
     }
 }

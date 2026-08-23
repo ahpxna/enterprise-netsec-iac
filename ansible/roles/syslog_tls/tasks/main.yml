@@ -1,11 +1,18 @@
 ---
 # Ship logs to the SIEM over TLS instead of cleartext 514.
 # Remediates the CYB-240/300 "plaintext syslog" finding directly.
-- name: Install rsyslog + gnutls driver
+- name: Install rsyslog and the platform TLS driver
   ansible.builtin.package:
-    name: [rsyslog, rsyslog-gnutls]
+    name:
+      - rsyslog
+      - "{{ 'rsyslog-tls' if ansible_os_family == 'Alpine' else 'rsyslog-gnutls' }}"
     state: present
-  failed_when: false
+
+- name: Install the private logging CA
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../../docker/syslog-relay/certs/ca.crt"
+    dest: /etc/rsyslog.d/ca.crt
+    mode: "0644"
 
 - name: Configure TLS log forwarding to the SIEM
   ansible.builtin.copy:
@@ -15,14 +22,14 @@
       # Managed by Ansible — DET-02 (encrypted log transport)
       global(
         DefaultNetstreamDriver="gtls"
-        DefaultNetstreamDriverCAFile="/etc/rsyslog.d/ca.pem"
+        DefaultNetstreamDriverCAFile="/etc/rsyslog.d/ca.crt"
       )
       action(
         type="omfwd"
-        target="172.16.50.10" port="6514" protocol="tcp"
+        target="172.16.50.11" port="6514" protocol="tcp"
         StreamDriver="gtls"
         StreamDriverMode="1"
         StreamDriverAuthMode="x509/name"
-        StreamDriverPermittedPeers="wazuh.manager"
+        StreamDriverPermittedPeers="syslog-relay.companyxyz.lab"
       )
   notify: restart rsyslog

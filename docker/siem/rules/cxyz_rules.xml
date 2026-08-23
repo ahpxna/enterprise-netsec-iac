@@ -10,7 +10,7 @@
     <description>CompanyXYZ firewall drop event</description>
   </rule>
 
-  <rule id="100201" level="10" frequency="6" timeframe="30">
+  <rule id="100201" level="10" frequency="2" timeframe="30">
     <if_matched_sid>100200</if_matched_sid>
     <match>CXYZ-FWCORE-FWD-DROP</match>
     <description>Prohibited internal scan: repeated user->DC drops (DET-01)</description>

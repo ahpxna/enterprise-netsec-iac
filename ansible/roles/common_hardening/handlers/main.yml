@@ -1,6 +1,10 @@
 ---
-- name: restart sshd
-  ansible.builtin.service:
-    name: ssh
-    state: restarted
-  failed_when: false
+- name: Restart sshd
+  ansible.builtin.shell: |
+    if command -v supervisorctl >/dev/null 2>&1; then
+      supervisorctl restart sshd
+    elif pgrep sshd >/dev/null 2>&1; then
+      pkill -HUP sshd
+    fi
+  changed_when: true
+  listen: restart sshd

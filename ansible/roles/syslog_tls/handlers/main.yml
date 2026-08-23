@@ -1,4 +1,12 @@
 ---
-- name: restart rsyslog
-  ansible.builtin.service: { name: rsyslog, state: restarted }
-  failed_when: false
+- name: Restart rsyslog
+  ansible.builtin.shell: |
+    if command -v supervisorctl >/dev/null 2>&1; then
+      supervisorctl restart rsyslog
+    elif pgrep rsyslogd >/dev/null 2>&1; then
+      pkill -HUP rsyslogd
+    else
+      rsyslogd
+    fi
+  changed_when: true
+  listen: restart rsyslog

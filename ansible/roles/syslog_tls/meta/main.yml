@@ -1,7 +1,6 @@
 ---
 galaxy_info:
   role_name: syslog_tls
-  author: nguyan
   description: CompanyXYZ-NG syslog_tls role
   license: MIT
   min_ansible_version: "2.15"

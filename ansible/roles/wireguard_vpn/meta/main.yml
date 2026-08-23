@@ -1,7 +1,6 @@
 ---
 galaxy_info:
   role_name: wireguard_vpn
-  author: nguyan
   description: CompanyXYZ-NG wireguard_vpn role
   license: MIT
   min_ansible_version: "2.15"

@@ -8,7 +8,7 @@
 #
 # Columns:
 #   id            stable control id used across the repo
-#   framework     NIST 800-53 / 800-63B / 800-92 / 800-41 / ISO 27002 / CIS
+#   framework     standards whose cited control directly matches the objective
 #   ref           clause/control number
 #   objective     what "good" means in one sentence
 #   implemented_by where the control lives (role/config)
@@ -51,23 +51,23 @@ controls:
     severity: high
 
   - id: IDM-01
-    framework: [NIST-800-63B]
-    ref: "no cleartext credentials at rest"
-    objective: "RADIUS store contains only PBKDF2 hashes; grep for cleartext returns nothing."
+    framework: [NIST-800-63B, NIST-800-53r5-IA-5(1)]
+    ref: "salted password verifier; no cleartext credential at rest"
+    objective: "The RADIUS user credential is a salted SHA-512-crypt verifier and no cleartext password attribute is configured."
     implemented_by: ansible/roles/radius_secure
     verified_by: test_hardening.py::test_no_cleartext_radius_password
     severity: critical
 
   - id: IDM-02
-    framework: [NIST-800-63B, CIS-1.4]
-    ref: "strong, unique RADIUS shared secret"
-    objective: "Shared secret >= 24 chars, not reused, not a dictionary word."
+    framework: [NIST-800-53r5-IA-5(1), NIST-800-53r5-SC-12]
+    ref: "strong and separately managed authenticator secrets"
+    objective: "Every RADIUS client has a unique random shared secret of at least 24 characters."
     implemented_by: ansible/roles/radius_secure
     verified_by: test_hardening.py::test_radius_shared_secret_strength
     severity: high
 
   - id: HRD-01
-    framework: [CIS-1.8]
+    framework: [NIST-800-53r5-AC-12]
     ref: "session timeouts"
     objective: "SSH idle timeout <= 5 min; console timeout enabled (not 0)."
     implemented_by: ansible/roles/common_hardening
@@ -75,7 +75,7 @@ controls:
     severity: moderate
 
   - id: HRD-02
-    framework: [CIS-1.6.2]
+    framework: [NIST-800-53r5-CM-7, NIST-800-53r5-SC-8]
     ref: "modern protocol only"
     objective: "SSHv2 enforced; Telnet disabled everywhere."
     implemented_by: ansible/roles/common_hardening
@@ -83,7 +83,7 @@ controls:
     severity: moderate
 
   - id: TIME-01
-    framework: [NIST-800-92, CIS-1.9.1, ISO-27002-8.17]
+    framework: [NIST-800-92, NIST-800-53r5-AU-8, NIST-800-53r5-SC-45, ISO-27002-8.17]
     ref: "authenticated time"
     objective: "NTP uses NTS/authenticated upstreams so log timestamps can't be spoofed."
     implemented_by: ansible/roles/ntp_secure
@@ -91,7 +91,7 @@ controls:
     severity: moderate
 
   - id: RTR-01
-    framework: [NIST-800-81-2]
+    framework: [NIST-SP-800-189, NIST-800-53r5-SC-23]
     ref: "routing plane authentication"
     objective: "OSPF adjacencies require MD5; BGP sessions use password + ttl-security."
     implemented_by: clab/configs/edge.frr.conf

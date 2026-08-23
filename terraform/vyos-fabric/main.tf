@@ -132,6 +132,7 @@ resource "libvirt_domain" "node" {
     for_each = local.interface_plan[each.key]
     content {
       network_name   = network_interface.value.network_name
+      bridge         = network_interface.value.bridge
       mac            = network_interface.value.mac
       wait_for_lease = false
     }
@@ -160,53 +161,24 @@ resource "libvirt_domain" "node" {
   }
 }
 
-# Mirrors the `links:` section of clab/companyxyz.clab.yml. List order is the
-# guest ethX order; management is appended after the final entry.
+# Directly consumes intent/fabric.yaml. Attachment list order is the guest
+# ethX order; management is appended after the final data-plane entry.
 locals {
   data_links = {
-    edge = [
-      { network_name = libvirt_network.isp1_link.name, address = "198.10.10.2/30", gateway = null },
-      { network_name = libvirt_network.isp2_link.name, address = "197.10.10.2/30", gateway = null },
-      { network_name = libvirt_network.edge_fwcore.name, address = "10.255.0.1/30", gateway = null },
-      { network_name = libvirt_network.edge_fwdmz.name, address = "10.255.0.5/30", gateway = null },
-    ]
-    fw-core = [
-      { network_name = libvirt_network.edge_fwcore.name, address = "10.255.0.2/30", gateway = null },
-      { network_name = libvirt_network.fwcore_core.name, address = "10.255.0.9/30", gateway = null },
-    ]
-    fw-dmz = [
-      { network_name = libvirt_network.edge_fwdmz.name, address = "10.255.0.6/30", gateway = null },
-      { network_name = libvirt_network.fwdmz_dmzweb.name, address = "195.1.1.162/29", gateway = null },
-    ]
-    core = [
-      { network_name = libvirt_network.fwcore_core.name, address = "10.255.0.10/30", gateway = null },
-      { network_name = libvirt_network.core_dist1.name, address = "192.168.10.253/24", gateway = null },
-      { network_name = libvirt_network.core_dist2.name, address = "192.168.40.253/24", gateway = null },
-      { network_name = libvirt_network.core_dc.name, address = "172.16.50.254/24", gateway = null },
-    ]
-    dist1 = [
-      { network_name = libvirt_network.core_dist1.name, address = "192.168.10.252/24", gateway = null },
-    ]
-    dist2 = [
-      { network_name = libvirt_network.core_dist2.name, address = "192.168.40.252/24", gateway = null },
-    ]
-    isp1 = [
-      { network_name = libvirt_network.isp1_link.name, address = "198.10.10.1/30", gateway = null },
-    ]
-    isp2 = [
-      { network_name = libvirt_network.isp2_link.name, address = "197.10.10.1/30", gateway = null },
-    ]
-    pc1 = [
-      { network_name = libvirt_network.core_dist1.name, address = "192.168.10.1/24", gateway = "192.168.10.254" },
-    ]
-    pc4 = [
-      { network_name = libvirt_network.core_dist2.name, address = "192.168.40.1/24", gateway = "192.168.40.254" },
-    ]
-    server1 = [
-      { network_name = libvirt_network.core_dc.name, address = "172.16.50.1/24", gateway = "172.16.50.254" },
-    ]
-    dmz-web = [
-      { network_name = libvirt_network.fwdmz_dmzweb.name, address = "195.1.1.161/29", gateway = "195.1.1.162" },
+    for node_name, node in local.fabric_intent.nodes : node_name => [
+      for attachment in node.attachments : {
+        network_name = try(libvirt_network.data[attachment.link].name, null)
+        bridge = try(
+          local.fabric_intent.links[attachment.link].kind == "external_bridge"
+          ? local.fabric_intent.links[attachment.link].bridge
+          : null,
+          null,
+        )
+        address = attachment.address
+        gateway = try([
+          for route in node.routes : route.via if route.to == "0.0.0.0/0"
+        ][0], null)
+      }
     ]
   }
 

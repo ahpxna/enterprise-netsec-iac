@@ -11,6 +11,7 @@ interfaces {
     }
 }
 protocols {
+    static { route 10.255.0.0/16 { next-hop 198.10.10.2 } }
     bgp 65010 {
         parameters { router-id 198.10.10.1 }
         neighbor 198.10.10.2 {
@@ -18,6 +19,7 @@ protocols {
             password "CHANGE_ME_bgp_isp1"
             ttl-security { hops 1 }
         }
+        address-family { ipv4-unicast { neighbor 198.10.10.2 { default-originate } } }
     }
 }
 system { host-name isp1 }
