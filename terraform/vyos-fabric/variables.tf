@@ -59,23 +59,6 @@ variable "ssh_public_key" {
   }
 }
 
-variable "routing_secrets" {
-  description = "Per-protocol routing authentication material, supplied from ignored terraform.tfvars or a secret backend"
-  type = object({
-    ospf_md5 = string
-    bgp_isp1 = string
-    bgp_isp2 = string
-  })
-  sensitive = true
-
-  validation {
-    condition = alltrue([
-      for secret in values(var.routing_secrets) : length(secret) >= 24 && !startswith(secret, "CHANGE_ME")
-    ]) && length(distinct(values(var.routing_secrets))) == length(values(var.routing_secrets))
-    error_message = "All routing secrets must be unique non-placeholder values of at least 24 characters."
-  }
-}
-
 variable "node_image_overrides" {
   description = "Optional reviewed node image overrides with mandatory SHA-256; unspecified nodes use their platform base image"
   type = map(object({

@@ -5,12 +5,15 @@ from __future__ import annotations
 import argparse
 import json
 import pathlib
+import sys
 
 import yaml
 
-from compliance.provenance import current_provenance
-
 ROOT = pathlib.Path(__file__).resolve().parent.parent
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from compliance.provenance import current_provenance
 VALID_RESULTS = {"PASS", "FAIL", "ERROR"}
 REQUIRED_FIELDS = {
     "schema_version", "control_id", "test_id", "result", "assertion",

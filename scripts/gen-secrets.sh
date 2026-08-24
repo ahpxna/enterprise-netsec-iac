@@ -5,6 +5,7 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
 [ -f .env ] || { cp .env.example .env; echo "created .env from template"; }
+chmod 600 .env
 
 # Add fields introduced after an operator's initial bootstrap without replacing
 # any existing local values.
@@ -92,4 +93,5 @@ done
 # The LinuxServer WireGuard container owns its persisted configuration and
 # peer keys beneath wireguard/config/.  Keeping a second unused key lifecycle
 # here was misleading and risked testing the wrong credentials.
+chmod 600 .env
 echo "secrets ready (values NOT shown; stored in .env and local service config)"

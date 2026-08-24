@@ -202,9 +202,11 @@ locals {
     }
   }
 
-  # Source configs are reviewed without secret material. Terraform injects
-  # routing credentials, the intent-owned management address, and the SSH
-  # bootstrap key only into the cloud-init payload.
+  # Terraform bootstrap never receives long-lived routing credentials. Each
+  # node gets a different non-secret auth token, deliberately preventing BGP
+  # and OSPF adjacency before trusted Ansible Day-2 injects the real secrets.
+  # Terraform state therefore contains only inert bootstrap values plus the
+  # public SSH key, not reusable routing authentication material.
   ssh_public_key_parts = split(" ", trimspace(var.ssh_public_key))
   ssh_public_key_type  = local.ssh_public_key_parts[0]
   ssh_public_key_data  = local.ssh_public_key_parts[1]
@@ -215,9 +217,9 @@ locals {
         replace(
           replace(
             replace(
-              replace(file("${path.module}/${node.boot_config}"), "CHANGE_ME_ospf_key", var.routing_secrets.ospf_md5),
-              "CHANGE_ME_bgp_isp1", var.routing_secrets.bgp_isp1),
-            "CHANGE_ME_bgp_isp2", var.routing_secrets.bgp_isp2),
+              replace(file("${path.module}/${node.boot_config}"), "CHANGE_ME_ospf_key", "BOOTSTRAP_DISABLED_${node_name}_ospf"),
+              "CHANGE_ME_bgp_isp1", "BOOTSTRAP_DISABLED_${node_name}_bgp1"),
+            "CHANGE_ME_bgp_isp2", "BOOTSTRAP_DISABLED_${node_name}_bgp2"),
           "MANAGEMENT_IP", local.fabric_intent.nodes[node_name].mgmt_ip),
         "SSH_KEY_TYPE", local.ssh_public_key_type),
       "SSH_KEY_DATA", local.ssh_public_key_data) : null

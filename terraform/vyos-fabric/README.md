@@ -62,6 +62,11 @@ terraform apply
 terraform output node_mgmt_ips
 ```
 
+Terraform first boot intentionally keeps BGP/OSPF adjacencies down by using
+per-node non-secret bootstrap authentication tokens. Long-lived routing secrets
+never enter Terraform state; Ansible injects them only after the management SSH
+trust boundary has been established.
+
 Before any Ansible connection, verify each VM SSH host key from its console or
 trusted hypervisor inventory and store it in `ansible/inventory/known_hosts`.
 The file is intentionally local-only; the automation refuses to disable host
@@ -72,6 +77,8 @@ cd ../..
 make vm-configure
 make vm-health
 make vm-idempotency
+# Establish at least one WireGuard peer handshake within 10 minutes before
+# vm-audit so VPN-01 has a real remote-access positive control.
 make vm-audit
 ```
 

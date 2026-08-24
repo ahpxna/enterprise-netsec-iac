@@ -1,0 +1,831 @@
+diff --git a/.gitignore b/.gitignore
+index 76743ead5e6b2a0425fb517f16bd99a10d162882..626baf5755164ae8a1fb1d77d9167da0c5631265 100644
+--- a/.gitignore
++++ b/.gitignore
+@@ -48,6 +48,7 @@ venv/
+ *.pyc
+ .DS_Store
+ ._*
++terraform/vyos-fabric/bootstrap.auto.tfvars.json
+ terraform/vyos-fabric/routing.auto.tfvars.json
+ terraform/vyos-fabric/runtime-configs/
+ .cxyz-state/
+diff --git a/ARCHITECTURE.md b/ARCHITECTURE.md
+index 4a7a39ef29352cb46a65a7eb9c4dba84662a7c6a..f2373d2c616d66bdef384eed59ce7ec4a2ab2d7f 100644
+--- a/ARCHITECTURE.md
++++ b/ARCHITECTURE.md
+@@ -29,7 +29,7 @@
+        OSPF (MD5)
+           /    \
+        [ DIST1 ]        [ DIST2 ]      Arista vEOS -> FRR
+-       VRRP master      VRRP backup    virtual gw .254, failover < 2s
++       VRRP master      VRRP backup    virtual gw .254, routed failover < 5s
+        (prio 150)       (prio 100)
+           |                 |
+        [ PC1 ]           [ PC4 ]
+diff --git a/COMPLIANCE-REPORT.md b/COMPLIANCE-REPORT.md
+index e69de29bb2d1d6434b8b29ae775ad8c2e48c5391..ecd4a2ae0e23f74f5469d184700a53f346257aeb 100644
+--- a/COMPLIANCE-REPORT.md
++++ b/COMPLIANCE-REPORT.md
+@@ -0,0 +1,10 @@
++# Compliance report location — NOT COMPLIANCE EVIDENCE
++
++This tracked file is only a pointer. It must never contain PASS/FAIL results.
++Current evidence-backed reports are generated locally under `evidence/`:
++
++- Path A: `evidence/COMPLIANCE-REPORT.md`
++- Path B: `evidence/PATH-B-COMPLIANCE-REPORT.md`
++
++Run `make audit` or `make vm-audit` to regenerate evidence for the current
++source tree. Do not cite this pointer file as compliance evidence.
+diff --git a/Makefile b/Makefile
+index baa4c5273c7aa22d28f770f545f3422582c4336c..101aec4cdfdcd946b0346287cca169f4b2444ec6 100644
+--- a/Makefile
++++ b/Makefile
+@@ -75,6 +75,7 @@ lint: ## Static checks: yamllint, ansible-lint, terraform, gitleaks
+ 	python scripts/render_batfish_snapshot.py --check
+ 	python scripts/render_vm_inventory.py --check
+ 	python scripts/check_vyos_boot.py
++	python scripts/check_path_b_intent.py
+ 	python scripts/security_static_checks.py
+ 	python compliance/check_wiring.py
+ 	python -m pytest tests/unit -q
+@@ -118,7 +119,7 @@ vm-init: ## Init Terraform for the real VyOS VM fabric
+ 	cd terraform/vyos-fabric && terraform init
+ 
+ .PHONY: path-b-vars
+-path-b-vars: secrets ## Render ignored Terraform Path B secrets/key inputs from .env
++path-b-vars: secrets ## Render ignored Terraform Path B public bootstrap input from .env
+ 	python scripts/render_path_b_vars.py
+ 
+ .PHONY: vm-plan
+@@ -157,7 +158,7 @@ vm-audit: vm-configure security ## Audit the real Path B VM data plane and fail
+ 	python scripts/env_exec.py --env-file .env -- env \
+ 		LAB_ENVIRONMENT=path-b EVIDENCE_DIR=$(EVIDENCE)-path-b \
+ 		python scripts/path_b_audit.py
+-	LAB_ENVIRONMENT=path-b python compliance/generate_report.py --strict --profile path-b \
++	LAB_ENVIRONMENT=path-b python -m compliance.generate_report --strict --profile path-b \
+ 		--run $(EVIDENCE)-path-b --out evidence/PATH-B-COMPLIANCE-REPORT.md
+ 
+ .PHONY: vm-down
+@@ -182,7 +183,7 @@ k8s-status: ## Show pod/service status for the k8s security plane
+ 
+ .PHONY: report
+ report: ## Generate Path A compliance report from controls.yaml + latest evidence
+-	python compliance/generate_report.py --strict --profile path-a \
++	python -m compliance.generate_report --strict --profile path-a \
+ 		--out evidence/COMPLIANCE-REPORT.md
+ 
+ .PHONY: audit
+@@ -206,4 +207,4 @@ down: ## Tear Path A services/fabric down and restore host routing state
+ 
+ .PHONY: clean
+ clean: down ## Tear down + remove generated artifacts
+-	rm -rf clab-companyxyz evidence/runs/* clab/runtime-configs terraform/vyos-fabric/routing.auto.tfvars.json .cxyz-state
++	rm -rf clab-companyxyz evidence/runs/* clab/runtime-configs terraform/vyos-fabric/bootstrap.auto.tfvars.json terraform/vyos-fabric/routing.auto.tfvars.json .cxyz-state
+diff --git a/ansible/roles/ntp_secure/handlers/main.yml b/ansible/roles/ntp_secure/handlers/main.yml
+index 6abe45c8588c42490ca61ba3d7955be8c95489ff..c1870868521e2725d857736ee68fa5a62b274c4e 100644
+--- a/ansible/roles/ntp_secure/handlers/main.yml
++++ b/ansible/roles/ntp_secure/handlers/main.yml
+@@ -1,5 +1,13 @@
+ ---
+-- name: Restart chrony
++- name: Restart chrony under Docker supervisor
+   ansible.builtin.command: supervisorctl restart chronyd  # noqa command-instead-of-module
+   changed_when: true
++  when: ansible_connection | default("") == "community.docker.docker"
++  listen: restart chrony
++
++- name: Restart chrony on systemd Linux
++  ansible.builtin.service:
++    name: chrony
++    state: restarted
++  when: ansible_connection | default("") != "community.docker.docker"
+   listen: restart chrony
+diff --git a/ansible/roles/vyos_edge/tasks/main.yml b/ansible/roles/vyos_edge/tasks/main.yml
+index 12d83ca8ca9d221bcb99e41bf84a504802312e3c..a416147f6501382006df49c8a84ad81aab3c8fe6 100644
+--- a/ansible/roles/vyos_edge/tasks/main.yml
++++ b/ansible/roles/vyos_edge/tasks/main.yml
+@@ -48,37 +48,40 @@
+       - vyos_edge_ssh_public_key[0] is match('^(ssh-|ecdsa-|sk-)')
+     fail_msg: "PATH_B_SSH_PUBLIC_KEY_FILE must point at a valid OpenSSH public key."
+ 
+-- name: Render a secret-injected Day-2 configuration on the controller
+-  ansible.builtin.copy:
+-    content: >-
+-      {{ lookup('ansible.builtin.file', vyos_edge_boot_file)
+-         | replace('CHANGE_ME_ospf_key', vyos_edge_ospf_md5)
+-         | replace('CHANGE_ME_bgp_isp1', vyos_edge_bgp_isp1)
+-         | replace('CHANGE_ME_bgp_isp2', vyos_edge_bgp_isp2)
+-         | replace('MANAGEMENT_IP', ansible_host)
+-         | replace('SSH_KEY_TYPE', vyos_edge_ssh_public_key[0])
+-         | replace('SSH_KEY_DATA', vyos_edge_ssh_public_key[1]) }}
+-    dest: "/tmp/cxyz-{{ inventory_hostname }}.boot"
+-    mode: "0600"
+-  delegate_to: localhost
+-  become: false
+-  no_log: true
+-
+-- name: Reconcile declarative VyOS configuration and save a rollback backup
+-  vyos.vyos.vyos_config:
+-    src: "/tmp/cxyz-{{ inventory_hostname }}.boot"
+-    backup: true
+-    save: "{{ vyos_edge_save_config }}"
+-  register: vyos_edge_result
++- name: Reconcile secret-bearing VyOS configuration safely
++  block:
++    - name: Render a secret-injected Day-2 configuration on the controller
++      ansible.builtin.copy:
++        content: >-
++          {{ lookup('ansible.builtin.file', vyos_edge_boot_file)
++             | replace('CHANGE_ME_ospf_key', vyos_edge_ospf_md5)
++             | replace('CHANGE_ME_bgp_isp1', vyos_edge_bgp_isp1)
++             | replace('CHANGE_ME_bgp_isp2', vyos_edge_bgp_isp2)
++             | replace('MANAGEMENT_IP', ansible_host)
++             | replace('SSH_KEY_TYPE', vyos_edge_ssh_public_key[0])
++             | replace('SSH_KEY_DATA', vyos_edge_ssh_public_key[1]) }}
++        dest: "/tmp/cxyz-{{ inventory_hostname }}.boot"
++        mode: "0600"
++      delegate_to: localhost
++      become: false
++      no_log: true
+ 
+-- name: Remove secret-injected Day-2 configuration from the controller
+-  ansible.builtin.file:
+-    path: "/tmp/cxyz-{{ inventory_hostname }}.boot"
+-    state: absent
+-  delegate_to: localhost
+-  become: false
+-  no_log: true
++    - name: Reconcile declarative VyOS configuration without secret-bearing backups
++      vyos.vyos.vyos_config:
++        src: "/tmp/cxyz-{{ inventory_hostname }}.boot"
++        backup: false
++        save: "{{ vyos_edge_save_config }}"
++      register: vyos_edge_result
++      no_log: true
++  always:
++    - name: Remove secret-injected Day-2 configuration from the controller
++      ansible.builtin.file:
++        path: "/tmp/cxyz-{{ inventory_hostname }}.boot"
++        state: absent
++      delegate_to: localhost
++      become: false
++      no_log: true
+ 
+-- name: Show what changed (empty on a clean re-run — proves idempotency)
++- name: Report whether VyOS reconciliation changed state
+   ansible.builtin.debug:
+-    msg: "{{ vyos_edge_result.commands | default([]) }}"
++    msg: "VyOS reconciliation changed={{ vyos_edge_result.changed | default(false) }}; commands are redacted because they may contain routing credentials."
+diff --git a/compliance/controls.yaml b/compliance/controls.yaml
+index 278a2cf24592f28539f1908126599cf52b3f47fb..1544d351494cb17f846ce389c3dfffcf8dac60d0 100644
+--- a/compliance/controls.yaml
++++ b/compliance/controls.yaml
+@@ -133,7 +133,7 @@ controls:
+   framework:
+   - NIST-800-53-CP-10
+   ref: gateway survivability
+-  objective: Killing VRRP master causes <2s failover; user keeps its default gateway.
++  objective: Losing the VRRP master preserves routed user traffic with measured recovery under 5 seconds.
+   implemented_by: clab/configs/dist1.frr.conf
+   verified_by: attack_chain.sh::step5_vrrp_failover
+   severity: moderate
+diff --git a/compliance/generate_report.py b/compliance/generate_report.py
+index 7310c86e0fb59d418bf49ad3b7ea3caf92faee9f..07f9d65fd4db9fdf4ee7401f8ea1adf4ae8df36e 100644
+--- a/compliance/generate_report.py
++++ b/compliance/generate_report.py
+@@ -5,12 +5,15 @@ from __future__ import annotations
+ import argparse
+ import json
+ import pathlib
++import sys
+ 
+ import yaml
+ 
+-from compliance.provenance import current_provenance
+-
+ ROOT = pathlib.Path(__file__).resolve().parent.parent
++if str(ROOT) not in sys.path:
++    sys.path.insert(0, str(ROOT))
++
++from compliance.provenance import current_provenance
+ VALID_RESULTS = {"PASS", "FAIL", "ERROR"}
+ REQUIRED_FIELDS = {
+     "schema_version", "control_id", "test_id", "result", "assertion",
+diff --git a/compliance/provenance.py b/compliance/provenance.py
+index 0d27cfc449f9313c8e11d0c1e1737d91b17140fb..688e1a705f3a01a12ae356390c7188e46c86cb9d 100644
+--- a/compliance/provenance.py
++++ b/compliance/provenance.py
+@@ -41,7 +41,7 @@ def _tracked_files() -> list[pathlib.Path]:
+         rel = path.relative_to(ROOT).as_posix()
+         if any(rel == item or rel.startswith(item + "/") for item in FALLBACK_EXCLUDES):
+             continue
+-        if path.name in {".env", "terraform.tfvars", "routing.auto.tfvars.json", "known_hosts"}:
++        if path.name in {".env", "terraform.tfvars", "routing.auto.tfvars.json", "bootstrap.auto.tfvars.json", "known_hosts"}:
+             continue
+         files.append(path)
+     return sorted(files)
+diff --git a/compliance/record_evidence.py b/compliance/record_evidence.py
+index 5efe56228c1dbbf31d08c1ebdf8701ea5bc53940..412a8d18932fa4485f0bb87ed83c1099f8ab983d 100644
+--- a/compliance/record_evidence.py
++++ b/compliance/record_evidence.py
+@@ -7,10 +7,13 @@ import argparse
+ import json
+ import os
+ import pathlib
++import sys
+ from datetime import datetime, timezone
+ 
+ 
+ ROOT = pathlib.Path(__file__).resolve().parent.parent
++if str(ROOT) not in sys.path:
++    sys.path.insert(0, str(ROOT))
+ from compliance.provenance import current_provenance
+ 
+ 
+diff --git a/scripts/attack_chain.sh b/scripts/attack_chain.sh
+index 7ee5622a73f03be5e0acc461394ce088ec6f5324..164f4104a9f12b5e979ca2a8ef8faa210108ed6f 100644
+--- a/scripts/attack_chain.sh
++++ b/scripts/attack_chain.sh
+@@ -24,7 +24,7 @@ wazuh_alert_count() {
+ }
+ 
+ record() {
+-  python3 compliance/record_evidence.py "$@"
++  python3 -m compliance.record_evidence "$@"
+ }
+ 
+ step2_scan_detected() {
+@@ -127,7 +127,7 @@ step5_vrrp_failover() {
+ 
+   trap restore_vrrp_master EXIT
+   docker exec "$(n pc1)" sh -c \
+-    "ping -D -i 0.1 -c 100 192.168.10.254 > /tmp/cxyz-ha01-ping.txt 2>&1 &"
++    "ping -D -i 0.1 -c 140 198.10.10.1 > /tmp/cxyz-ha01-ping.txt 2>&1 &"
+   sleep 1
+   docker exec "$(n dist1)" vtysh \
+     -c "configure terminal" -c "interface eth2" -c "shutdown" >/dev/null
+@@ -154,7 +154,7 @@ PY
+       && grep -qi backup <<<"$d2_state" \
+       && python3 - "$gap" <<'PY'
+ import sys
+-raise SystemExit(0 if float(sys.argv[1]) < 2.0 else 1)
++raise SystemExit(0 if float(sys.argv[1]) < 5.0 else 1)
+ PY
+   then
+     result="PASS"
+@@ -162,7 +162,7 @@ PY
+   record \
+     --test-id "attack_chain.sh::step5_vrrp_failover" \
+     --control HA-01 --result "$result" \
+-    --assertion "VRRP macvlans/VIPs and advertisements are live; DIST1 master/DIST2 backup failover is below 2 seconds" \
++    --assertion "VRRP state is healthy and routed user traffic through the backup gateway recovers within 5 seconds" \
+     --enforcement-node dist1,dist2 \
+     --started-at "$started" \
+     --observed "dist1_master=$(grep -qi master <<<"$d1_state" && echo true || echo false)" \
+diff --git a/scripts/check_path_b_intent.py b/scripts/check_path_b_intent.py
+new file mode 100755
+index 0000000000000000000000000000000000000000..76940c6d8765c111669ea5b32dfb007588131642
+--- /dev/null
++++ b/scripts/check_path_b_intent.py
+@@ -0,0 +1,94 @@
++#!/usr/bin/env python3
++"""Detect Path B drift between canonical intent and reviewed VyOS configs.
++
++Terraform derives NIC ordering directly from intent/fabric.yaml.  This check
++makes the corresponding config.boot interface addresses and static routes part
++of the same fail-closed contract so a topology edit cannot silently leave the
++VyOS guest configuration behind.
++"""
++from __future__ import annotations
++
++import pathlib
++import re
++import sys
++
++import yaml
++
++ROOT = pathlib.Path(__file__).resolve().parent.parent
++INTENT = yaml.safe_load((ROOT / "intent" / "fabric.yaml").read_text())
++CONFIG_DIR = ROOT / "terraform" / "vyos-fabric" / "configs"
++VYOS_NODES = ("isp1", "isp2", "edge", "fw-core", "core", "dist1", "dist2", "fw-dmz")
++
++
++def strip_comments(text: str) -> str:
++    return re.sub(r"/\*.*?\*/", "", text, flags=re.S)
++
++
++def named_block(text: str, pattern: str) -> str | None:
++    match = re.search(pattern + r"\s*\{", text)
++    if not match:
++        return None
++    start = match.end()
++    depth = 1
++    i = start
++    while i < len(text):
++        if text[i] == "{":
++            depth += 1
++        elif text[i] == "}":
++            depth -= 1
++            if depth == 0:
++                return text[start:i]
++        i += 1
++    return None
++
++
++def normalize(value: str) -> str:
++    return value.strip().strip('"\'')
++
++
++def main() -> int:
++    errors: list[str] = []
++    for node_name in VYOS_NODES:
++        node = INTENT["nodes"][node_name]
++        path = CONFIG_DIR / f"{node_name}.boot"
++        body = strip_comments(path.read_text())
++        attachments = node.get("attachments", [])
++
++        for index, attachment in enumerate(attachments):
++            block = named_block(body, rf"\bethernet\s+eth{index}\b")
++            if block is None:
++                errors.append(f"{path.name}: missing eth{index} for intent attachment {attachment['link']}")
++                continue
++            addresses = [normalize(v) for v in re.findall(r"\baddress\s+([^\s;{}]+)", block)]
++            expected = str(attachment["address"])
++            if expected not in addresses:
++                errors.append(f"{path.name}: eth{index} address drift: intent={expected}, config={addresses or ['<missing>']}")
++
++        mgmt_index = len(attachments)
++        mgmt = named_block(body, rf"\bethernet\s+eth{mgmt_index}\b")
++        if mgmt is None:
++            errors.append(f"{path.name}: missing management eth{mgmt_index}")
++        else:
++            if not re.search(r"\baddress\s+dhcp\b", mgmt):
++                errors.append(f"{path.name}: management eth{mgmt_index} is not DHCP")
++            if "no-default-route" not in mgmt:
++                errors.append(f"{path.name}: management eth{mgmt_index} can import a default route")
++
++        for route in node.get("routes", []):
++            destination = re.escape(str(route["to"]))
++            via = re.escape(str(route["via"]))
++            route_pattern = rf"\broute\s+{destination}\s*\{{[^{{}}]*?next-hop\s+{via}(?:\s|\}})"
++            if not re.search(route_pattern, body, flags=re.S):
++                errors.append(f"{path.name}: missing intent static route {route['to']} via {route['via']}")
++
++    if errors:
++        print("Path B intent/config drift detected:", file=sys.stderr)
++        for error in errors:
++            print(f" - {error}", file=sys.stderr)
++        return 1
++    print("OK: Path B VyOS interface and static-route configs match canonical intent")
++    return 0
++
++
++if __name__ == "__main__":
++    raise SystemExit(main())
+diff --git a/scripts/gen-secrets.sh b/scripts/gen-secrets.sh
+index b5cc9c27d3903a2807d71eddffc0772db7154e64..fd2be6d81cc14366a6cf07299e136a47bf00916e 100755
+--- a/scripts/gen-secrets.sh
++++ b/scripts/gen-secrets.sh
+@@ -5,6 +5,7 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+ cd "$ROOT"
+ 
+ [ -f .env ] || { cp .env.example .env; echo "created .env from template"; }
++chmod 600 .env
+ 
+ # Add fields introduced after an operator's initial bootstrap without replacing
+ # any existing local values.
+@@ -92,4 +93,5 @@ done
+ # The LinuxServer WireGuard container owns its persisted configuration and
+ # peer keys beneath wireguard/config/.  Keeping a second unused key lifecycle
+ # here was misleading and risked testing the wrong credentials.
++chmod 600 .env
+ echo "secrets ready (values NOT shown; stored in .env and local service config)"
+diff --git a/scripts/path_b_audit.py b/scripts/path_b_audit.py
+index 3b8e97d6a409a0807fd9219256b1226be6793cb0..3c270ce260036d05473c888c2b006ef09c12e14d 100644
+--- a/scripts/path_b_audit.py
++++ b/scripts/path_b_audit.py
+@@ -14,6 +14,7 @@ import pathlib
+ import re
+ import shlex
+ import subprocess
++import sys
+ import time
+ import uuid
+ from datetime import datetime, timezone
+@@ -21,10 +22,13 @@ from typing import Callable
+ 
+ import yaml
+ 
++ROOT = pathlib.Path(__file__).resolve().parent.parent
++if str(ROOT) not in sys.path:
++    sys.path.insert(0, str(ROOT))
++
+ from compliance.provenance import current_provenance
+ from env_exec import parse_dotenv
+ 
+-ROOT = pathlib.Path(__file__).resolve().parent.parent
+ INTENT = yaml.safe_load((ROOT / "intent" / "fabric.yaml").read_text())
+ NODES = INTENT["nodes"]
+ KNOWN_HOSTS = ROOT / "ansible" / "inventory" / "known_hosts"
+@@ -214,15 +218,26 @@ def test_seg01() -> tuple[str, dict]:
+ def test_seg02() -> tuple[str, dict]:
+     local_web = linux("dmz-web", "curl -fsS http://127.0.0.1/ >/dev/null")
+     routed_web = tcp_from_linux("pc1", "195.1.1.161", 80)
++    route_precondition = linux("dmz-web", "ip route get 172.16.50.1")
+     pivot_ssh = tcp_from_linux("dmz-web", "172.16.50.1", 22)
++    fw_cfg = normalized_config(config("fw-dmz"))
++    explicit_pivot_deny = all(token in fw_cfg for token in (
++        "description SEG-02 block DMZ pivot to internal networks",
++        "source group network-group WEB_HOST",
++        "destination group network-group INTERNAL_NETS",
++        "action drop",
++    ))
+     observed = {
+         "dmz_web_local_health": local_web.returncode == 0,
+         "routed_http_positive": routed_web,
++        "dmz_to_dc_route_exists": route_precondition.returncode == 0,
++        "explicit_vyos_pivot_deny_present": explicit_pivot_deny,
+         "dmz_to_dc_ssh_reachable": pivot_ssh,
+     }
+     assert local_web.returncode == 0 and routed_web, "SEG-02 DMZ positive-control web path failed"
++    assert route_precondition.returncode == 0 and explicit_pivot_deny, "SEG-02 deny attribution preconditions are incomplete"
+     assert not pivot_ssh, "SEG-02 DMZ host pivoted into the DC"
+-    return "real DMZ web service is reachable where allowed and cannot initiate a DC SSH pivot", observed
++    return "DMZ routing is healthy, the explicit VyOS pivot-deny policy exists, and the prohibited DC SSH pivot is blocked", observed
+ 
+ 
+ def test_det01() -> tuple[str, dict]:
+@@ -240,33 +255,38 @@ def test_det02() -> tuple[str, dict]:
+         "set system syslog host 172.16.50.11 port 6514",
+         "set system syslog host 172.16.50.11 tls auth-mode name",
+     )
++    nodes = ("edge", "core", "dist1", "dist2", "fw-core", "fw-dmz")
+     configured: dict[str, bool] = {}
+-    for node in ("edge", "core", "dist1", "dist2", "fw-core", "fw-dmz"):
++    for node in nodes:
+         running = normalized_config(config(node))
+         configured[node] = all(token in running for token in required) and "tls certificate" in running and "tls ca-certificate" in running
+ 
+-    marker = f"CXYZ-DET02-TLS-MARKER-{uuid.uuid4()}"
+-    submitted = vyos_shell("core", f"logger -p local0.notice -t cxyz-det02 {shlex.quote(marker)}")
+-    relay_seen = False
+-    alert_seen = False
+-    deadline = time.monotonic() + 20
++    markers = {node: f"CXYZ-DET02-TLS-MARKER-{node}-{uuid.uuid4()}" for node in nodes}
++    submitted = {
++        node: vyos_shell(node, f"logger -p local0.notice -t cxyz-det02 {shlex.quote(marker)}").returncode == 0
++        for node, marker in markers.items()
++    }
++    relay_seen = {node: False for node in nodes}
++    alert_seen = {node: False for node in nodes}
++    deadline = time.monotonic() + 30
+     while time.monotonic() < deadline:
+-        relay_seen = compose_exec("syslog-relay", f"grep -Fq {shlex.quote(marker)} /var/log/cxyz/remote.log").returncode == 0
+-        alert_seen = compose_exec("wazuh.manager", f"grep -Fq {shlex.quote(marker)} /var/ossec/logs/alerts/alerts.json").returncode == 0
+-        if relay_seen and alert_seen:
++        for node, marker in markers.items():
++            if not relay_seen[node]:
++                relay_seen[node] = compose_exec("syslog-relay", f"grep -Fq {shlex.quote(marker)} /var/log/cxyz/remote.log").returncode == 0
++            if not alert_seen[node]:
++                alert_seen[node] = compose_exec("wazuh.manager", f"grep -Fq {shlex.quote(marker)} /var/ossec/logs/alerts/alerts.json").returncode == 0
++        if all(relay_seen.values()) and all(alert_seen.values()):
+             break
+         time.sleep(1)
+     observed = {
+-        "all_vyos_tls_configured": all(configured.values()),
+         "configured_nodes": configured,
+-        "marker_submitted": submitted.returncode == 0,
++        "marker_submitted": submitted,
+         "relay_received": relay_seen,
+         "wazuh_alert_received": alert_seen,
+     }
+     assert all(configured.values()), "DET-02 one or more VyOS nodes are not configured for authenticated TLS syslog"
+-    assert submitted.returncode == 0 and relay_seen and alert_seen, "DET-02 mTLS marker did not traverse relay into Wazuh"
+-    return "VyOS devices use mTLS syslog/6514 and a live marker reaches the relay and Wazuh", observed
+-
++    assert all(submitted.values()) and all(relay_seen.values()) and all(alert_seen.values()), "DET-02 one or more VyOS mTLS identities failed end-to-end relay/Wazuh delivery"
++    return "every audited VyOS node proves its own mTLS syslog identity with an end-to-end Wazuh marker", observed
+ 
+ def test_idm01() -> tuple[str, dict]:
+     content = linux("server1", "cat /etc/freeradius/3.0/mods-config/files/authorize").stdout
+@@ -330,10 +350,27 @@ def test_hrd02() -> tuple[str, dict]:
+ def test_time01() -> tuple[str, dict]:
+     cfg = linux("server1", "cat /etc/chrony/chrony.conf").stdout
+     tracking = linux("server1", "chronyc tracking")
++    runtime_sources = linux("server1", "chronyc sources -n")
+     sources = [line for line in cfg.splitlines() if line.strip().startswith("server ") and " nts" in line]
+-    observed = {"nts_source_count": len(sources), "chronyc_tracking_rc": tracking.returncode}
+-    assert len(sources) >= 2 and tracking.returncode == 0, "TIME-01 NTS configuration/runtime health is incomplete"
+-    return "server1 chrony uses at least two NTS upstreams and answers runtime tracking", observed
++    leap = re.search(r"Leap status\s*:\s*(.+)", tracking.stdout)
++    stratum = re.search(r"Stratum\s*:\s*(\d+)", tracking.stdout)
++    offset = re.search(r"System time\s*:\s*([0-9.eE+-]+) seconds", tracking.stdout)
++    selected = any(re.match(r"^\^\*", line.strip()) for line in runtime_sources.stdout.splitlines())
++    offset_seconds = abs(float(offset.group(1))) if offset else None
++    synchronized = bool(leap and leap.group(1).strip().lower() == "normal" and stratum and int(stratum.group(1)) > 0 and selected)
++    observed = {
++        "nts_source_count": len(sources),
++        "chronyc_tracking_rc": tracking.returncode,
++        "chronyc_sources_rc": runtime_sources.returncode,
++        "leap_status": leap.group(1).strip() if leap else None,
++        "stratum": int(stratum.group(1)) if stratum else None,
++        "selected_runtime_source": selected,
++        "absolute_system_offset_seconds": offset_seconds,
++    }
++    assert len(sources) >= 2, "TIME-01 does not configure two NTS upstreams"
++    assert tracking.returncode == 0 and runtime_sources.returncode == 0 and synchronized, "TIME-01 chrony is configured but not synchronized to an active source"
++    assert offset_seconds is not None and offset_seconds < 1.0, "TIME-01 system clock offset exceeds the one-second audit bound"
++    return "server1 has two NTS-configured upstreams, an active synchronized source, Normal leap status, and sub-second clock offset", observed
+ 
+ 
+ def test_rtr01() -> tuple[str, dict]:
+@@ -388,7 +425,12 @@ def test_ha01() -> tuple[str, dict]:
+         raise RuntimeError("cannot query VyOS VRRP state")
+     assert "MASTER" in d1.stdout.upper() and "BACKUP" in d2.stdout.upper(), "HA-01 expected DIST1 master / DIST2 backup precondition failed"
+ 
+-    ping_cmd = "ping -D -i 0.2 -c 45 192.168.10.254"
++    # Probe a remote routed destination, not the local VIP. This proves that
++    # VRRP takeover plus the backup distribution/core routing path survives.
++    target = "198.10.10.1"
++    ping_cmd = f"ping -D -i 0.2 -c 70 {target}"
++    baseline = linux("pc1", f"ping -c 2 -W 2 {target}", timeout=8)
++    assert baseline.returncode == 0, "HA-01 routed baseline to ISP1 is unhealthy before failover"
+     proc = subprocess.Popen(
+         ssh_argv("pc1", "ansible", f"bash -lc {shlex.quote(ping_cmd)}"),
+         cwd=ROOT,
+@@ -404,12 +446,14 @@ def test_ha01() -> tuple[str, dict]:
+         if result.returncode != 0:
+             raise RuntimeError(f"cannot suspend VRRP master: {result.stderr.strip()}")
+         suspended = True
+-        time.sleep(3.0)
++        # VyOS uses one-second VRRP advertisements; allow the standards-based
++        # master-down interval to expire before restoring the original master.
++        time.sleep(6.0)
+         result = run(["virsh", "-c", uri, "resume", "cxyz-dist1"], timeout=10)
+         if result.returncode != 0:
+             raise RuntimeError(f"cannot resume VRRP master: {result.stderr.strip()}")
+         suspended = False
+-        output, _ = proc.communicate(timeout=15)
++        output, _ = proc.communicate(timeout=20)
+     finally:
+         if suspended:
+             run(["virsh", "-c", uri, "resume", "cxyz-dist1"], timeout=10)
+@@ -418,28 +462,44 @@ def test_ha01() -> tuple[str, dict]:
+             output, _ = proc.communicate(timeout=5)
+     timestamps = _reply_timestamps(output)
+     max_gap = max((b - a for a, b in zip(timestamps, timestamps[1:])), default=999.0)
+-    observed = {"reply_count": len(timestamps), "max_reply_gap_seconds": round(max_gap, 3)}
+-    assert len(timestamps) >= 20 and max_gap < 2.0, f"HA-01 measured VRRP failover gap is {max_gap:.3f}s"
+-    return "suspending the real DIST1 VyOS master preserves the VIP with a measured reply gap below 2 seconds", observed
+-
++    observed = {"target": target, "reply_count": len(timestamps), "max_reply_gap_seconds": round(max_gap, 3)}
++    assert len(timestamps) >= 35 and max_gap < 5.0, f"HA-01 measured routed failover gap is {max_gap:.3f}s"
++    return "suspending the real DIST1 VyOS master preserves remote routed user traffic with recovery below 5 seconds", observed
+ 
+ def test_vpn01() -> tuple[str, dict]:
+     ssh_ready = tcp_from_linux("pc4", "172.16.50.1", 22)
+     wan = vyos_shell("isp1", "timeout 4 bash -c 'exec 3<>/dev/tcp/172.16.50.1/22'", timeout=8)
+-    wg = compose_exec("wireguard", "wg show interfaces")
++    wg_if = compose_exec("wireguard", "wg show interfaces")
++    wg_peers = compose_exec("wireguard", "wg show all peers")
++    wg_handshakes = compose_exec("wireguard", "wg show all latest-handshakes")
++    now = int(time.time())
++    recent_handshake = False
++    handshake_ages: list[int] = []
++    if wg_handshakes.returncode == 0:
++        for line in wg_handshakes.stdout.splitlines():
++            fields = line.split()
++            if len(fields) >= 3 and fields[-1].isdigit() and int(fields[-1]) > 0:
++                age = now - int(fields[-1])
++                handshake_ages.append(age)
++                if 0 <= age <= 600:
++                    recent_handshake = True
+     compose = (ROOT / "docker-compose.yml").read_text()
+     forbidden_publish = any(token in compose for token in ('"55000:55000"', '"1515:1515"', '"1514:1514"', '"8081:8080"'))
+     observed = {
+         "dc_ssh_positive": ssh_ready,
+         "wan_ssh_reachable": wan.returncode == 0,
+-        "wireguard_ready": wg.returncode == 0 and bool(wg.stdout.strip()),
++        "wireguard_interface_ready": wg_if.returncode == 0 and bool(wg_if.stdout.strip()),
++        "wireguard_peer_count": len([line for line in wg_peers.stdout.splitlines() if line.strip()]),
++        "recent_wireguard_handshake": recent_handshake,
++        "handshake_ages_seconds": handshake_ages,
+         "forbidden_management_publish_present": forbidden_publish,
+     }
+     assert ssh_ready, "VPN-01 healthy DC SSH positive control failed"
+     assert wan.returncode != 0, "VPN-01 routed ISP reached DC management SSH"
+-    assert observed["wireguard_ready"] and not forbidden_publish, "VPN-01 WireGuard is not ready or a management/backend port is host-published"
+-    return "WireGuard is operational while the routed ISP cannot reach DC SSH and no management/backend port is published", observed
+-
++    assert observed["wireguard_interface_ready"] and observed["wireguard_peer_count"] > 0, "VPN-01 WireGuard has no operational interface/configured peer"
++    assert recent_handshake, "VPN-01 requires at least one real WireGuard peer handshake within the last 10 minutes"
++    assert not forbidden_publish, "VPN-01 management/backend port is host-published"
++    return "a real WireGuard peer has recently handshaken while routed WAN management access is denied and management/backend ports remain unpublished", observed
+ 
+ def test_ztna01() -> tuple[str, dict]:
+     domain = os.environ.get("ORG_DOMAIN") or ENV.get("ORG_DOMAIN", "companyxyz.lab")
+diff --git a/scripts/render_path_b_vars.py b/scripts/render_path_b_vars.py
+index bc193a72ba8a98545ea09614248245440ff3c7c4..9c4eb77badc5fa46811617f8c726dc9d007823ca 100644
+--- a/scripts/render_path_b_vars.py
++++ b/scripts/render_path_b_vars.py
+@@ -1,9 +1,9 @@
+ #!/usr/bin/env python3
+ """Render ignored Path B Terraform secret inputs from the canonical .env.
+ 
+-Routing secrets and the deployment SSH public key are intentionally shared by
+-Terraform first boot and Ansible Day-2 reconciliation.  This removes a second,
+-manually-maintained copy from terraform.tfvars.
++Terraform receives only the deployment SSH public key. Long-lived BGP/OSPF
++credentials remain in .env (or a future secret backend) and are injected only
++by Ansible Day-2, so Terraform state is not a routing-credential store.
+ """
+ from __future__ import annotations
+ 
+@@ -14,7 +14,8 @@ import pathlib
+ from env_exec import parse_dotenv
+ 
+ ROOT = pathlib.Path(__file__).resolve().parent.parent
+-OUT = ROOT / "terraform" / "vyos-fabric" / "routing.auto.tfvars.json"
++OUT = ROOT / "terraform" / "vyos-fabric" / "bootstrap.auto.tfvars.json"
++LEGACY_OUT = ROOT / "terraform" / "vyos-fabric" / "routing.auto.tfvars.json"
+ 
+ 
+ def strong(value: str) -> bool:
+@@ -40,30 +41,17 @@ def main() -> int:
+     args = parser.parse_args()
+ 
+     env = parse_dotenv(ROOT / ".env")
+-    names = ("OSPF_MD5_SECRET", "BGP_ISP1_SECRET", "BGP_ISP2_SECRET")
+-    missing = [name for name in names if not strong(env.get(name, ""))]
+-    if missing:
+-        raise SystemExit("weak/missing Path B routing secret(s): " + ", ".join(missing))
+-    if len({env[name] for name in names}) != len(names):
+-        raise SystemExit("Path B routing secrets must be unique")
+-
+     key_file = env.get("PATH_B_SSH_PUBLIC_KEY_FILE", "")
+     if not key_file:
+         raise SystemExit("PATH_B_SSH_PUBLIC_KEY_FILE is not set in .env")
+     public_key = load_public_key(key_file)
+-    payload = {
+-        "routing_secrets": {
+-            "ospf_md5": env["OSPF_MD5_SECRET"],
+-            "bgp_isp1": env["BGP_ISP1_SECRET"],
+-            "bgp_isp2": env["BGP_ISP2_SECRET"],
+-        },
+-        "ssh_public_key": public_key,
+-    }
++    payload = {"ssh_public_key": public_key}
+     rendered = json.dumps(payload, indent=2, sort_keys=True) + "\n"
+     if args.check:
+         if not OUT.exists() or OUT.read_text() != rendered:
+             raise SystemExit(f"stale or missing {OUT.relative_to(ROOT)}; run make path-b-vars")
+         return 0
++    LEGACY_OUT.unlink(missing_ok=True)
+     OUT.write_text(rendered)
+     OUT.chmod(0o600)
+     print(f"rendered {OUT.relative_to(ROOT)} (secret values not shown)")
+diff --git a/scripts/security_static_checks.py b/scripts/security_static_checks.py
+index 72f5f5d72a1daf1635cce8412e0c538359bb2169..3b324e7ac8af1aa8ca73c4a0ec1289824aa63109 100644
+--- a/scripts/security_static_checks.py
++++ b/scripts/security_static_checks.py
+@@ -60,13 +60,38 @@ for path in k8s_files:
+     if "SYS_MODULE" in body:
+         fail(f"{path.relative_to(ROOT)} grants SYS_MODULE")
+ 
++
++# Path B Terraform state must never contain long-lived routing credentials.
++tf_main = text("terraform/vyos-fabric/main.tf")
++tf_vars = text("terraform/vyos-fabric/variables.tf")
++if "var.routing_secrets" in tf_main or 'variable "routing_secrets"' in tf_vars:
++    fail("Terraform Path B must not receive long-lived BGP/OSPF credentials")
++for token in ("BOOTSTRAP_DISABLED_${node_name}_ospf", "BOOTSTRAP_DISABLED_${node_name}_bgp1", "BOOTSTRAP_DISABLED_${node_name}_bgp2"):
++    if token not in tf_main:
++        fail("Path B first boot must use per-node fail-closed routing authentication tokens")
++
++vyos_role = text("ansible/roles/vyos_edge/tasks/main.yml")
++if "backup: true" in vyos_role:
++    fail("VyOS Day-2 reconciliation must not write secret-bearing configuration backups")
++if "vyos_edge_result.commands" in vyos_role:
++    fail("VyOS Day-2 must not print secret-bearing command lists")
++if "no_log: true" not in vyos_role:
++    fail("VyOS secret-bearing reconciliation is not log-redacted")
++
++local_env = ROOT / ".env"
++if local_env.exists() and (local_env.stat().st_mode & 0o077):
++    fail(".env contains credentials and must be mode 0600")
++
+ wazuh_k8s = text("k8s/10-wazuh.yaml")
+ for component in ("indexer", "manager", "dashboard"):
+     if f"wazuh/wazuh-{component}:4.14.6" not in wazuh_k8s:
+         fail(f"Kubernetes Wazuh {component} is not aligned to 4.14.6")
+ 
+-if (ROOT / "COMPLIANCE-REPORT.md").exists():
+-    fail("tracked root COMPLIANCE-REPORT.md is stale-prone; generated evidence report must be authoritative")
++root_report = ROOT / "COMPLIANCE-REPORT.md"
++if root_report.exists():
++    pointer = root_report.read_text()
++    if "NOT COMPLIANCE EVIDENCE" not in pointer or "evidence/PATH-B-COMPLIANCE-REPORT.md" not in pointer:
++        fail("tracked root COMPLIANCE-REPORT.md may only be a non-evidence pointer to generated reports")
+ 
+ if ERRORS:
+     print("security static checks FAILED:", file=sys.stderr)
+diff --git a/terraform/vyos-fabric/README.md b/terraform/vyos-fabric/README.md
+index 52dd1d05924a97168ff18e6c875dcf3d50694a50..130ef13a060f6d0c16f2169501ca49a6b302f800 100644
+--- a/terraform/vyos-fabric/README.md
++++ b/terraform/vyos-fabric/README.md
+@@ -62,6 +62,11 @@ terraform apply
+ terraform output node_mgmt_ips
+ ```
+ 
++Terraform first boot intentionally keeps BGP/OSPF adjacencies down by using
++per-node non-secret bootstrap authentication tokens. Long-lived routing secrets
++never enter Terraform state; Ansible injects them only after the management SSH
++trust boundary has been established.
++
+ Before any Ansible connection, verify each VM SSH host key from its console or
+ trusted hypervisor inventory and store it in `ansible/inventory/known_hosts`.
+ The file is intentionally local-only; the automation refuses to disable host
+@@ -72,6 +77,8 @@ cd ../..
+ make vm-configure
+ make vm-health
+ make vm-idempotency
++# Establish at least one WireGuard peer handshake within 10 minutes before
++# vm-audit so VPN-01 has a real remote-access positive control.
+ make vm-audit
+ ```
+ 
+diff --git a/terraform/vyos-fabric/main.tf b/terraform/vyos-fabric/main.tf
+index 5c27f8c2e84bd1d1a45e83e32fd337832bac5c42..59f0ff11a07ec972ba96780b74974bb55d56d34d 100644
+--- a/terraform/vyos-fabric/main.tf
++++ b/terraform/vyos-fabric/main.tf
+@@ -202,9 +202,11 @@ locals {
+     }
+   }
+ 
+-  # Source configs are reviewed without secret material. Terraform injects
+-  # routing credentials, the intent-owned management address, and the SSH
+-  # bootstrap key only into the cloud-init payload.
++  # Terraform bootstrap never receives long-lived routing credentials. Each
++  # node gets a different non-secret auth token, deliberately preventing BGP
++  # and OSPF adjacency before trusted Ansible Day-2 injects the real secrets.
++  # Terraform state therefore contains only inert bootstrap values plus the
++  # public SSH key, not reusable routing authentication material.
+   ssh_public_key_parts = split(" ", trimspace(var.ssh_public_key))
+   ssh_public_key_type  = local.ssh_public_key_parts[0]
+   ssh_public_key_data  = local.ssh_public_key_parts[1]
+@@ -215,9 +217,9 @@ locals {
+         replace(
+           replace(
+             replace(
+-              replace(file("${path.module}/${node.boot_config}"), "CHANGE_ME_ospf_key", var.routing_secrets.ospf_md5),
+-              "CHANGE_ME_bgp_isp1", var.routing_secrets.bgp_isp1),
+-            "CHANGE_ME_bgp_isp2", var.routing_secrets.bgp_isp2),
++              replace(file("${path.module}/${node.boot_config}"), "CHANGE_ME_ospf_key", "BOOTSTRAP_DISABLED_${node_name}_ospf"),
++              "CHANGE_ME_bgp_isp1", "BOOTSTRAP_DISABLED_${node_name}_bgp1"),
++            "CHANGE_ME_bgp_isp2", "BOOTSTRAP_DISABLED_${node_name}_bgp2"),
+           "MANAGEMENT_IP", local.fabric_intent.nodes[node_name].mgmt_ip),
+         "SSH_KEY_TYPE", local.ssh_public_key_type),
+       "SSH_KEY_DATA", local.ssh_public_key_data) : null
+diff --git a/terraform/vyos-fabric/terraform.tfvars.example b/terraform/vyos-fabric/terraform.tfvars.example
+index 8314e38050b6ef420b2f41ba77e8657f274cd5c8..61da7c6610722201c4ec86ce64e54b8d827dec63 100644
+--- a/terraform/vyos-fabric/terraform.tfvars.example
++++ b/terraform/vyos-fabric/terraform.tfvars.example
+@@ -1,6 +1,6 @@
+ # Copy to terraform.tfvars and fill in reviewed local image paths/digests.
+-# Routing secrets and ssh_public_key are generated into the ignored
+-# routing.auto.tfvars.json by `make path-b-vars` from the root .env.
++# Only ssh_public_key is generated into ignored bootstrap.auto.tfvars.json by
++# `make path-b-vars`. BGP/OSPF credentials never enter Terraform state.
+ libvirt_uri = "qemu:///system"
+ 
+ # Select one exact cloud-init-enabled VyOS 1.4.x image after validating every
+diff --git a/terraform/vyos-fabric/variables.tf b/terraform/vyos-fabric/variables.tf
+index 5190fde04dde25b880d8466112e4e3222f393c02..59e0e2d9b5c09d6d7c1d290221f617a66b1e76d9 100644
+--- a/terraform/vyos-fabric/variables.tf
++++ b/terraform/vyos-fabric/variables.tf
+@@ -59,23 +59,6 @@ variable "ssh_public_key" {
+   }
+ }
+ 
+-variable "routing_secrets" {
+-  description = "Per-protocol routing authentication material, supplied from ignored terraform.tfvars or a secret backend"
+-  type = object({
+-    ospf_md5 = string
+-    bgp_isp1 = string
+-    bgp_isp2 = string
+-  })
+-  sensitive = true
+-
+-  validation {
+-    condition = alltrue([
+-      for secret in values(var.routing_secrets) : length(secret) >= 24 && !startswith(secret, "CHANGE_ME")
+-    ]) && length(distinct(values(var.routing_secrets))) == length(values(var.routing_secrets))
+-    error_message = "All routing secrets must be unique non-placeholder values of at least 24 characters."
+-  }
+-}
+-
+ variable "node_image_overrides" {
+   description = "Optional reviewed node image overrides with mandatory SHA-256; unspecified nodes use their platform base image"
+   type = map(object({

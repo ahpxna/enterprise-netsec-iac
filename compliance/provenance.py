@@ -41,7 +41,7 @@ def _tracked_files() -> list[pathlib.Path]:
         rel = path.relative_to(ROOT).as_posix()
         if any(rel == item or rel.startswith(item + "/") for item in FALLBACK_EXCLUDES):
             continue
-        if path.name in {".env", "terraform.tfvars", "routing.auto.tfvars.json", "known_hosts"}:
+        if path.name in {".env", "terraform.tfvars", "routing.auto.tfvars.json", "bootstrap.auto.tfvars.json", "known_hosts"}:
             continue
         files.append(path)
     return sorted(files)

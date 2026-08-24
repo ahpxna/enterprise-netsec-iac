@@ -1,6 +1,6 @@
 # Copy to terraform.tfvars and fill in reviewed local image paths/digests.
-# Routing secrets and ssh_public_key are generated into the ignored
-# routing.auto.tfvars.json by `make path-b-vars` from the root .env.
+# Only ssh_public_key is generated into ignored bootstrap.auto.tfvars.json by
+# `make path-b-vars`. BGP/OSPF credentials never enter Terraform state.
 libvirt_uri = "qemu:///system"
 
 # Select one exact cloud-init-enabled VyOS 1.4.x image after validating every

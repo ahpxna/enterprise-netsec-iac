@@ -75,6 +75,7 @@ lint: ## Static checks: yamllint, ansible-lint, terraform, gitleaks
 	python scripts/render_batfish_snapshot.py --check
 	python scripts/render_vm_inventory.py --check
 	python scripts/check_vyos_boot.py
+	python scripts/check_path_b_intent.py
 	python scripts/security_static_checks.py
 	python compliance/check_wiring.py
 	python -m pytest tests/unit -q
@@ -118,7 +119,7 @@ vm-init: ## Init Terraform for the real VyOS VM fabric
 	cd terraform/vyos-fabric && terraform init
 
 .PHONY: path-b-vars
-path-b-vars: secrets ## Render ignored Terraform Path B secrets/key inputs from .env
+path-b-vars: secrets ## Render ignored Terraform Path B public bootstrap input from .env
 	python scripts/render_path_b_vars.py
 
 .PHONY: vm-plan
@@ -157,7 +158,7 @@ vm-audit: vm-configure security ## Audit the real Path B VM data plane and fail 
 	python scripts/env_exec.py --env-file .env -- env \
 		LAB_ENVIRONMENT=path-b EVIDENCE_DIR=$(EVIDENCE)-path-b \
 		python scripts/path_b_audit.py
-	LAB_ENVIRONMENT=path-b python compliance/generate_report.py --strict --profile path-b \
+	LAB_ENVIRONMENT=path-b python -m compliance.generate_report --strict --profile path-b \
 		--run $(EVIDENCE)-path-b --out evidence/PATH-B-COMPLIANCE-REPORT.md
 
 .PHONY: vm-down
@@ -182,7 +183,7 @@ k8s-status: ## Show pod/service status for the k8s security plane
 
 .PHONY: report
 report: ## Generate Path A compliance report from controls.yaml + latest evidence
-	python compliance/generate_report.py --strict --profile path-a \
+	python -m compliance.generate_report --strict --profile path-a \
 		--out evidence/COMPLIANCE-REPORT.md
 
 .PHONY: audit
@@ -206,4 +207,4 @@ down: ## Tear Path A services/fabric down and restore host routing state
 
 .PHONY: clean
 clean: down ## Tear down + remove generated artifacts
-	rm -rf clab-companyxyz evidence/runs/* clab/runtime-configs terraform/vyos-fabric/routing.auto.tfvars.json .cxyz-state
+	rm -rf clab-companyxyz evidence/runs/* clab/runtime-configs terraform/vyos-fabric/bootstrap.auto.tfvars.json terraform/vyos-fabric/routing.auto.tfvars.json .cxyz-state

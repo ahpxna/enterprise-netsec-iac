@@ -48,37 +48,40 @@
       - vyos_edge_ssh_public_key[0] is match('^(ssh-|ecdsa-|sk-)')
     fail_msg: "PATH_B_SSH_PUBLIC_KEY_FILE must point at a valid OpenSSH public key."
 
-- name: Render a secret-injected Day-2 configuration on the controller
-  ansible.builtin.copy:
-    content: >-
-      {{ lookup('ansible.builtin.file', vyos_edge_boot_file)
-         | replace('CHANGE_ME_ospf_key', vyos_edge_ospf_md5)
-         | replace('CHANGE_ME_bgp_isp1', vyos_edge_bgp_isp1)
-         | replace('CHANGE_ME_bgp_isp2', vyos_edge_bgp_isp2)
-         | replace('MANAGEMENT_IP', ansible_host)
-         | replace('SSH_KEY_TYPE', vyos_edge_ssh_public_key[0])
-         | replace('SSH_KEY_DATA', vyos_edge_ssh_public_key[1]) }}
-    dest: "/tmp/cxyz-{{ inventory_hostname }}.boot"
-    mode: "0600"
-  delegate_to: localhost
-  become: false
-  no_log: true
+- name: Reconcile secret-bearing VyOS configuration safely
+  block:
+    - name: Render a secret-injected Day-2 configuration on the controller
+      ansible.builtin.copy:
+        content: >-
+          {{ lookup('ansible.builtin.file', vyos_edge_boot_file)
+             | replace('CHANGE_ME_ospf_key', vyos_edge_ospf_md5)
+             | replace('CHANGE_ME_bgp_isp1', vyos_edge_bgp_isp1)
+             | replace('CHANGE_ME_bgp_isp2', vyos_edge_bgp_isp2)
+             | replace('MANAGEMENT_IP', ansible_host)
+             | replace('SSH_KEY_TYPE', vyos_edge_ssh_public_key[0])
+             | replace('SSH_KEY_DATA', vyos_edge_ssh_public_key[1]) }}
+        dest: "/tmp/cxyz-{{ inventory_hostname }}.boot"
+        mode: "0600"
+      delegate_to: localhost
+      become: false
+      no_log: true
 
-- name: Reconcile declarative VyOS configuration and save a rollback backup
-  vyos.vyos.vyos_config:
-    src: "/tmp/cxyz-{{ inventory_hostname }}.boot"
-    backup: true
-    save: "{{ vyos_edge_save_config }}"
-  register: vyos_edge_result
+    - name: Reconcile declarative VyOS configuration without secret-bearing backups
+      vyos.vyos.vyos_config:
+        src: "/tmp/cxyz-{{ inventory_hostname }}.boot"
+        backup: false
+        save: "{{ vyos_edge_save_config }}"
+      register: vyos_edge_result
+      no_log: true
+  always:
+    - name: Remove secret-injected Day-2 configuration from the controller
+      ansible.builtin.file:
+        path: "/tmp/cxyz-{{ inventory_hostname }}.boot"
+        state: absent
+      delegate_to: localhost
+      become: false
+      no_log: true
 
-- name: Remove secret-injected Day-2 configuration from the controller
-  ansible.builtin.file:
-    path: "/tmp/cxyz-{{ inventory_hostname }}.boot"
-    state: absent
-  delegate_to: localhost
-  become: false
-  no_log: true
-
-- name: Show what changed (empty on a clean re-run — proves idempotency)
+- name: Report whether VyOS reconciliation changed state
   ansible.builtin.debug:
-    msg: "{{ vyos_edge_result.commands | default([]) }}"
+    msg: "VyOS reconciliation changed={{ vyos_edge_result.changed | default(false) }}; commands are redacted because they may contain routing credentials."

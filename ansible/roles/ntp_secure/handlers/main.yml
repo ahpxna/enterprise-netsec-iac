@@ -1,5 +1,13 @@
 ---
-- name: Restart chrony
+- name: Restart chrony under Docker supervisor
   ansible.builtin.command: supervisorctl restart chronyd  # noqa command-instead-of-module
   changed_when: true
+  when: ansible_connection | default("") == "community.docker.docker"
+  listen: restart chrony
+
+- name: Restart chrony on systemd Linux
+  ansible.builtin.service:
+    name: chrony
+    state: restarted
+  when: ansible_connection | default("") != "community.docker.docker"
   listen: restart chrony

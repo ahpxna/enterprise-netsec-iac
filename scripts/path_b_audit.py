@@ -14,6 +14,7 @@ import pathlib
 import re
 import shlex
 import subprocess
+import sys
 import time
 import uuid
 from datetime import datetime, timezone
@@ -21,10 +22,13 @@ from typing import Callable
 
 import yaml
 
+ROOT = pathlib.Path(__file__).resolve().parent.parent
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
 from compliance.provenance import current_provenance
 from env_exec import parse_dotenv
 
-ROOT = pathlib.Path(__file__).resolve().parent.parent
 INTENT = yaml.safe_load((ROOT / "intent" / "fabric.yaml").read_text())
 NODES = INTENT["nodes"]
 KNOWN_HOSTS = ROOT / "ansible" / "inventory" / "known_hosts"
@@ -214,15 +218,26 @@ def test_seg01() -> tuple[str, dict]:
 def test_seg02() -> tuple[str, dict]:
     local_web = linux("dmz-web", "curl -fsS http://127.0.0.1/ >/dev/null")
     routed_web = tcp_from_linux("pc1", "195.1.1.161", 80)
+    route_precondition = linux("dmz-web", "ip route get 172.16.50.1")
     pivot_ssh = tcp_from_linux("dmz-web", "172.16.50.1", 22)
+    fw_cfg = normalized_config(config("fw-dmz"))
+    explicit_pivot_deny = all(token in fw_cfg for token in (
+        "description SEG-02 block DMZ pivot to internal networks",
+        "source group network-group WEB_HOST",
+        "destination group network-group INTERNAL_NETS",
+        "action drop",
+    ))
     observed = {
         "dmz_web_local_health": local_web.returncode == 0,
         "routed_http_positive": routed_web,
+        "dmz_to_dc_route_exists": route_precondition.returncode == 0,
+        "explicit_vyos_pivot_deny_present": explicit_pivot_deny,
         "dmz_to_dc_ssh_reachable": pivot_ssh,
     }
     assert local_web.returncode == 0 and routed_web, "SEG-02 DMZ positive-control web path failed"
+    assert route_precondition.returncode == 0 and explicit_pivot_deny, "SEG-02 deny attribution preconditions are incomplete"
     assert not pivot_ssh, "SEG-02 DMZ host pivoted into the DC"
-    return "real DMZ web service is reachable where allowed and cannot initiate a DC SSH pivot", observed
+    return "DMZ routing is healthy, the explicit VyOS pivot-deny policy exists, and the prohibited DC SSH pivot is blocked", observed
 
 
 def test_det01() -> tuple[str, dict]:
@@ -240,33 +255,38 @@ def test_det02() -> tuple[str, dict]:
         "set system syslog host 172.16.50.11 port 6514",
         "set system syslog host 172.16.50.11 tls auth-mode name",
     )
+    nodes = ("edge", "core", "dist1", "dist2", "fw-core", "fw-dmz")
     configured: dict[str, bool] = {}
-    for node in ("edge", "core", "dist1", "dist2", "fw-core", "fw-dmz"):
+    for node in nodes:
         running = normalized_config(config(node))
         configured[node] = all(token in running for token in required) and "tls certificate" in running and "tls ca-certificate" in running
 
-    marker = f"CXYZ-DET02-TLS-MARKER-{uuid.uuid4()}"
-    submitted = vyos_shell("core", f"logger -p local0.notice -t cxyz-det02 {shlex.quote(marker)}")
-    relay_seen = False
-    alert_seen = False
-    deadline = time.monotonic() + 20
+    markers = {node: f"CXYZ-DET02-TLS-MARKER-{node}-{uuid.uuid4()}" for node in nodes}
+    submitted = {
+        node: vyos_shell(node, f"logger -p local0.notice -t cxyz-det02 {shlex.quote(marker)}").returncode == 0
+        for node, marker in markers.items()
+    }
+    relay_seen = {node: False for node in nodes}
+    alert_seen = {node: False for node in nodes}
+    deadline = time.monotonic() + 30
     while time.monotonic() < deadline:
-        relay_seen = compose_exec("syslog-relay", f"grep -Fq {shlex.quote(marker)} /var/log/cxyz/remote.log").returncode == 0
-        alert_seen = compose_exec("wazuh.manager", f"grep -Fq {shlex.quote(marker)} /var/ossec/logs/alerts/alerts.json").returncode == 0
-        if relay_seen and alert_seen:
+        for node, marker in markers.items():
+            if not relay_seen[node]:
+                relay_seen[node] = compose_exec("syslog-relay", f"grep -Fq {shlex.quote(marker)} /var/log/cxyz/remote.log").returncode == 0
+            if not alert_seen[node]:
+                alert_seen[node] = compose_exec("wazuh.manager", f"grep -Fq {shlex.quote(marker)} /var/ossec/logs/alerts/alerts.json").returncode == 0
+        if all(relay_seen.values()) and all(alert_seen.values()):
             break
         time.sleep(1)
     observed = {
-        "all_vyos_tls_configured": all(configured.values()),
         "configured_nodes": configured,
-        "marker_submitted": submitted.returncode == 0,
+        "marker_submitted": submitted,
         "relay_received": relay_seen,
         "wazuh_alert_received": alert_seen,
     }
     assert all(configured.values()), "DET-02 one or more VyOS nodes are not configured for authenticated TLS syslog"
-    assert submitted.returncode == 0 and relay_seen and alert_seen, "DET-02 mTLS marker did not traverse relay into Wazuh"
-    return "VyOS devices use mTLS syslog/6514 and a live marker reaches the relay and Wazuh", observed
-
+    assert all(submitted.values()) and all(relay_seen.values()) and all(alert_seen.values()), "DET-02 one or more VyOS mTLS identities failed end-to-end relay/Wazuh delivery"
+    return "every audited VyOS node proves its own mTLS syslog identity with an end-to-end Wazuh marker", observed
 
 def test_idm01() -> tuple[str, dict]:
     content = linux("server1", "cat /etc/freeradius/3.0/mods-config/files/authorize").stdout
@@ -330,10 +350,27 @@ def test_hrd02() -> tuple[str, dict]:
 def test_time01() -> tuple[str, dict]:
     cfg = linux("server1", "cat /etc/chrony/chrony.conf").stdout
     tracking = linux("server1", "chronyc tracking")
+    runtime_sources = linux("server1", "chronyc sources -n")
     sources = [line for line in cfg.splitlines() if line.strip().startswith("server ") and " nts" in line]
-    observed = {"nts_source_count": len(sources), "chronyc_tracking_rc": tracking.returncode}
-    assert len(sources) >= 2 and tracking.returncode == 0, "TIME-01 NTS configuration/runtime health is incomplete"
-    return "server1 chrony uses at least two NTS upstreams and answers runtime tracking", observed
+    leap = re.search(r"Leap status\s*:\s*(.+)", tracking.stdout)
+    stratum = re.search(r"Stratum\s*:\s*(\d+)", tracking.stdout)
+    offset = re.search(r"System time\s*:\s*([0-9.eE+-]+) seconds", tracking.stdout)
+    selected = any(re.match(r"^\^\*", line.strip()) for line in runtime_sources.stdout.splitlines())
+    offset_seconds = abs(float(offset.group(1))) if offset else None
+    synchronized = bool(leap and leap.group(1).strip().lower() == "normal" and stratum and int(stratum.group(1)) > 0 and selected)
+    observed = {
+        "nts_source_count": len(sources),
+        "chronyc_tracking_rc": tracking.returncode,
+        "chronyc_sources_rc": runtime_sources.returncode,
+        "leap_status": leap.group(1).strip() if leap else None,
+        "stratum": int(stratum.group(1)) if stratum else None,
+        "selected_runtime_source": selected,
+        "absolute_system_offset_seconds": offset_seconds,
+    }
+    assert len(sources) >= 2, "TIME-01 does not configure two NTS upstreams"
+    assert tracking.returncode == 0 and runtime_sources.returncode == 0 and synchronized, "TIME-01 chrony is configured but not synchronized to an active source"
+    assert offset_seconds is not None and offset_seconds < 1.0, "TIME-01 system clock offset exceeds the one-second audit bound"
+    return "server1 has two NTS-configured upstreams, an active synchronized source, Normal leap status, and sub-second clock offset", observed
 
 
 def test_rtr01() -> tuple[str, dict]:
@@ -388,7 +425,12 @@ def test_ha01() -> tuple[str, dict]:
         raise RuntimeError("cannot query VyOS VRRP state")
     assert "MASTER" in d1.stdout.upper() and "BACKUP" in d2.stdout.upper(), "HA-01 expected DIST1 master / DIST2 backup precondition failed"
 
-    ping_cmd = "ping -D -i 0.2 -c 45 192.168.10.254"
+    # Probe a remote routed destination, not the local VIP. This proves that
+    # VRRP takeover plus the backup distribution/core routing path survives.
+    target = "198.10.10.1"
+    ping_cmd = f"ping -D -i 0.2 -c 70 {target}"
+    baseline = linux("pc1", f"ping -c 2 -W 2 {target}", timeout=8)
+    assert baseline.returncode == 0, "HA-01 routed baseline to ISP1 is unhealthy before failover"
     proc = subprocess.Popen(
         ssh_argv("pc1", "ansible", f"bash -lc {shlex.quote(ping_cmd)}"),
         cwd=ROOT,
@@ -404,12 +446,14 @@ def test_ha01() -> tuple[str, dict]:
         if result.returncode != 0:
             raise RuntimeError(f"cannot suspend VRRP master: {result.stderr.strip()}")
         suspended = True
-        time.sleep(3.0)
+        # VyOS uses one-second VRRP advertisements; allow the standards-based
+        # master-down interval to expire before restoring the original master.
+        time.sleep(6.0)
         result = run(["virsh", "-c", uri, "resume", "cxyz-dist1"], timeout=10)
         if result.returncode != 0:
             raise RuntimeError(f"cannot resume VRRP master: {result.stderr.strip()}")
         suspended = False
-        output, _ = proc.communicate(timeout=15)
+        output, _ = proc.communicate(timeout=20)
     finally:
         if suspended:
             run(["virsh", "-c", uri, "resume", "cxyz-dist1"], timeout=10)
@@ -418,28 +462,44 @@ def test_ha01() -> tuple[str, dict]:
             output, _ = proc.communicate(timeout=5)
     timestamps = _reply_timestamps(output)
     max_gap = max((b - a for a, b in zip(timestamps, timestamps[1:])), default=999.0)
-    observed = {"reply_count": len(timestamps), "max_reply_gap_seconds": round(max_gap, 3)}
-    assert len(timestamps) >= 20 and max_gap < 2.0, f"HA-01 measured VRRP failover gap is {max_gap:.3f}s"
-    return "suspending the real DIST1 VyOS master preserves the VIP with a measured reply gap below 2 seconds", observed
-
+    observed = {"target": target, "reply_count": len(timestamps), "max_reply_gap_seconds": round(max_gap, 3)}
+    assert len(timestamps) >= 35 and max_gap < 5.0, f"HA-01 measured routed failover gap is {max_gap:.3f}s"
+    return "suspending the real DIST1 VyOS master preserves remote routed user traffic with recovery below 5 seconds", observed
 
 def test_vpn01() -> tuple[str, dict]:
     ssh_ready = tcp_from_linux("pc4", "172.16.50.1", 22)
     wan = vyos_shell("isp1", "timeout 4 bash -c 'exec 3<>/dev/tcp/172.16.50.1/22'", timeout=8)
-    wg = compose_exec("wireguard", "wg show interfaces")
+    wg_if = compose_exec("wireguard", "wg show interfaces")
+    wg_peers = compose_exec("wireguard", "wg show all peers")
+    wg_handshakes = compose_exec("wireguard", "wg show all latest-handshakes")
+    now = int(time.time())
+    recent_handshake = False
+    handshake_ages: list[int] = []
+    if wg_handshakes.returncode == 0:
+        for line in wg_handshakes.stdout.splitlines():
+            fields = line.split()
+            if len(fields) >= 3 and fields[-1].isdigit() and int(fields[-1]) > 0:
+                age = now - int(fields[-1])
+                handshake_ages.append(age)
+                if 0 <= age <= 600:
+                    recent_handshake = True
     compose = (ROOT / "docker-compose.yml").read_text()
     forbidden_publish = any(token in compose for token in ('"55000:55000"', '"1515:1515"', '"1514:1514"', '"8081:8080"'))
     observed = {
         "dc_ssh_positive": ssh_ready,
         "wan_ssh_reachable": wan.returncode == 0,
-        "wireguard_ready": wg.returncode == 0 and bool(wg.stdout.strip()),
+        "wireguard_interface_ready": wg_if.returncode == 0 and bool(wg_if.stdout.strip()),
+        "wireguard_peer_count": len([line for line in wg_peers.stdout.splitlines() if line.strip()]),
+        "recent_wireguard_handshake": recent_handshake,
+        "handshake_ages_seconds": handshake_ages,
         "forbidden_management_publish_present": forbidden_publish,
     }
     assert ssh_ready, "VPN-01 healthy DC SSH positive control failed"
     assert wan.returncode != 0, "VPN-01 routed ISP reached DC management SSH"
-    assert observed["wireguard_ready"] and not forbidden_publish, "VPN-01 WireGuard is not ready or a management/backend port is host-published"
-    return "WireGuard is operational while the routed ISP cannot reach DC SSH and no management/backend port is published", observed
-
+    assert observed["wireguard_interface_ready"] and observed["wireguard_peer_count"] > 0, "VPN-01 WireGuard has no operational interface/configured peer"
+    assert recent_handshake, "VPN-01 requires at least one real WireGuard peer handshake within the last 10 minutes"
+    assert not forbidden_publish, "VPN-01 management/backend port is host-published"
+    return "a real WireGuard peer has recently handshaken while routed WAN management access is denied and management/backend ports remain unpublished", observed
 
 def test_ztna01() -> tuple[str, dict]:
     domain = os.environ.get("ORG_DOMAIN") or ENV.get("ORG_DOMAIN", "companyxyz.lab")

@@ -24,7 +24,7 @@ wazuh_alert_count() {
 }
 
 record() {
-  python3 compliance/record_evidence.py "$@"
+  python3 -m compliance.record_evidence "$@"
 }
 
 step2_scan_detected() {
@@ -127,7 +127,7 @@ step5_vrrp_failover() {
 
   trap restore_vrrp_master EXIT
   docker exec "$(n pc1)" sh -c \
-    "ping -D -i 0.1 -c 100 192.168.10.254 > /tmp/cxyz-ha01-ping.txt 2>&1 &"
+    "ping -D -i 0.1 -c 140 198.10.10.1 > /tmp/cxyz-ha01-ping.txt 2>&1 &"
   sleep 1
   docker exec "$(n dist1)" vtysh \
     -c "configure terminal" -c "interface eth2" -c "shutdown" >/dev/null
@@ -154,7 +154,7 @@ PY
       && grep -qi backup <<<"$d2_state" \
       && python3 - "$gap" <<'PY'
 import sys
-raise SystemExit(0 if float(sys.argv[1]) < 2.0 else 1)
+raise SystemExit(0 if float(sys.argv[1]) < 5.0 else 1)
 PY
   then
     result="PASS"
@@ -162,7 +162,7 @@ PY
   record \
     --test-id "attack_chain.sh::step5_vrrp_failover" \
     --control HA-01 --result "$result" \
-    --assertion "VRRP macvlans/VIPs and advertisements are live; DIST1 master/DIST2 backup failover is below 2 seconds" \
+    --assertion "VRRP state is healthy and routed user traffic through the backup gateway recovers within 5 seconds" \
     --enforcement-node dist1,dist2 \
     --started-at "$started" \
     --observed "dist1_master=$(grep -qi master <<<"$d1_state" && echo true || echo false)" \

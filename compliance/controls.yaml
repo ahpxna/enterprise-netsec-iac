@@ -133,7 +133,7 @@ controls:
   framework:
   - NIST-800-53-CP-10
   ref: gateway survivability
-  objective: Killing VRRP master causes <2s failover; user keeps its default gateway.
+  objective: Losing the VRRP master preserves routed user traffic with measured recovery under 5 seconds.
   implemented_by: clab/configs/dist1.frr.conf
   verified_by: attack_chain.sh::step5_vrrp_failover
   severity: moderate

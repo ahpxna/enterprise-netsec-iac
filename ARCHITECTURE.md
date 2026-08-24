@@ -29,7 +29,7 @@
        OSPF (MD5)
           /    \
        [ DIST1 ]        [ DIST2 ]      Arista vEOS -> FRR
-       VRRP master      VRRP backup    virtual gw .254, failover < 2s
+       VRRP master      VRRP backup    virtual gw .254, routed failover < 5s
        (prio 150)       (prio 100)
           |                 |
        [ PC1 ]           [ PC4 ]

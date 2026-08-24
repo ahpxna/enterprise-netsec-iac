@@ -48,6 +48,7 @@ venv/
 *.pyc
 .DS_Store
 ._*
+terraform/vyos-fabric/bootstrap.auto.tfvars.json
 terraform/vyos-fabric/routing.auto.tfvars.json
 terraform/vyos-fabric/runtime-configs/
 .cxyz-state/
