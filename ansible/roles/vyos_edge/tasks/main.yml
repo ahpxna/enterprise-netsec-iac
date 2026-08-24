@@ -35,13 +35,29 @@
     fail_msg: "Path B routing secrets must be supplied through ignored .env or an approved secret backend."
   no_log: true
 
+- name: Read the canonical Path B SSH public key on the controller
+  ansible.builtin.set_fact:
+    vyos_edge_ssh_public_key: >-
+      {{ lookup('ansible.builtin.file', vyos_edge_ssh_public_key_file).split() }}
+  no_log: true
+
+- name: Assert the bootstrap public key can be rendered for Day-2
+  ansible.builtin.assert:
+    that:
+      - vyos_edge_ssh_public_key | length >= 2
+      - vyos_edge_ssh_public_key[0] is match('^(ssh-|ecdsa-|sk-)')
+    fail_msg: "PATH_B_SSH_PUBLIC_KEY_FILE must point at a valid OpenSSH public key."
+
 - name: Render a secret-injected Day-2 configuration on the controller
   ansible.builtin.copy:
     content: >-
       {{ lookup('ansible.builtin.file', vyos_edge_boot_file)
          | replace('CHANGE_ME_ospf_key', vyos_edge_ospf_md5)
          | replace('CHANGE_ME_bgp_isp1', vyos_edge_bgp_isp1)
-         | replace('CHANGE_ME_bgp_isp2', vyos_edge_bgp_isp2) }}
+         | replace('CHANGE_ME_bgp_isp2', vyos_edge_bgp_isp2)
+         | replace('MANAGEMENT_IP', ansible_host)
+         | replace('SSH_KEY_TYPE', vyos_edge_ssh_public_key[0])
+         | replace('SSH_KEY_DATA', vyos_edge_ssh_public_key[1]) }}
     dest: "/tmp/cxyz-{{ inventory_hostname }}.boot"
     mode: "0600"
   delegate_to: localhost

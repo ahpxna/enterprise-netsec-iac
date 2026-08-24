@@ -84,8 +84,17 @@ def test_radius_shared_secret_strength(evidence):
 
 def test_syslog_transport_is_tls(evidence):
     result = in_node("server1", "sh", "-c", "cat /etc/rsyslog.d/*.conf 2>/dev/null")
-    tls = all(token in result.stdout for token in ("gtls", 'port="6514"', 'StreamDriverMode="1"'))
+    tls = all(token in result.stdout for token in ("gtls", 'port="6514"', 'StreamDriverMode="1"', 'StreamDriverAuthMode="x509/name"'))
     cleartext = 'port="514"' in result.stdout
+    relay_cfg = subprocess.run(
+        ["docker", "compose", "exec", "-T", "syslog-relay", "cat", "/etc/rsyslog.conf"],
+        cwd=ROOT, capture_output=True, text=True, check=False,
+    )
+    relay_mutual_tls = (
+        relay_cfg.returncode == 0
+        and 'StreamDriver.AuthMode="x509/name"' in relay_cfg.stdout
+        and "PermittedPeer" in relay_cfg.stdout
+    )
     marker = f"CXYZ-DET02-TLS-MARKER-{uuid.uuid4()}"
     submitted = in_node("server1", "logger", "-p", "local0.notice", "-t", "cxyz-det02", marker)
     relay_received = False
@@ -115,6 +124,7 @@ def test_syslog_transport_is_tls(evidence):
         assertion="unique marker traverses authenticated TLS syslog relay and creates a Wazuh alert",
         observed={
             "tls_configured": tls,
+            "relay_mutual_tls": relay_mutual_tls,
             "cleartext_514": cleartext,
             "marker_submitted": submitted.returncode == 0,
             "relay_received": relay_received,
@@ -122,7 +132,7 @@ def test_syslog_transport_is_tls(evidence):
         },
         enforcement_node="server1,syslog-relay,wazuh.manager",
     )
-    assert tls and not cleartext, "device-to-relay logging is not TLS-only"
+    assert tls and relay_mutual_tls and not cleartext, "device-to-relay logging is not mutually authenticated TLS-only"
     assert submitted.returncode == 0, "unable to submit DET-02 marker"
     assert relay_received and wazuh_alert_received, "TLS marker did not reach relay and Wazuh"
 
@@ -179,6 +189,11 @@ def test_no_mgmt_exposed_to_internet(evidence):
         check=False,
     )
     wg_ready = positive.returncode == 0 and bool(positive.stdout.strip())
+    compose_text = (ROOT / "docker-compose.yml").read_text()
+    forbidden_publishes = [
+        token for token in ("55000:55000", "1515:1515", "1514:1514", "6514:6514", "8081:8080")
+        if token in compose_text
+    ]
     counter_delta = int(after_match.group(1)) - int(before_match.group(1))
     evidence(
         control="VPN-01",
@@ -188,6 +203,7 @@ def test_no_mgmt_exposed_to_internet(evidence):
             "wireguard_ready": wg_ready,
             "wan_ssh_reachable": negative.returncode == 0,
             "wan_deny_counter_delta": counter_delta,
+            "forbidden_host_publishes": forbidden_publishes,
         },
         enforcement_node="fw-core",
         counter_before=int(before_match.group(1)),
@@ -196,6 +212,7 @@ def test_no_mgmt_exposed_to_internet(evidence):
     assert service.returncode == 0, "DC SSH positive precondition failed"
     assert wg_ready, "WireGuard positive control failed"
     assert negative.returncode != 0 and counter_delta > 0, "WAN SSH was not denied by fw-core"
+    assert not forbidden_publishes, f"management/backend ports are published on the host: {forbidden_publishes}"
 
 
 def test_ztna_redirects_unauthenticated_request(evidence):
@@ -220,6 +237,11 @@ def test_ztna_redirects_unauthenticated_request(evidence):
     redirect_target = location.group(1).strip() if location else ""
     is_redirect = status_code in {301, 302, 303, 307, 308}
     to_authentik = "sso." in redirect_target or "/if/flow/" in redirect_target
+    direct = subprocess.run(
+        ["curl", "--silent", "--max-time", "3", "http://127.0.0.1:8081/"],
+        cwd=ROOT, capture_output=True, text=True, check=False, timeout=5,
+    )
+    direct_backend_reachable = direct.returncode == 0
     evidence(
         control="ZTNA-01",
         assertion="unauthenticated HTTPS request is redirected by Traefik/Authentik before reaching the app",
@@ -228,8 +250,10 @@ def test_ztna_redirects_unauthenticated_request(evidence):
             "status_code": status_code,
             "redirect_target": redirect_target,
             "redirects_to_authentik": to_authentik,
+            "direct_backend_8081_reachable": direct_backend_reachable,
         },
         enforcement_node="traefik,authentik-server",
     )
     assert response.returncode == 0, f"ZTNA endpoint unavailable: {response.stderr}"
     assert is_redirect and to_authentik, "unauthenticated request was not redirected to Authentik"
+    assert not direct_backend_reachable, "protected backend is still directly reachable on host port 8081"

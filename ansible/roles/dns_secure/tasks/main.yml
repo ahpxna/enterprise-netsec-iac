@@ -1,0 +1,22 @@
+---
+- name: Install dnsmasq
+  ansible.builtin.package:
+    name: dnsmasq
+    state: present
+
+- name: Configure the Path B DC DNS positive-control service
+  ansible.builtin.copy:
+    dest: /etc/dnsmasq.d/cxyz.conf
+    owner: root
+    group: root
+    mode: "0644"
+    content: |
+      bind-interfaces
+      listen-address={{ dns_secure_listen_address }}
+      domain={{ dns_secure_domain }}
+      domain-needed
+      bogus-priv
+      {% for record in dns_secure_host_records %}
+      address=/{{ record.split()[1] }}/{{ record.split()[0] }}
+      {% endfor %}
+  notify: restart dnsmasq

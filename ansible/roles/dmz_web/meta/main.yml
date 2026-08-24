@@ -1,0 +1,11 @@
+---
+galaxy_info:
+  author: CompanyXYZ-NG
+  role_name: dmz_web
+  description: Path B DMZ positive-control web endpoint
+  license: MIT
+  min_ansible_version: "2.15"
+  platforms:
+    - name: Ubuntu
+      versions: [jammy, noble]
+dependencies: []

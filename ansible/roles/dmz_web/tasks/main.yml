@@ -1,0 +1,20 @@
+---
+- name: Install nginx on the real Path B DMZ endpoint
+  ansible.builtin.package:
+    name: nginx
+    state: present
+
+- name: Deploy deterministic Path B DMZ health page
+  ansible.builtin.copy:
+    dest: /var/www/html/index.html
+    owner: root
+    group: root
+    mode: "0644"
+    content: "CompanyXYZ Path B DMZ endpoint\n"
+  notify: restart nginx
+
+- name: Ensure nginx is enabled and running
+  ansible.builtin.service:
+    name: nginx
+    enabled: true
+    state: started

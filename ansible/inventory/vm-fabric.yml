@@ -18,7 +18,7 @@ all:
             edge:
               ansible_host: 10.1.1.10
             core:
-              ansible_host: 10.1.1.1
+              ansible_host: 10.1.1.11
             dist1:
               ansible_host: 10.1.1.2
             dist2:

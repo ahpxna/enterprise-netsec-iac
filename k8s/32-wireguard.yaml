@@ -20,10 +20,10 @@ spec:
       hostNetwork: true
       containers:
         - name: wireguard
-          image: linuxserver/wireguard:latest
+          image: linuxserver/wireguard@sha256:ee2db24277b43ec4e7529e93967dc3cea00a02bf81b749c680b2b102a6e4aa5b
           securityContext:
-            capabilities: { add: ["NET_ADMIN", "SYS_MODULE"] }
-            privileged: true   # required for the WireGuard kernel module path
+            capabilities: { add: ["NET_ADMIN"] }
+            allowPrivilegeEscalation: false
           env:
             - { name: PUID, value: "1000" }
             - { name: PGID, value: "1000" }

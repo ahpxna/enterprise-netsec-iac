@@ -24,7 +24,6 @@ services:
     image: cxyz/syslog-relay:local
     hostname: syslog-relay.companyxyz.lab
     restart: unless-stopped
-    ports: ["6514:6514"]
     volumes:
       - ./docker/syslog-relay/certs:/run/certs:ro
       - cxyz_remote_logs:/var/log/cxyz
@@ -39,17 +38,16 @@ services:
     environment:
       - INDEXER_URL=https://wazuh.indexer:9200
       - INDEXER_USERNAME=admin
-      - INDEXER_PASSWORD=${WAZUH_INDEXER_PASSWORD:-changeme}
+      - INDEXER_PASSWORD=${WAZUH_INDEXER_PASSWORD:?run make secrets}
       - FILEBEAT_SSL_VERIFICATION_MODE=full
       - SSL_CERTIFICATE_AUTHORITIES=/etc/ssl/root-ca.pem
       - SSL_CERTIFICATE=/etc/ssl/filebeat.pem
       - SSL_KEY=/etc/ssl/filebeat.key
       - API_USERNAME=wazuh-wui
-      - API_PASSWORD=${WAZUH_API_PASSWORD:-changeme}
+      - API_PASSWORD=${WAZUH_API_PASSWORD:?run make secrets}
     ulimits:
       memlock: { soft: -1, hard: -1 }
       nofile: { soft: 655360, hard: 655360 }
-    ports: ["1514:1514", "1515:1515", "55000:55000"]
     volumes:
       - wazuh_api_configuration:/var/ossec/api/configuration
       - wazuh_etc:/var/ossec/etc
@@ -97,14 +95,14 @@ services:
     hostname: wazuh.dashboard
     restart: unless-stopped
     depends_on: [wazuh.indexer, wazuh.manager]
-    ports: ["5601:5601"]
+    ports: ["127.0.0.1:5601:5601"]
     environment:
       - INDEXER_USERNAME=admin
-      - INDEXER_PASSWORD=${WAZUH_INDEXER_PASSWORD:-changeme}
-      - DASHBOARD_PASSWORD=${WAZUH_DASHBOARD_PASSWORD:-changeme}
+      - INDEXER_PASSWORD=${WAZUH_INDEXER_PASSWORD:?run make secrets}
+      - DASHBOARD_PASSWORD=${WAZUH_DASHBOARD_PASSWORD:?run make secrets}
       - WAZUH_API_URL=https://wazuh.manager
       - API_USERNAME=wazuh-wui
-      - API_PASSWORD=${WAZUH_API_PASSWORD:-changeme}
+      - API_PASSWORD=${WAZUH_API_PASSWORD:?run make secrets}
     volumes:
       - ./docker/wazuh/certs/wazuh.dashboard.pem:/usr/share/wazuh-dashboard/certs/wazuh-dashboard.pem:ro
       - ./docker/wazuh/certs/wazuh.dashboard-key.pem:/usr/share/wazuh-dashboard/certs/wazuh-dashboard-key.pem:ro
@@ -117,7 +115,7 @@ services:
   # -------------------- IDS: Suricata (AF-PACKET) ------------------
   suricata:
     profiles: ["ids"]
-    image: jasonish/suricata:latest
+    image: jasonish/suricata:8.0.1
     hostname: suricata
     restart: unless-stopped
     cap_add: [NET_ADMIN, NET_RAW, SYS_NICE]
@@ -135,16 +133,13 @@ services:
     hostname: traefik
     restart: unless-stopped
     command:
-      - --providers.docker=true
-      - --providers.docker.exposedbydefault=false
       - --providers.file.filename=/etc/traefik/dynamic.yml
       - --providers.file.watch=true
       - --entrypoints.web.address=:80
       - --entrypoints.websecure.address=:443
       - --api.dashboard=true
-    ports: ["80:80", "443:443", "8080:8080"]
+    ports: ["80:80", "443:443", "127.0.0.1:8080:8080"]
     volumes:
-      - /var/run/docker.sock:/var/run/docker.sock:ro
       - ./docker/zero-trust-gateway/dynamic.yml:/etc/traefik/dynamic.yml:ro
     networks: [cxyz_edge]
 
@@ -155,14 +150,10 @@ services:
     restart: unless-stopped
     command: server
     environment:
-      AUTHENTIK_SECRET_KEY: ${AUTHENTIK_SECRET_KEY:-changeme}
+      AUTHENTIK_SECRET_KEY: ${AUTHENTIK_SECRET_KEY:?run make secrets}
       AUTHENTIK_POSTGRESQL__HOST: authentik-postgres
-      AUTHENTIK_POSTGRESQL__PASSWORD: ${AUTHENTIK_POSTGRES_PASSWORD:-changeme}
+      AUTHENTIK_POSTGRESQL__PASSWORD: ${AUTHENTIK_POSTGRES_PASSWORD:?run make secrets}
     depends_on: [authentik-postgres, authentik-redis]
-    labels:
-      - traefik.enable=true
-      - traefik.http.routers.authentik.rule=Host(`sso.${ORG_DOMAIN:-companyxyz.lab}`)
-      - traefik.http.routers.authentik.entrypoints=websecure
     networks: [cxyz_edge]
 
   # Background jobs, blueprints, and embedded-outpost lifecycle require a
@@ -174,9 +165,9 @@ services:
     restart: unless-stopped
     command: worker
     environment:
-      AUTHENTIK_SECRET_KEY: ${AUTHENTIK_SECRET_KEY:-changeme}
+      AUTHENTIK_SECRET_KEY: ${AUTHENTIK_SECRET_KEY:?run make secrets}
       AUTHENTIK_POSTGRESQL__HOST: authentik-postgres
-      AUTHENTIK_POSTGRESQL__PASSWORD: ${AUTHENTIK_POSTGRES_PASSWORD:-changeme}
+      AUTHENTIK_POSTGRESQL__PASSWORD: ${AUTHENTIK_POSTGRES_PASSWORD:?run make secrets}
     depends_on: [authentik-postgres, authentik-redis]
     networks: [cxyz_edge]
 
@@ -185,7 +176,7 @@ services:
     image: postgres:16-alpine
     restart: unless-stopped
     environment:
-      POSTGRES_PASSWORD: ${AUTHENTIK_POSTGRES_PASSWORD:-changeme}
+      POSTGRES_PASSWORD: ${AUTHENTIK_POSTGRES_PASSWORD:?run make secrets}
       POSTGRES_DB: authentik
     volumes: ["authentik_db:/var/lib/postgresql/data"]
     networks: [cxyz_edge]
@@ -198,10 +189,10 @@ services:
 
   wireguard:
     profiles: ["ztna"]
-    image: linuxserver/wireguard:latest
+    image: linuxserver/wireguard@sha256:ee2db24277b43ec4e7529e93967dc3cea00a02bf81b749c680b2b102a6e4aa5b
     hostname: wireguard
     restart: unless-stopped
-    cap_add: [NET_ADMIN, SYS_MODULE]
+    cap_add: [NET_ADMIN]
     environment:
       - PUID=1000
       - PGID=1000
@@ -219,12 +210,6 @@ services:
     image: nginxinc/nginx-unprivileged:stable-alpine
     hostname: dmz-web
     restart: unless-stopped
-    ports: ["8081:8080"]
-    labels:
-      - traefik.enable=true
-      - traefik.http.routers.dmzweb.rule=Host(`app.${ORG_DOMAIN:-companyxyz.lab}`)
-      - traefik.http.routers.dmzweb.entrypoints=websecure
-      - traefik.http.routers.dmzweb.middlewares=authentik@file
     networks: [cxyz_edge]
 
 volumes:

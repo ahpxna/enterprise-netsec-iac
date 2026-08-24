@@ -36,7 +36,7 @@ resource "libvirt_volume" "node_override_base" {
 
   name   = "${each.key}-base.qcow2"
   pool   = libvirt_pool.cxyz.name
-  source = each.value
+  source = each.value.path
   format = "qcow2"
 }
 
@@ -143,12 +143,11 @@ resource "libvirt_domain" "node" {
   # without accepting a management-plane default route.
   network_interface {
     network_name   = libvirt_network.mgmt.name
-    mac            = local.management_plan[each.key].mac
-      hostname       = each.key
-      # IP ownership belongs only to intent/fabric.yaml.  Libvirt uses this
-      # address to create the deterministic DHCP reservation for the stable
-      # management MAC below.
-      addresses      = [local.management_plan[each.key].address]
+    mac          = local.management_plan[each.key].mac
+    hostname     = each.key
+    # IP ownership belongs only to intent/fabric.yaml. Libvirt uses this
+    # address to create a deterministic DHCP reservation for the stable MAC.
+    addresses      = [local.management_plan[each.key].address]
     wait_for_lease = false
   }
 
@@ -203,15 +202,27 @@ locals {
     }
   }
 
-  # Source configs are reviewed without secret material.  Terraform injects
-  # values only into the cloud-init payload from ignored tfvars/secret input.
+  # Source configs are reviewed without secret material. Terraform injects
+  # routing credentials, the intent-owned management address, and the SSH
+  # bootstrap key only into the cloud-init payload.
+  ssh_public_key_parts = split(" ", trimspace(var.ssh_public_key))
+  ssh_public_key_type  = local.ssh_public_key_parts[0]
+  ssh_public_key_data  = local.ssh_public_key_parts[1]
+
   vyos_boot_configs = {
     for node_name, node in var.nodes : node_name => node.platform == "vyos" ? replace(
       replace(
-        replace(file("${path.module}/${node.boot_config}"), "CHANGE_ME_ospf_key", var.routing_secrets.ospf_md5),
-        "CHANGE_ME_bgp_isp1", var.routing_secrets.bgp_isp1),
-      "CHANGE_ME_bgp_isp2", var.routing_secrets.bgp_isp2) : null
+        replace(
+          replace(
+            replace(
+              replace(file("${path.module}/${node.boot_config}"), "CHANGE_ME_ospf_key", var.routing_secrets.ospf_md5),
+              "CHANGE_ME_bgp_isp1", var.routing_secrets.bgp_isp1),
+            "CHANGE_ME_bgp_isp2", var.routing_secrets.bgp_isp2),
+          "MANAGEMENT_IP", local.fabric_intent.nodes[node_name].mgmt_ip),
+        "SSH_KEY_TYPE", local.ssh_public_key_type),
+      "SSH_KEY_DATA", local.ssh_public_key_data) : null
   }
+
 }
 
 check "complete_topology" {
@@ -239,6 +250,22 @@ check "pinned_vyos_image" {
   assert {
     condition     = lower(filesha256(var.vyos_image_path)) == lower(var.vyos_image_sha256)
     error_message = "vyos_image_path does not match vyos_image_sha256; use the exact reviewed VyOS image."
+  }
+}
+
+check "pinned_linux_image" {
+  assert {
+    condition     = lower(filesha256(var.linux_image_path)) == lower(var.linux_image_sha256)
+    error_message = "linux_image_path does not match linux_image_sha256; use the exact reviewed Linux image."
+  }
+}
+
+check "pinned_override_images" {
+  assert {
+    condition = alltrue([
+      for image in values(var.node_image_overrides) : lower(filesha256(image.path)) == lower(image.sha256)
+    ])
+    error_message = "A node_image_overrides path does not match its reviewed SHA-256 digest."
   }
 }
 

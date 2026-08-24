@@ -12,3 +12,5 @@ vyos_edge_save_config: true
 vyos_edge_ospf_md5: "{{ lookup('ansible.builtin.env', 'OSPF_MD5_SECRET') }}"
 vyos_edge_bgp_isp1: "{{ lookup('ansible.builtin.env', 'BGP_ISP1_SECRET') }}"
 vyos_edge_bgp_isp2: "{{ lookup('ansible.builtin.env', 'BGP_ISP2_SECRET') }}"
+
+vyos_edge_ssh_public_key_file: "{{ lookup('ansible.builtin.env', 'PATH_B_SSH_PUBLIC_KEY_FILE') }}"

@@ -21,7 +21,7 @@ INTENT_PATH = ROOT / "intent" / "fabric.yaml"
 OUTPUT_PATH = ROOT / "clab" / "companyxyz.clab.yml"
 
 FRR_IMAGE = "quay.io/frrouting/frr:9.1.0"
-TOOLS_IMAGE = "wbitt/network-multitool:latest"
+TOOLS_IMAGE = "wbitt/network-multitool:sha-2e883bc"
 
 
 class IndentedSafeDumper(yaml.SafeDumper):
@@ -53,8 +53,8 @@ def node_definition(name: str, node: dict) -> dict:
     if role in {"router", "isp"}:
         rendered["image"] = FRR_IMAGE
         rendered["binds"] = [
-            f"configs/{name}.frr.conf:/etc/frr/frr.conf:ro",
-            "configs/frr-daemons:/etc/frr/daemons:ro",
+            f"runtime-configs/{name}.frr.conf:/etc/frr/frr.conf:ro",
+            "runtime-configs/frr-daemons:/etc/frr/daemons:ro",
         ]
         rendered["exec"] = [
             "sysctl -w net.ipv4.ip_forward=1",

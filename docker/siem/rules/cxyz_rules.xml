@@ -31,4 +31,14 @@
     <description>Authenticated TLS syslog transport marker received (DET-02)</description>
     <group>syslog,</group>
   </rule>
+  <!-- Path B VyOS uses the native nftables firewall logger rather than the
+       custom Path A nft prefix. Correlate the denied validation scan by its
+       real data-plane source/destination pair. -->
+  <rule id="100204" level="10" frequency="2" timeframe="30">
+    <regex>SRC=192\.168\.10\.1 DST=172\.16\.50\.1</regex>
+    <description>Path B prohibited user-to-DC scan denied by VyOS fw-core (DET-01)</description>
+    <mitre><id>T1046</id></mitre>
+    <group>attack,recon,path_b,</group>
+  </rule>
+
 </group>

@@ -16,7 +16,6 @@ docker/wazuh/generated/
 
 # ---- Terraform ----
 .terraform/
-.terraform.lock.hcl
 *.tfstate
 *.tfstate.*
 *.tfvars
@@ -29,6 +28,7 @@ ansible/.facts_cache/
 ansible/collections/
 
 # ---- Containerlab ----
+clab/runtime-configs/
 clab-*/
 .clab.*.bak
 
@@ -48,3 +48,6 @@ venv/
 *.pyc
 .DS_Store
 ._*
+terraform/vyos-fabric/routing.auto.tfvars.json
+terraform/vyos-fabric/runtime-configs/
+.cxyz-state/

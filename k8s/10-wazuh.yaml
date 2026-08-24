@@ -21,14 +21,9 @@ spec:
     metadata:
       labels: { app: wazuh-indexer }
     spec:
-      initContainers:
-        - name: sysctl
-          image: busybox:1.36
-          securityContext: { privileged: true }
-          command: ["sh", "-c", "sysctl -w vm.max_map_count=262144"]
       containers:
         - name: wazuh-indexer
-          image: wazuh/wazuh-indexer:4.9.0
+          image: wazuh/wazuh-indexer:4.14.6
           env:
             - { name: OPENSEARCH_JAVA_OPTS, value: "-Xms1g -Xmx1g" }
           ports: [{ containerPort: 9200 }]
@@ -67,7 +62,7 @@ spec:
     spec:
       containers:
         - name: wazuh-manager
-          image: wazuh/wazuh-manager:4.9.0
+          image: wazuh/wazuh-manager:4.14.6
           env:
             - { name: INDEXER_URL, value: "https://wazuh-indexer:9200" }
             - { name: INDEXER_USERNAME, value: "admin" }
@@ -76,7 +71,7 @@ spec:
           ports:
             - { containerPort: 1514, protocol: UDP }
             - { containerPort: 1515 }
-            - { containerPort: 514, protocol: UDP }  # syslog-TLS target from ansible/roles/syslog_tls
+            - { containerPort: 514, protocol: UDP }  # Wazuh local syslog input only; not DET-02 TLS transport
             - { containerPort: 55000 }
           volumeMounts:
             - { name: decoders, mountPath: /var/ossec/etc/decoders/local, readOnly: true }
@@ -116,7 +111,7 @@ spec:
     spec:
       containers:
         - name: wazuh-dashboard
-          image: wazuh/wazuh-dashboard:4.9.0
+          image: wazuh/wazuh-dashboard:4.14.6
           env:
             - { name: INDEXER_USERNAME, value: "admin" }
             - name: INDEXER_PASSWORD
@@ -131,6 +126,6 @@ metadata:
   name: wazuh-dashboard
   namespace: cxyz-security
 spec:
-  type: NodePort
+  type: ClusterIP
   selector: { app: wazuh-dashboard }
-  ports: [{ port: 5601, targetPort: 5601, nodePort: 30561 }]
+  ports: [{ port: 5601, targetPort: 5601 }]

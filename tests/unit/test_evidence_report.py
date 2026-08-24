@@ -16,6 +16,8 @@ def artifact(result: str) -> dict:
         "ended_at": "2026-01-01T00:00:01Z",
         "run_id": "unit",
         "git_sha": "abc",
+        "git_dirty": False,
+        "source_tree_sha256": "tree",
         "control_catalog_sha256": "a",
         "topology_sha256": "b",
         "test_suite_sha256": "c",
@@ -26,6 +28,7 @@ def artifact(result: str) -> dict:
 CONTROL = {
     "id": "SEG-01",
     "verified_by": "test_segmentation.py::test_user_vlan_blocked_from_radius",
+    "verified_by_path_b": "path_b_audit.py::test_seg01",
 }
 
 
@@ -57,3 +60,16 @@ def test_mixed_provenance_is_rejected(tmp_path: pathlib.Path):
     second["git_sha"] = "different"
     errors = validate_provenance([first, second], tmp_path / "unit")
     assert any("mixed provenance field git_sha" in error for error in errors)
+
+
+def test_path_b_profile_never_accepts_path_a_test_id():
+    status, _ = status_for(CONTROL, [artifact("PASS")], profile="path-b")
+    assert status == "UNVERIFIED"
+
+
+def test_path_b_profile_accepts_only_path_b_test_id():
+    item = artifact("PASS")
+    item["test_id"] = "path_b_audit.py::test_seg01"
+    item["environment"] = "path-b"
+    status, _ = status_for(CONTROL, [item], profile="path-b")
+    assert status == "PASS"

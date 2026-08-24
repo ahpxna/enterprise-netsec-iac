@@ -10,15 +10,19 @@
         commands:
           - show version
           - show interfaces
+          - show configuration commands
       register: vyos_bootstrap
       changed_when: false
 
     - name: Assert VyOS answered operational commands
       ansible.builtin.assert:
         that:
-          - vyos_bootstrap.stdout | length == 2
-          - vyos_bootstrap.stdout[0] | length > 0
+          - vyos_bootstrap.stdout | length == 3
+          - "'1.4.' in vyos_bootstrap.stdout[0]"
           - vyos_bootstrap.stdout[1] | length > 0
+          - "'set service ssh listen-address' in vyos_bootstrap.stdout[2]"
+          - "ansible_host in vyos_bootstrap.stdout[2]"
+          - "'set service ssh disable-password-authentication' in vyos_bootstrap.stdout[2]"
         fail_msg: "{{ inventory_hostname }} did not complete the VyOS SSH/network_cli bootstrap gate."
 
 - name: Verify management access to every real Linux endpoint

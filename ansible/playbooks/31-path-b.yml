@@ -1,9 +1,16 @@
 ---
-# Authoritative Day-2 lifecycle for the real-NOS VM fabric.  Linux roles are
-# deliberately scoped to Linux guests; VyOS is configured only through its
-# network_cli role in 30-vyos-fabric.yml.
+# Authoritative Day-2 lifecycle for the real-NOS VM fabric. Linux roles are
+# deliberately scoped to Linux guests; VyOS is configured only with network_cli.
 - name: Apply Path B VyOS fabric configuration
   import_playbook: 30-vyos-fabric.yml
+
+- name: Configure authenticated Path B network-device logging
+  hosts: vyos_routers:vyos_firewalls
+  gather_facts: false
+  roles:
+    - role: vyos_syslog_tls
+      when: inventory_hostname not in ['isp1', 'isp2']
+      tags: [logging, siem]
 
 - name: Harden Path B Linux endpoints
   hosts: linux_nodes
@@ -12,20 +19,35 @@
     - role: common_hardening
       tags: [baseline, cis]
 
-- name: Configure Path B identity, time, and logging endpoint
+- name: Install validation clients only where live controls need them
+  hosts: clients
+  gather_facts: true
+  tasks:
+    - name: Install DNS, RADIUS, scan, and packet-test clients
+      ansible.builtin.package:
+        name:
+          - dnsutils
+          - freeradius-utils
+          - nmap
+        state: present
+      tags: [validation]
+
+- name: Configure Path B identity, DNS, authenticated time, and TLS logging
   hosts: servers
   gather_facts: true
   roles:
     - role: radius_secure
       tags: [identity]
+    - role: dns_secure
+      tags: [dns]
     - role: ntp_secure
       tags: [time]
     - role: syslog_tls
       tags: [logging]
 
-- name: Configure Path B IDS endpoint
-  hosts: servers
+- name: Configure the real Path B DMZ endpoint
+  hosts: dmz_hosts
   gather_facts: true
   roles:
-    - role: suricata
-      tags: [ids]
+    - role: dmz_web
+      tags: [dmz]

@@ -1,0 +1,5 @@
+---
+dns_secure_listen_address: 172.16.50.1
+dns_secure_domain: companyxyz.lab
+dns_secure_host_records:
+  - "172.16.50.1 server1.companyxyz.lab server1"

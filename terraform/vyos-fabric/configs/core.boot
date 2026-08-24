@@ -13,12 +13,32 @@ protocols {
         route 172.16.50.0/24 { next-hop 10.255.0.5 }
     }
     ospf {
-        parameters { router-id 10.1.1.1 }
+        parameters { router-id 10.1.1.11 }
         default-information { originate { } }
         area 0 { network 10.255.1.0/31; network 10.255.1.2/31 }
         interface eth1 { authentication { md5 { key-id 1 { md5-key "CHANGE_ME_ospf_key" } } } }
         interface eth2 { authentication { md5 { key-id 1 { md5-key "CHANGE_ME_ospf_key" } } } }
     }
 }
-system { host-name core }
-service { ssh { port 22 } }
+system {
+    host-name core
+    login {
+        timeout 300
+        user vyos {
+            authentication {
+                public-keys terraform-bootstrap {
+                    type "SSH_KEY_TYPE"
+                    key "SSH_KEY_DATA"
+                }
+            }
+        }
+    }
+}
+service {
+    ssh {
+        port 22
+        listen-address "MANAGEMENT_IP"
+        disable-password-authentication
+        client-keepalive-interval 300
+    }
+}

@@ -33,6 +33,16 @@ variable "linux_image_path" {
   type        = string
 }
 
+variable "linux_image_sha256" {
+  description = "SHA-256 digest of the exact Linux cloud image selected for Path B"
+  type        = string
+
+  validation {
+    condition     = can(regex("^[0-9a-fA-F]{64}$", var.linux_image_sha256))
+    error_message = "linux_image_sha256 must be a 64-character SHA-256 hexadecimal digest."
+  }
+}
+
 variable "management_network" {
   description = "libvirt network name for the 10.1.1.0/24 management plane"
   type        = string
@@ -40,8 +50,13 @@ variable "management_network" {
 }
 
 variable "ssh_public_key" {
-  description = "Public key injected through cloud-init for VyOS and Linux management access"
+  description = "Public key injected through cloud-init for VyOS and Linux management access; generated into auto tfvars by make path-b-vars"
   type        = string
+
+  validation {
+    condition     = can(regex("^(ssh-|ecdsa-|sk-)[^ ]+ [A-Za-z0-9+/=]+", trimspace(var.ssh_public_key)))
+    error_message = "ssh_public_key must contain a supported OpenSSH public key."
+  }
 }
 
 variable "routing_secrets" {
@@ -56,15 +71,25 @@ variable "routing_secrets" {
   validation {
     condition = alltrue([
       for secret in values(var.routing_secrets) : length(secret) >= 24 && !startswith(secret, "CHANGE_ME")
-    ])
+    ]) && length(distinct(values(var.routing_secrets))) == length(values(var.routing_secrets))
     error_message = "All routing secrets must be unique non-placeholder values of at least 24 characters."
   }
 }
 
 variable "node_image_overrides" {
-  description = "Optional node-name to qcow2 path overrides; unspecified nodes use their platform base image"
-  type        = map(string)
-  default     = {}
+  description = "Optional reviewed node image overrides with mandatory SHA-256; unspecified nodes use their platform base image"
+  type = map(object({
+    path   = string
+    sha256 = string
+  }))
+  default = {}
+
+  validation {
+    condition = alltrue([
+      for image in values(var.node_image_overrides) : can(regex("^[0-9a-fA-F]{64}$", image.sha256))
+    ])
+    error_message = "Every node image override requires a 64-character SHA-256 digest."
+  }
 }
 
 # ---------------------------------------------------------------------

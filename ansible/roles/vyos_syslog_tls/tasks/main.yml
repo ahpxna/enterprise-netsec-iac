@@ -1,0 +1,58 @@
+---
+- name: Resolve local PKI files for this VyOS node
+  ansible.builtin.set_fact:
+    vyos_syslog_tls_ca_file: "{{ vyos_syslog_tls_cert_root }}/ca.crt"
+    vyos_syslog_tls_cert_file: "{{ vyos_syslog_tls_cert_root }}/clients/{{ inventory_hostname }}.crt"
+    vyos_syslog_tls_key_file: "{{ vyos_syslog_tls_cert_root }}/clients/{{ inventory_hostname }}.key"
+
+- name: Assert the Path B logging identity exists locally
+  ansible.builtin.stat:
+    path: "{{ item }}"
+  loop:
+    - "{{ vyos_syslog_tls_ca_file }}"
+    - "{{ vyos_syslog_tls_cert_file }}"
+    - "{{ vyos_syslog_tls_key_file }}"
+  delegate_to: localhost
+  become: false
+  register: vyos_syslog_tls_files
+
+- name: Fail closed if the VyOS logging identity is missing
+  ansible.builtin.assert:
+    that: vyos_syslog_tls_files.results | map(attribute='stat.exists') | min
+    fail_msg: "Run make secrets before configuring Path B mTLS logging."
+
+- name: Read and normalize the logging PKI material
+  ansible.builtin.set_fact:
+    vyos_syslog_tls_ca: >-
+      {{ lookup('ansible.builtin.file', vyos_syslog_tls_ca_file)
+         | regex_replace('-----BEGIN CERTIFICATE-----', '')
+         | regex_replace('-----END CERTIFICATE-----', '')
+         | regex_replace('\\s+', '') }}
+    vyos_syslog_tls_cert: >-
+      {{ lookup('ansible.builtin.file', vyos_syslog_tls_cert_file)
+         | regex_replace('-----BEGIN CERTIFICATE-----', '')
+         | regex_replace('-----END CERTIFICATE-----', '')
+         | regex_replace('\\s+', '') }}
+    vyos_syslog_tls_key: >-
+      {{ lookup('ansible.builtin.file', vyos_syslog_tls_key_file)
+         | regex_replace('-----BEGIN (RSA )?PRIVATE KEY-----', '')
+         | regex_replace('-----END (RSA )?PRIVATE KEY-----', '')
+         | regex_replace('\\s+', '') }}
+  no_log: true
+
+- name: Configure VyOS PKI and mutually authenticated TLS syslog
+  vyos.vyos.vyos_config:
+    lines:
+      - "set pki ca cxyz-logging-ca certificate '{{ vyos_syslog_tls_ca }}'"
+      - "set pki certificate cxyz-syslog-client certificate '{{ vyos_syslog_tls_cert }}'"
+      - "set pki certificate cxyz-syslog-client private key '{{ vyos_syslog_tls_key }}'"
+      - "set system syslog host {{ vyos_syslog_tls_relay_ip }} facility all level info"
+      - "set system syslog host {{ vyos_syslog_tls_relay_ip }} port 6514"
+      - "set system syslog host {{ vyos_syslog_tls_relay_ip }} protocol tcp"
+      - "set system syslog host {{ vyos_syslog_tls_relay_ip }} tls ca-certificate cxyz-logging-ca"
+      - "set system syslog host {{ vyos_syslog_tls_relay_ip }} tls certificate cxyz-syslog-client"
+      - "set system syslog host {{ vyos_syslog_tls_relay_ip }} tls auth-mode name"
+      - "set system syslog host {{ vyos_syslog_tls_relay_ip }} tls permitted-peer {{ vyos_syslog_tls_relay_name }}"
+    save: true
+    comment: "CompanyXYZ DET-02 mutual-TLS logging"
+  no_log: true

@@ -20,7 +20,7 @@ spec:
       hostNetwork: true
       containers:
         - name: suricata
-          image: jasonish/suricata:latest
+          image: jasonish/suricata:8.0.1
           args: ["-i", "any", "-v"]
           securityContext:
             capabilities:

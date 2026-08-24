@@ -1,0 +1,11 @@
+---
+galaxy_info:
+  author: CompanyXYZ-NG
+  role_name: dns_secure
+  description: Minimal DC DNS service used as an allowed-path control
+  license: MIT
+  min_ansible_version: "2.15"
+  platforms:
+    - name: Ubuntu
+      versions: [jammy, noble]
+dependencies: []

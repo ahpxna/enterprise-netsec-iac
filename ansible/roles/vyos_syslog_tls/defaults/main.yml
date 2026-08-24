@@ -1,0 +1,5 @@
+---
+vyos_syslog_tls_repo_root: "{{ playbook_dir }}/../.."
+vyos_syslog_tls_cert_root: "{{ vyos_syslog_tls_repo_root }}/docker/syslog-relay/certs"
+vyos_syslog_tls_relay_ip: "172.16.50.11"
+vyos_syslog_tls_relay_name: "syslog-relay.companyxyz.lab"

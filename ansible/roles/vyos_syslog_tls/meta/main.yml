@@ -1,0 +1,6 @@
+---
+galaxy_info:
+  author: CompanyXYZ
+  description: Configure VyOS 1.4 mutual-TLS remote syslog
+  min_ansible_version: "2.15"
+dependencies: []

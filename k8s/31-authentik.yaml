@@ -88,6 +88,28 @@ spec:
               valueFrom: { secretKeyRef: { name: cxyz-security-secrets, key: AUTHENTIK_POSTGRES_PASSWORD } }
           ports: [{ containerPort: 9000 }]
 ---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: authentik-worker
+  namespace: cxyz-security
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: authentik-worker } }
+  template:
+    metadata: { labels: { app: authentik-worker } }
+    spec:
+      containers:
+        - name: authentik-worker
+          image: ghcr.io/goauthentik/server:2024.8
+          args: ["worker"]
+          env:
+            - name: AUTHENTIK_SECRET_KEY
+              valueFrom: { secretKeyRef: { name: cxyz-security-secrets, key: AUTHENTIK_SECRET_KEY } }
+            - { name: AUTHENTIK_POSTGRESQL__HOST, value: authentik-postgres }
+            - name: AUTHENTIK_POSTGRESQL__PASSWORD
+              valueFrom: { secretKeyRef: { name: cxyz-security-secrets, key: AUTHENTIK_POSTGRES_PASSWORD } }
+---
 apiVersion: v1
 kind: Service
 metadata:

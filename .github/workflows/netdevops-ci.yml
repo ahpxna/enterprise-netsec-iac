@@ -30,6 +30,7 @@ jobs:
           python scripts/render_batfish_snapshot.py --check
           python scripts/render_vm_inventory.py --check
           python scripts/check_vyos_boot.py
+          python scripts/security_static_checks.py
 
       - name: Unit-test evidence semantics
         run: pytest tests/unit -q

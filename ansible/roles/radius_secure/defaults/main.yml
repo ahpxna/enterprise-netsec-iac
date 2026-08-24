@@ -15,3 +15,9 @@ radius_secure_clients:
   - name: pc4
     ip: 192.168.40.1
     secret: "{{ lookup('ansible.builtin.env', 'RADIUS_SECRET_PC4') }}"
+  # Probe-only client: policy still blocks this user VLAN at fw-core. Keeping
+  # a server-side client definition lets SEG-01 distinguish a firewall deny
+  # from an unknown-client RADIUS discard.
+  - name: pc1-validation
+    ip: 192.168.10.1
+    secret: "{{ lookup('ansible.builtin.env', 'RADIUS_SECRET_PC1_PROBE') }}"

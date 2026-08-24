@@ -1,6 +1,6 @@
 ---
-# Ship logs to the SIEM over TLS instead of cleartext 514.
-# Remediates the CYB-240/300 "plaintext syslog" finding directly.
+# Mutual-TLS log shipping. The relay validates each device certificate and
+# each client validates the relay name against the private logging CA.
 - name: Install rsyslog and the platform TLS driver
   ansible.builtin.package:
     name:
@@ -8,21 +8,40 @@
       - "{{ 'rsyslog-tls' if ansible_os_family == 'Alpine' else 'rsyslog-gnutls' }}"
     state: present
 
+- name: Derive the stable logging identity for this node
+  ansible.builtin.set_fact:
+    syslog_tls_client_name: "{{ inventory_hostname | regex_replace('^clab-companyxyz-', '') }}"
+
 - name: Install the private logging CA
   ansible.builtin.copy:
     src: "{{ playbook_dir }}/../../docker/syslog-relay/certs/ca.crt"
     dest: /etc/rsyslog.d/ca.crt
     mode: "0644"
 
-- name: Configure TLS log forwarding to the SIEM
+- name: Install the node mTLS certificate
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../../docker/syslog-relay/certs/clients/{{ syslog_tls_client_name }}.crt"
+    dest: /etc/rsyslog.d/cxyz-client.crt
+    mode: "0644"
+
+- name: Install the node mTLS private key
+  ansible.builtin.copy:
+    src: "{{ playbook_dir }}/../../docker/syslog-relay/certs/clients/{{ syslog_tls_client_name }}.key"
+    dest: /etc/rsyslog.d/cxyz-client.key
+    mode: "0600"
+  no_log: true
+
+- name: Configure mutually authenticated TLS log forwarding to the SIEM
   ansible.builtin.copy:
     dest: /etc/rsyslog.d/60-cxyz-tls.conf
     mode: "0644"
     content: |
-      # Managed by Ansible — DET-02 (encrypted log transport)
+      # Managed by Ansible — DET-02
       global(
         DefaultNetstreamDriver="gtls"
         DefaultNetstreamDriverCAFile="/etc/rsyslog.d/ca.crt"
+        DefaultNetstreamDriverCertFile="/etc/rsyslog.d/cxyz-client.crt"
+        DefaultNetstreamDriverKeyFile="/etc/rsyslog.d/cxyz-client.key"
       )
       action(
         type="omfwd"

@@ -48,8 +48,12 @@ render: ## Render Path A and Batfish models from canonical fabric intent
 	python scripts/render_fabric.py
 	python scripts/render_batfish_snapshot.py
 
+.PHONY: runtime-config
+runtime-config: secrets ## Render secret-bearing Path A runtime configs outside Git
+	python scripts/render_runtime_configs.py
+
 .PHONY: net
-net: dc-network ## Deploy the routed network fabric (containerlab + FRR/VyOS)
+net: dc-network runtime-config ## Deploy the routed network fabric (containerlab + FRR/VyOS)
 	sudo containerlab deploy -t $(CLAB_TOPO) --reconfigure
 
 .PHONY: security
@@ -57,8 +61,8 @@ security: images dc-network wazuh-config ## Deploy SIEM + IDS + Zero-Trust gatew
 	docker compose --profile siem --profile ids --profile ztna --profile dmz up -d
 
 .PHONY: configure
-configure: ## Push all device/server configuration with Ansible
-	cd $(ANSIBLE_DIR) && ansible-playbook site.yml
+configure: secrets ## Push all device/server configuration with Ansible
+	python scripts/env_exec.py --env-file .env -- bash -lc 'cd $(ANSIBLE_DIR) && ansible-playbook site.yml'
 
 .PHONY: harden
 harden: ## Apply CIS-aligned hardening only
@@ -71,9 +75,10 @@ lint: ## Static checks: yamllint, ansible-lint, terraform, gitleaks
 	python scripts/render_batfish_snapshot.py --check
 	python scripts/render_vm_inventory.py --check
 	python scripts/check_vyos_boot.py
+	python scripts/security_static_checks.py
 	python compliance/check_wiring.py
 	python -m pytest tests/unit -q
-	docker compose --profile siem --profile ids --profile ztna --profile dmz config --quiet
+	docker compose --env-file .env.example --profile siem --profile ids --profile ztna --profile dmz config --quiet
 	yamllint .
 	cd $(ANSIBLE_DIR) && ansible-lint
 	terraform -chdir=terraform/libvirt fmt -check -recursive
@@ -112,32 +117,48 @@ attack: ## Replay the CYB-240 attack chain and prove the SIEM sees it
 vm-init: ## Init Terraform for the real VyOS VM fabric
 	cd terraform/vyos-fabric && terraform init
 
+.PHONY: path-b-vars
+path-b-vars: secrets ## Render ignored Terraform Path B secrets/key inputs from .env
+	python scripts/render_path_b_vars.py
+
 .PHONY: vm-plan
-vm-plan: ## Plan the VyOS VM fabric (requires terraform.tfvars, see .example)
+vm-plan: path-b-vars ## Plan the VyOS VM fabric (requires image tfvars, see .example)
 	cd terraform/vyos-fabric && terraform plan
 
 .PHONY: vm-up
-vm-up: ## Apply: boot the complete 12-node Path B real-NOS fabric
+vm-up: dc-network path-b-vars ## Apply: boot the complete 12-node Path B real-NOS fabric
 	cd terraform/vyos-fabric && terraform apply
 	@echo "==> Wait ~2 min for cloud-init first-boot config load, then: make vm-configure"
 
 .PHONY: vm-inventory
 vm-inventory: ## Render the Path B inventory from intent/fabric.yaml
-	python scripts/render_vm_inventory.py --check
+	python scripts/render_vm_inventory.py
 
 .PHONY: vm-configure
-vm-configure: vm-inventory ## Reconcile VyOS and Linux Day-2 configuration for Path B
+vm-configure: secrets path-b-vars vm-inventory ## Reconcile VyOS and Linux Day-2 configuration for Path B
 	@test -s ansible/inventory/known_hosts || (echo "missing verified ansible/inventory/known_hosts; verify VM SSH host keys before configuration" >&2; exit 1)
-	cd ansible && set -a && source ../.env && set +a && ansible-playbook -i inventory/vm-fabric.yml playbooks/31-path-b.yml
+	python scripts/env_exec.py --env-file .env -- bash -lc 'cd ansible && ansible-playbook -i inventory/vm-fabric.yml playbooks/32-vm-health.yml && ansible-playbook -i inventory/vm-fabric.yml playbooks/31-path-b.yml'
 
 .PHONY: vm-health
 vm-health: vm-inventory ## Block if Path B management SSH/network_cli bootstrap is unhealthy
 	@test -s ansible/inventory/known_hosts || (echo "missing verified ansible/inventory/known_hosts" >&2; exit 1)
 	cd ansible && ansible-playbook -i inventory/vm-fabric.yml playbooks/32-vm-health.yml
 
+.PHONY: vm-idempotency
+vm-idempotency: secrets vm-inventory ## Require a zero-change second Path B Day-2 run
+	@test -s ansible/inventory/known_hosts || (echo "missing verified ansible/inventory/known_hosts" >&2; exit 1)
+	python scripts/env_exec.py --env-file .env -- python scripts/check_path_b_idempotency.py
+
 .PHONY: vm-audit
-vm-audit: vm-health ## Path B VM/bootstrap health evidence gate (semantic controls remain separately pending)
-	@echo "==> Path B management and bootstrap gate passed; run Path B semantic controls only after their VyOS backend is implemented."
+vm-audit: vm-configure security ## Audit the real Path B VM data plane and fail closed
+	@$(MAKE) vm-health
+	@$(MAKE) vm-idempotency
+	@mkdir -p $(EVIDENCE)-path-b
+	python scripts/env_exec.py --env-file .env -- env \
+		LAB_ENVIRONMENT=path-b EVIDENCE_DIR=$(EVIDENCE)-path-b \
+		python scripts/path_b_audit.py
+	LAB_ENVIRONMENT=path-b python compliance/generate_report.py --strict --profile path-b \
+		--run $(EVIDENCE)-path-b --out evidence/PATH-B-COMPLIANCE-REPORT.md
 
 .PHONY: vm-down
 vm-down: ## Destroy the real VyOS VM fabric
@@ -160,12 +181,12 @@ k8s-status: ## Show pod/service status for the k8s security plane
 	kubectl -n cxyz-security get pods,svc
 
 .PHONY: report
-report: ## Generate compliance report from controls.yaml + latest evidence
-	python compliance/generate_report.py --strict \
+report: ## Generate Path A compliance report from controls.yaml + latest evidence
+	python compliance/generate_report.py --strict --profile path-a \
 		--out evidence/COMPLIANCE-REPORT.md
 
 .PHONY: audit
-audit: batfish validate attack report ## Everything an auditor would ask for
+audit: lint batfish validate attack report ## Everything an auditor would ask for
 	@echo "==> Evidence bundle: $(EVIDENCE)"
 
 # ---------------------------------------------------------------- misc
@@ -178,10 +199,11 @@ logs: ## Tail the SIEM manager
 	docker compose logs -f wazuh.manager
 
 .PHONY: down
-down: ## Tear everything down
+down: ## Tear Path A services/fabric down and restore host routing state
 	docker compose --profile siem --profile ids --profile ztna --profile dmz down -v
 	-sudo containerlab destroy -t $(CLAB_TOPO) --cleanup
+	-bash scripts/cleanup_dc_network.sh
 
 .PHONY: clean
 clean: down ## Tear down + remove generated artifacts
-	rm -rf clab-companyxyz evidence/runs/*
+	rm -rf clab-companyxyz evidence/runs/* clab/runtime-configs terraform/vyos-fabric/routing.auto.tfvars.json .cxyz-state

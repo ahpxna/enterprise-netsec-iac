@@ -1,5 +1,16 @@
 ---
-- name: Restart freeradius
-  ansible.builtin.command: supervisorctl restart freeradius  # noqa command-instead-of-module
+- name: Restart FreeRADIUS on systemd or supervisor managed hosts
+  ansible.builtin.shell: |
+    set -eu
+    if command -v systemctl >/dev/null 2>&1 && systemctl list-unit-files freeradius.service >/dev/null 2>&1; then
+      systemctl restart freeradius
+    elif command -v supervisorctl >/dev/null 2>&1; then
+      supervisorctl restart freeradius
+    else
+      echo "No supported FreeRADIUS service manager found" >&2
+      exit 1
+    fi
+  args:
+    executable: /bin/sh
   changed_when: true
   listen: restart freeradius

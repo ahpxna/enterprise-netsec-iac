@@ -1,123 +1,168 @@
 # =====================================================================
-# controls.yaml — the single source of truth for evidence-backed controls.
+# controls.yaml — evidence-backed security-control catalog.
 #
-# Old projects: a report *claimed* a control was met, in prose.
-# This project: every control row points at a `verified_by` test id. The
-# report generator refuses to mark a control PASS unless that test
-# actually ran and emitted evidence in the latest run. No test = UNVERIFIED.
-#
-# Columns:
-#   id            stable control id used across the repo
-#   framework     standards whose cited control directly matches the objective
-#   ref           clause/control number
-#   objective     what "good" means in one sentence
-#   implemented_by where the control lives (role/config)
-#   verified_by   test node id in tests/ (pytest id or attack-chain step)
-#   severity      risk if this control fails
+# verified_by is the Path A executable proof; verified_by_path_b is the
+# independent real-NOS proof. generate_report.py --profile selects the right
+# mapping and refuses to substitute Path A evidence for Path B.
 # =====================================================================
 
----
 controls:
-  - id: SEG-01
-    framework: [NIST-800-41r1, ISO-27002-8.22]
-    ref: "default-deny + segmentation"
-    objective: "User VLAN cannot reach DC management/RADIUS ports; only DNS/NTP."
-    implemented_by: clab/configs/fw-core.nft
-    verified_by: test_segmentation.py::test_user_vlan_blocked_from_radius
-    severity: high
-
-  - id: SEG-02
-    framework: [NIST-800-41r1, ISO-27002-8.22]
-    ref: "DMZ isolation"
-    objective: "DMZ web host cannot initiate connections into internal zones."
-    implemented_by: clab/configs/fw-dmz.nft
-    verified_by: test_segmentation.py::test_dmz_cannot_pivot_internal
-    severity: high
-
-  - id: DET-01
-    framework: [NIST-800-92, NIST-800-53-AU-6, ISO-27002-8.15]
-    ref: "prohibited scan generates detectable event"
-    objective: "A denied user->DC scan produces a firewall DROP log the SIEM ingests."
-    implemented_by: [clab/configs/fw-core.nft, docker/siem]
-    verified_by: attack_chain.sh::step2_scan_detected
-    severity: high
-
-  - id: DET-02
-    framework: [NIST-800-92, ISO-27002-8.15]
-    ref: "log integrity in transit"
-    objective: "Device->SIEM log transport is TLS, not cleartext 514 (fixes CYB-240 finding)."
-    implemented_by: ansible/roles/syslog_tls
-    verified_by: test_hardening.py::test_syslog_transport_is_tls
-    severity: high
-
-  - id: IDM-01
-    framework: [NIST-800-63B, NIST-800-53r5-IA-5(1)]
-    ref: "salted password verifier; no cleartext credential at rest"
-    objective: "The RADIUS user credential is a salted SHA-512-crypt verifier and no cleartext password attribute is configured."
-    implemented_by: ansible/roles/radius_secure
-    verified_by: test_hardening.py::test_no_cleartext_radius_password
-    severity: critical
-
-  - id: IDM-02
-    framework: [NIST-800-53r5-IA-5(1), NIST-800-53r5-SC-12]
-    ref: "strong and separately managed authenticator secrets"
-    objective: "Every RADIUS client has a unique random shared secret of at least 24 characters."
-    implemented_by: ansible/roles/radius_secure
-    verified_by: test_hardening.py::test_radius_shared_secret_strength
-    severity: high
-
-  - id: HRD-01
-    framework: [NIST-800-53r5-AC-12]
-    ref: "session timeouts"
-    objective: "SSH idle timeout <= 5 min; console timeout enabled (not 0)."
-    implemented_by: ansible/roles/common_hardening
-    verified_by: test_hardening.py::test_ssh_idle_timeout
-    severity: moderate
-
-  - id: HRD-02
-    framework: [NIST-800-53r5-CM-7, NIST-800-53r5-SC-8]
-    ref: "modern protocol only"
-    objective: "SSHv2 enforced; Telnet disabled everywhere."
-    implemented_by: ansible/roles/common_hardening
-    verified_by: test_hardening.py::test_telnet_disabled
-    severity: moderate
-
-  - id: TIME-01
-    framework: [NIST-800-92, NIST-800-53r5-AU-8, NIST-800-53r5-SC-45, ISO-27002-8.17]
-    ref: "authenticated time"
-    objective: "NTP uses NTS/authenticated upstreams so log timestamps can't be spoofed."
-    implemented_by: ansible/roles/ntp_secure
-    verified_by: test_hardening.py::test_ntp_authenticated
-    severity: moderate
-
-  - id: RTR-01
-    framework: [NIST-SP-800-189, NIST-800-53r5-SC-23]
-    ref: "routing plane authentication"
-    objective: "OSPF adjacencies require MD5; BGP sessions use password + ttl-security."
-    implemented_by: clab/configs/edge.frr.conf
-    verified_by: test_routing.py::test_ospf_md5_and_bgp_ttl
-    severity: high
-
-  - id: HA-01
-    framework: [NIST-800-53-CP-10]
-    ref: "gateway survivability"
-    objective: "Killing VRRP master causes <2s failover; user keeps its default gateway."
-    implemented_by: clab/configs/dist1.frr.conf
-    verified_by: attack_chain.sh::step5_vrrp_failover
-    severity: moderate
-
-  - id: VPN-01
-    framework: [NIST-800-53-AC-17, ISO-27002-6.7]
-    ref: "secure remote access"
-    objective: "Remote admin path is WireGuard only; no management port on the Internet."
-    implemented_by: docker-compose.yml#wireguard,clab/configs/fw-core.nft
-    verified_by: test_hardening.py::test_no_mgmt_exposed_to_internet
-    severity: high
-
-  - id: ZTNA-01
-    framework: [NIST-800-53r5-AC-3]
-    ref: "application access enforcement"
-    objective: "Unauthenticated requests to the protected web application redirect to Authentik."
-    implemented_by: docker-compose.yml#traefik,docker/zero-trust-gateway/dynamic.yml
-    verified_by: test_hardening.py::test_ztna_redirects_unauthenticated_request
-    severity: high
+- id: SEG-01
+  framework:
+  - NIST-800-41r1
+  - ISO-27002-8.22
+  ref: default-deny + segmentation
+  objective: User VLAN cannot reach DC management/RADIUS ports; only DNS/NTP.
+  implemented_by: clab/configs/fw-core.nft
+  verified_by: test_segmentation.py::test_user_vlan_blocked_from_radius
+  severity: high
+  verified_by_path_b: path_b_audit.py::test_seg01
+  implemented_by_path_b: terraform/vyos-fabric/configs/fw-core.boot
+- id: SEG-02
+  framework:
+  - NIST-800-41r1
+  - ISO-27002-8.22
+  ref: DMZ isolation
+  objective: DMZ web host cannot initiate connections into internal zones.
+  implemented_by: clab/configs/fw-dmz.nft
+  verified_by: test_segmentation.py::test_dmz_cannot_pivot_internal
+  severity: high
+  verified_by_path_b: path_b_audit.py::test_seg02
+  implemented_by_path_b: terraform/vyos-fabric/configs/fw-dmz.boot
+- id: DET-01
+  framework:
+  - NIST-800-92
+  - NIST-800-53-AU-6
+  - ISO-27002-8.15
+  ref: prohibited scan generates detectable event
+  objective: A denied user->DC scan produces a firewall DROP log the SIEM ingests.
+  implemented_by:
+  - clab/configs/fw-core.nft
+  - docker/siem
+  verified_by: attack_chain.sh::step2_scan_detected
+  severity: high
+  verified_by_path_b: path_b_audit.py::test_det01
+  implemented_by_path_b:
+  - terraform/vyos-fabric/configs/fw-core.boot
+  - docker/siem
+- id: DET-02
+  framework:
+  - NIST-800-92
+  - ISO-27002-8.15
+  ref: log integrity in transit
+  objective: Device->SIEM log transport is TLS, not cleartext 514 (fixes CYB-240 finding).
+  implemented_by: ansible/roles/syslog_tls
+  verified_by: test_hardening.py::test_syslog_transport_is_tls
+  severity: high
+  verified_by_path_b: path_b_audit.py::test_det02
+  implemented_by_path_b:
+  - ansible/roles/vyos_syslog_tls
+  - docker/syslog-relay
+- id: IDM-01
+  framework:
+  - NIST-800-63B
+  - NIST-800-53r5-IA-5(1)
+  ref: salted password verifier; no cleartext credential at rest
+  objective: The RADIUS user credential is a salted SHA-512-crypt verifier and no cleartext password attribute is configured.
+  implemented_by: ansible/roles/radius_secure
+  verified_by: test_hardening.py::test_no_cleartext_radius_password
+  severity: critical
+  verified_by_path_b: path_b_audit.py::test_idm01
+  implemented_by_path_b: ansible/roles/radius_secure
+- id: IDM-02
+  framework:
+  - NIST-800-53r5-IA-5(1)
+  - NIST-800-53r5-SC-12
+  ref: strong and separately managed authenticator secrets
+  objective: Every RADIUS client has a unique random shared secret of at least 24 characters.
+  implemented_by: ansible/roles/radius_secure
+  verified_by: test_hardening.py::test_radius_shared_secret_strength
+  severity: high
+  verified_by_path_b: path_b_audit.py::test_idm02
+  implemented_by_path_b: ansible/roles/radius_secure
+- id: HRD-01
+  framework:
+  - NIST-800-53r5-AC-12
+  ref: session timeouts
+  objective: SSH idle timeout <= 5 min; console timeout enabled (not 0).
+  implemented_by: ansible/roles/common_hardening
+  verified_by: test_hardening.py::test_ssh_idle_timeout
+  severity: moderate
+  verified_by_path_b: path_b_audit.py::test_hrd01
+  implemented_by_path_b:
+  - ansible/roles/common_hardening
+  - terraform/vyos-fabric/configs
+- id: HRD-02
+  framework:
+  - NIST-800-53r5-CM-7
+  - NIST-800-53r5-SC-8
+  ref: modern protocol only
+  objective: SSHv2 enforced; Telnet disabled everywhere.
+  implemented_by: ansible/roles/common_hardening
+  verified_by: test_hardening.py::test_telnet_disabled
+  severity: moderate
+  verified_by_path_b: path_b_audit.py::test_hrd02
+  implemented_by_path_b:
+  - ansible/roles/common_hardening
+  - terraform/vyos-fabric/configs
+- id: TIME-01
+  framework:
+  - NIST-800-92
+  - NIST-800-53r5-AU-8
+  - NIST-800-53r5-SC-45
+  - ISO-27002-8.17
+  ref: authenticated time
+  objective: NTP uses NTS/authenticated upstreams so log timestamps can't be spoofed.
+  implemented_by: ansible/roles/ntp_secure
+  verified_by: test_hardening.py::test_ntp_authenticated
+  severity: moderate
+  verified_by_path_b: path_b_audit.py::test_time01
+  implemented_by_path_b: ansible/roles/ntp_secure
+- id: RTR-01
+  framework:
+  - NIST-SP-800-189
+  - NIST-800-53r5-SC-23
+  ref: routing plane authentication
+  objective: OSPF adjacencies require MD5; BGP sessions use password + ttl-security.
+  implemented_by: clab/configs/edge.frr.conf
+  verified_by: test_routing.py::test_ospf_md5_and_bgp_ttl
+  severity: high
+  verified_by_path_b: path_b_audit.py::test_rtr01
+  implemented_by_path_b: terraform/vyos-fabric/configs
+- id: HA-01
+  framework:
+  - NIST-800-53-CP-10
+  ref: gateway survivability
+  objective: Killing VRRP master causes <2s failover; user keeps its default gateway.
+  implemented_by: clab/configs/dist1.frr.conf
+  verified_by: attack_chain.sh::step5_vrrp_failover
+  severity: moderate
+  verified_by_path_b: path_b_audit.py::test_ha01
+  implemented_by_path_b:
+  - terraform/vyos-fabric/configs/dist1.boot
+  - terraform/vyos-fabric/configs/dist2.boot
+- id: VPN-01
+  framework:
+  - NIST-800-53-AC-17
+  - ISO-27002-6.7
+  ref: secure remote access
+  objective: Remote admin path is WireGuard only; no management port on the Internet.
+  implemented_by: docker-compose.yml#wireguard,clab/configs/fw-core.nft
+  verified_by: test_hardening.py::test_no_mgmt_exposed_to_internet
+  severity: high
+  verified_by_path_b: path_b_audit.py::test_vpn01
+  implemented_by_path_b:
+  - docker-compose.yml#wireguard
+  - terraform/vyos-fabric/configs/fw-core.boot
+- id: ZTNA-01
+  framework:
+  - NIST-800-53r5-AC-3
+  ref: application access enforcement
+  objective: Unauthenticated requests to the protected web application redirect to Authentik.
+  implemented_by: docker-compose.yml#traefik,docker/zero-trust-gateway/dynamic.yml
+  verified_by: test_hardening.py::test_ztna_redirects_unauthenticated_request
+  severity: high
+  verified_by_path_b: path_b_audit.py::test_ztna01
+  implemented_by_path_b:
+  - docker-compose.yml#traefik
+  - docker/zero-trust-gateway/dynamic.yml

@@ -1,27 +1,38 @@
 ---
-# Replaces the CYB-240/300 cleartext-password anti-pattern with hashed
-# storage and a strong, per-deployment shared secret (NIST SP 800-63B).
+# FreeRADIUS is installed here rather than assumed to exist. This keeps the
+# role valid on clean Path B Ubuntu guests as well as the prebuilt Path A image.
+- name: Install FreeRADIUS runtime and validation client tools
+  ansible.builtin.package:
+    name:
+      - freeradius
+      - freeradius-utils
+    state: present
 
 - name: Fail fast if identity secrets were not generated or are reused
   ansible.builtin.assert:
     that:
       - radius_secure_admin_crypt is match('^\\$6\\$')
+      - radius_secure_test_crypt is match('^\\$6\\$')
       - radius_secure_clients | map(attribute='secret') | map('length') | min >= 24
       - radius_secure_clients | map(attribute='secret') | unique | length == radius_secure_clients | length
       - radius_secure_clients | map(attribute='secret') | select('match', '^CHANGE_ME') | list | length == 0
     fail_msg: "Run `make secrets` first — refusing to deploy weak/cleartext creds."
 
-- name: Deploy FreeRADIUS clients.conf (strong shared secret)
+- name: Deploy FreeRADIUS clients.conf with one secret per client
   ansible.builtin.template:
     src: clients.conf.j2
     dest: /etc/freeradius/3.0/clients.conf
+    owner: root
+    group: freerad
     mode: "0640"
   notify: restart freeradius
 
-- name: Deploy authorize file with HASHED admin credential only
+- name: Deploy authorize file with HASHED credentials only
   ansible.builtin.template:
     src: authorize.j2
     dest: /etc/freeradius/3.0/mods-config/files/authorize
+    owner: root
+    group: freerad
     mode: "0640"
   notify: restart freeradius
 

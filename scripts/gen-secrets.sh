@@ -10,7 +10,8 @@ cd "$ROOT"
 # any existing local values.
 for required in \
   'RADIUS_TEST_PASSWORD=CHANGE_ME_ephemeral_integration_password' \
-  'RADIUS_TEST_CRYPT=CHANGE_ME_see_scripts_mkhash'; do
+  'RADIUS_TEST_CRYPT=CHANGE_ME_see_scripts_mkhash' \
+  'RADIUS_SECRET_PC1_PROBE=CHANGE_ME_unique_pc1_probe_min_32_chars'; do
   key="${required%%=*}"
   grep -q "^${key}=" .env || printf '\n%s\n' "$required" >> .env
 done
@@ -61,6 +62,32 @@ if [ ! -f "$relay_certs/ca.crt" ]; then
   chmod 600 "$relay_certs"/*.key
   echo "  generated syslog relay CA and server certificate"
 fi
+
+# Per-node mTLS identities. The relay rejects clients that do not present one
+# of these CA-signed identities, preventing unauthenticated log injection.
+client_dir="$relay_certs/clients"
+mkdir -p "$client_dir"
+for node in server1 edge core dist1 dist2 fw-core fw-dmz; do
+  cert="$client_dir/$node.crt"
+  key="$client_dir/$node.key"
+  if [ ! -f "$cert" ] || [ ! -f "$key" ]; then
+    cn="$node.companyxyz.lab"
+    openssl req -newkey rsa:3072 -nodes -subj "/CN=$cn" \
+      -keyout "$key" -out "$client_dir/$node.csr" >/dev/null 2>&1
+    openssl x509 -req -days 397 -sha256 \
+      -in "$client_dir/$node.csr" \
+      -CA "$relay_certs/ca.crt" -CAkey "$relay_certs/ca.key" -CAcreateserial \
+      -extfile <(printf '%s\n' \
+        'basicConstraints=CA:FALSE' \
+        'keyUsage=digitalSignature,keyEncipherment' \
+        'extendedKeyUsage=clientAuth' \
+        "subjectAltName=DNS:$cn") \
+      -out "$cert" >/dev/null 2>&1
+    rm -f "$client_dir/$node.csr"
+    chmod 600 "$key"
+    echo "  generated syslog mTLS identity for $node"
+  fi
+done
 
 # The LinuxServer WireGuard container owns its persisted configuration and
 # peer keys beneath wireguard/config/.  Keeping a second unused key lifecycle

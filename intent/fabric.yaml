@@ -5,7 +5,7 @@ name: companyxyz
 management:
   network: cxyz_mgmt
   subnet: 10.1.1.0/24
-  gateway: 10.1.1.254
+  gateway: 10.1.1.1
 
 links:
   isp1_edge:
@@ -103,7 +103,7 @@ nodes:
       - {to: 192.168.0.0/16, via: 10.255.0.6}
   core:
     role: router
-    mgmt_ip: 10.1.1.1
+    mgmt_ip: 10.1.1.11
     attachments:
       - {link: fwcore_core, address: 10.255.0.6/30}
       - {link: core_dist1, address: 10.255.1.0/31}

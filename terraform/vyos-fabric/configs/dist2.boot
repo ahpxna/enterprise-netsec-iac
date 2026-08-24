@@ -24,5 +24,25 @@ protocols {
         interface eth2 { passive }
     }
 }
-system { host-name dist2 }
-service { ssh { port 22 } }
+system {
+    host-name dist2
+    login {
+        timeout 300
+        user vyos {
+            authentication {
+                public-keys terraform-bootstrap {
+                    type "SSH_KEY_TYPE"
+                    key "SSH_KEY_DATA"
+                }
+            }
+        }
+    }
+}
+service {
+    ssh {
+        port 22
+        listen-address "MANAGEMENT_IP"
+        disable-password-authentication
+        client-keepalive-interval 300
+    }
+}

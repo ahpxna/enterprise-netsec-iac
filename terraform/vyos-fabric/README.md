@@ -21,14 +21,15 @@ router/firewall software and retains endpoint hosts for end-to-end testing.
 
 ## Getting a VyOS image
 
-1. Rolling release (free, no login) — follow the current curl command in the
-   official docs, the exact build filename changes often:
-   https://docs.vyos.io/en/latest/installation/virtual/libvirt.html
-2. LTS release (more stable, requires a free/paid support.vyos.io account):
-   https://support.vyos.io/
-3. Pick a cloud-init-enabled VyOS qcow2 and set `vyos_image_path`.
-4. Supply a cloud-init-enabled Ubuntu 24.04 (or compatible) image through
-   `linux_image_path` for the four endpoint VMs.
+1. Select one **exact VyOS 1.4.x** cloud-init-enabled qcow2 build. The checked
+   `config.boot` grammar and live audit target VyOS 1.4.x; do not point this
+   deployment at a moving `rolling/current` artifact.
+2. Record the local qcow2 SHA-256 in `vyos_image_sha256`. Terraform refuses an
+   image whose digest differs from the reviewed value.
+3. Select one exact cloud-init-enabled Ubuntu 24.04 (or compatible) qcow2 for
+   the four endpoint VMs and record its SHA-256 in `linux_image_sha256`.
+4. Before expanding to all nodes, boot one disposable VyOS VM and verify that
+   the exact selected image can load, commit, and save the repository config.
 
 ## Sizing
 
@@ -70,22 +71,23 @@ verification. Then run the complete Path-B lifecycle:
 cd ../..
 make vm-configure
 make vm-health
+make vm-idempotency
+make vm-audit
 ```
 
 ## Current validation status and known gaps
 
 - **The expanded 12-node topology has not yet passed a live first-boot
-  checkpoint.** `terraform validate` cannot validate VyOS grammar. Pin one
-  exact VyOS qcow2 version and checksum in `terraform.tfvars`, boot one node,
-  then run `configure && load /config/config.boot && commit` before deploying
-  the full fabric.
+  checkpoint in this repository revision.** `scripts/check_vyos_boot.py`
+  catches repository invariants, but only the exact qcow2 can prove parser and
+  runtime compatibility. Pin one VyOS 1.4.x image and checksum, boot one node,
+  and load/commit/save its config before deploying the full fabric.
 - The first live apply exposed the legacy dmacvicar/libvirt 0.8 `/30`
   validation limit. Data-plane CIDRs now live in `local.link_plan`, while
   `mode = "none"` creates addressless isolated Layer-2 networks. This avoids
   DHCP validation and prevents the host bridge from consuming either VyOS
   endpoint address. Inspect the plan via `terraform output data_plane_link_plan`.
-- No HA/failover test has been run against real VRRP on VyOS yet — the
-  `dist1`/`dist2` priorities are set, but `make audit`'s `HA-01` control
-  still needs a live failover test against these VMs specifically (the
-  existing `attack_chain.sh::step5_vrrp_failover` currently targets the
-  container fabric).
+- `make vm-audit` now contains a Path-B-specific 13-control live audit,
+  including a real libvirt suspend/resume VRRP failover measurement. It does
+  **not** reuse the Containerlab `docker exec` validation backend. These checks
+  remain UNVERIFIED until they pass on the actual KVM/libvirt host.
