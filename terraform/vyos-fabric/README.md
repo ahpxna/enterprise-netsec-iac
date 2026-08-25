@@ -41,15 +41,11 @@ Kubernetes realistically requires 32GB or more.
 ## Stable interface model
 
 Data-plane NICs are attached first and map to `eth0..ethN`; the management NIC
-is attached last. Infrastructure and the trusted admin workstation use the
-`10.1.1.0/24` OOB network. Untrusted `pc1` and `dmz-web` use the separate
-`10.1.2.0/24` isolated endpoint-harness network, which has no libvirt forwarding;
-this preserves host-side SSH for Ansible/evidence without giving those endpoints
-a Layer-2 path around the routed firewalls. Every interface also receives a
-deterministic MAC address. Linux cloud-init matches and renames interfaces by
-MAC, while each VyOS `config.boot` declares its final management interface as
-DHCP with no imported default route. The plan displays the proposed
-`node_interface_plan`; after apply, inspect the same mapping with:
+is attached last. Every interface also receives a deterministic MAC address.
+Linux cloud-init matches and renames interfaces by MAC, while each VyOS
+`config.boot` declares its final management interface as DHCP with no imported
+default route. The plan displays the proposed `node_interface_plan`; after
+apply, inspect the same mapping with:
 
 ```bash
 terraform output node_interface_plan

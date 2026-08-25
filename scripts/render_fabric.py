@@ -46,13 +46,10 @@ def shell_commands(node: dict) -> list[str]:
 
 def node_definition(name: str, node: dict) -> dict:
     role = node["role"]
-    rendered: dict = {"kind": "linux"}
-    if node.get("management_plane", "trusted") == "endpoint":
-        # Untrusted endpoints are administered with docker exec on Path A.
-        # network-mode:none prevents a second path around the routed firewall.
-        rendered["network-mode"] = "none"
-    else:
-        rendered["mgmt-ipv4"] = node["mgmt_ip"]
+    rendered: dict = {
+        "kind": "linux",
+        "mgmt-ipv4": node["mgmt_ip"],
+    }
     if role in {"router", "isp"}:
         rendered["image"] = FRR_IMAGE
         rendered["binds"] = [

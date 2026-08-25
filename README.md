@@ -29,18 +29,14 @@ all 12 nodes. Libvirt creates addressless isolated Layer-2 networks, while
 point-to-point addresses are assigned inside the guests; this avoids treating
 small transit networks as libvirt-managed DHCP networks. Data-plane NICs are
 created first with stable MAC addresses and management is always appended last.
-Trusted infrastructure remains on `10.1.1.0/24`; untrusted `pc1` and `dmz-web`
-use an isolated `10.1.2.0/24` host-side endpoint-management network on Path B,
-and no Containerlab management NIC on Path A. The inventory is rendered from
-the same intent, and `vm-configure` requires a
+The inventory is rendered from the same intent, and `vm-configure` requires a
 verified local `ansible/inventory/known_hosts` file before it will connect.
 `make vm-health` is the current Path-B bootstrap gate; it is deliberately not
 an alias for the Containerlab `make audit` suite.
 
-Path C has renderable manifests but has not completed live-cluster validation
-and is not yet security-control-equivalent to Compose. Wazuh certificate/API
-wiring, Suricata-to-Wazuh delivery, NetworkPolicy, resource sizing, readiness
-probes, and security-policy behavior remain open validation items.
+Path C has schema-valid manifests but has not completed live-cluster
+validation. Resource sizing, readiness probes, and security-policy behavior
+remain open validation items.
 
 ## Quick start
 

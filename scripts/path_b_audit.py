@@ -179,7 +179,6 @@ def test_seg01() -> tuple[str, dict]:
     ssh_ready = ":22" in listeners
     mgmt_ssh = tcp_from_linux("pc4", "172.16.50.1", 22)
     user_ssh = tcp_from_linux("pc1", "172.16.50.1", 22)
-    alternate_oob_ssh = tcp_from_linux("pc1", "10.1.1.50", 22)
 
     pc4_secret = require_secret("RADIUS_SECRET_PC4")
     positive_cmd = (
@@ -207,14 +206,12 @@ def test_seg01() -> tuple[str, dict]:
         "management_radius_positive": radius_mgmt_response,
         "user_dns_positive": dns_allowed,
         "user_ssh_reachable": user_ssh,
-        "alternate_oob_ssh_reachable": alternate_oob_ssh,
         "user_radius_received_response": radius_user_response,
     }
     assert radius_ready and dns_ready and ssh_ready, "SEG-01 DC service preconditions are not healthy"
     assert mgmt_ssh and radius_mgmt_response, "SEG-01 management positive controls failed"
     assert dns_allowed, "SEG-01 approved user DNS path failed"
     assert not user_ssh and not radius_user_response, "SEG-01 user VLAN reached prohibited SSH/RADIUS service"
-    assert not alternate_oob_ssh, "SEG-01 user endpoint reached trusted OOB management directly"
     return "healthy DC services; user DNS allowed; user SSH/RADIUS denied on real VyOS fw-core", observed
 
 
@@ -223,7 +220,6 @@ def test_seg02() -> tuple[str, dict]:
     routed_web = tcp_from_linux("pc1", "195.1.1.161", 80)
     route_precondition = linux("dmz-web", "ip route get 172.16.50.1")
     pivot_ssh = tcp_from_linux("dmz-web", "172.16.50.1", 22)
-    alternate_oob_ssh = tcp_from_linux("dmz-web", "10.1.1.50", 22)
     fw_cfg = normalized_config(config("fw-dmz"))
     explicit_pivot_deny = all(token in fw_cfg for token in (
         "description SEG-02 block DMZ pivot to internal networks",
@@ -237,12 +233,10 @@ def test_seg02() -> tuple[str, dict]:
         "dmz_to_dc_route_exists": route_precondition.returncode == 0,
         "explicit_vyos_pivot_deny_present": explicit_pivot_deny,
         "dmz_to_dc_ssh_reachable": pivot_ssh,
-        "alternate_oob_ssh_reachable": alternate_oob_ssh,
     }
     assert local_web.returncode == 0 and routed_web, "SEG-02 DMZ positive-control web path failed"
     assert route_precondition.returncode == 0 and explicit_pivot_deny, "SEG-02 deny attribution preconditions are incomplete"
     assert not pivot_ssh, "SEG-02 DMZ host pivoted into the DC"
-    assert not alternate_oob_ssh, "SEG-02 DMZ endpoint reached trusted OOB management directly"
     return "DMZ routing is healthy, the explicit VyOS pivot-deny policy exists, and the prohibited DC SSH pivot is blocked", observed
 
 

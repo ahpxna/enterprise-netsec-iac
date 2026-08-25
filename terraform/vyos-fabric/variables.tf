@@ -49,12 +49,6 @@ variable "management_network" {
   default     = "cxyz-mgmt"
 }
 
-variable "endpoint_management_network" {
-  description = "isolated libvirt network used only to administer untrusted endpoint VMs from the lab host"
-  type        = string
-  default     = "cxyz-endpoint-mgmt"
-}
-
 variable "ssh_public_key" {
   description = "Public key injected through cloud-init for VyOS and Linux management access; generated into auto tfvars by make path-b-vars"
   type        = string

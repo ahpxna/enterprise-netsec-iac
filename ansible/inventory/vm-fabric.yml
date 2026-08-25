@@ -41,7 +41,7 @@ all:
         clients:
           hosts:
             pc1:
-              ansible_host: 10.1.2.111
+              ansible_host: 10.1.1.111
             pc4:
               ansible_host: 10.1.1.144
         servers:
@@ -51,4 +51,4 @@ all:
         dmz_hosts:
           hosts:
             dmz-web:
-              ansible_host: 10.1.2.61
+              ansible_host: 10.1.1.61

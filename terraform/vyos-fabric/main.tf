@@ -138,11 +138,11 @@ resource "libvirt_domain" "node" {
     }
   }
 
-  # Final NIC: management/test-harness access. Infrastructure uses the trusted
-  # OOB network; explicitly marked untrusted endpoints use an isolated host-only
-  # libvirt network so they cannot bypass routed firewall policy.
+  # Final NIC: out-of-band management. The management network reserves the
+  # requested address for this stable MAC; VyOS and Linux both request DHCP
+  # without accepting a management-plane default route.
   network_interface {
-    network_name = local.management_plan[each.key].network_name
+    network_name = libvirt_network.mgmt.name
     mac          = local.management_plan[each.key].mac
     hostname     = each.key
     # IP ownership belongs only to intent/fabric.yaml. Libvirt uses this
@@ -195,11 +195,10 @@ locals {
 
   management_plan = {
     for node_name, node in local.fabric_intent.nodes : node_name => {
-      device = "eth${length(local.data_links[node_name])}"
-      mac    = format("52:54:00:%02x:00:ff", var.nodes[node_name].node_id)
-      plane  = try(node.management_plane, "trusted")
-      network_name = try(node.management_plane, "trusted") == "endpoint" ? libvirt_network.endpoint_mgmt.name : libvirt_network.mgmt.name
-      address = node.mgmt_ip
+      device       = "eth${length(local.data_links[node_name])}"
+      mac          = format("52:54:00:%02x:00:ff", var.nodes[node_name].node_id)
+      network_name = var.management_network
+      address      = node.mgmt_ip
     }
   }
 
@@ -277,7 +276,7 @@ output "node_mgmt_ips" {
 }
 
 output "node_interface_plan" {
-  description = "Stable guest device, MAC, management plane, network, and address mapping; management is always last"
+  description = "Stable guest device, MAC, network, and address mapping; management is always last"
   value = {
     for node_name in keys(var.nodes) : node_name => {
       data       = local.interface_plan[node_name]

@@ -21,17 +21,6 @@ resource "libvirt_network" "mgmt" {
   dns { enabled = true }
 }
 
-# Untrusted endpoints need host-side SSH for Ansible/evidence, but must not share
-# the trusted router/firewall OOB segment.  An isolated libvirt network keeps
-# that test-harness access local to the virtualization host with no forwarding.
-resource "libvirt_network" "endpoint_mgmt" {
-  name      = var.endpoint_management_network
-  mode      = "none"
-  addresses = [local.fabric_intent.endpoint_management.subnet]
-  dhcp { enabled = true }
-  dns { enabled = true }
-}
-
 resource "libvirt_network" "data" {
   # DC uses the existing br-cxyz-dc bridge shared with Docker. Do not recreate
   # it as a separate libvirt network using the same CIDR.

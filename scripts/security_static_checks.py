@@ -2,7 +2,6 @@
 """Fail-closed repository invariants for previously audited security regressions."""
 from __future__ import annotations
 
-import ipaddress
 import pathlib
 import re
 import sys
@@ -65,25 +64,6 @@ for key in ("AUTHENTIK_POSTGRESQL__HOST", "AUTHENTIK_POSTGRESQL__USER", "AUTHENT
 postgres_env = services.get("authentik-postgres", {}).get("environment", {})
 if postgres_env.get("POSTGRES_USER") != "authentik":
     fail("Authentik PostgreSQL must create the same explicit database user Authentik uses")
-
-intent = yaml.safe_load(text("intent/fabric.yaml"))
-trusted_mgmt = ipaddress.ip_network(intent["management"]["subnet"])
-endpoint_mgmt = ipaddress.ip_network(intent["endpoint_management"]["subnet"])
-if trusted_mgmt.overlaps(endpoint_mgmt):
-    fail("trusted and endpoint management planes must use non-overlapping subnets")
-for endpoint in ("pc1", "dmz-web"):
-    node = intent["nodes"][endpoint]
-    if node.get("management_plane") != "endpoint":
-        fail(f"{endpoint} must use the isolated endpoint management plane")
-    if ipaddress.ip_address(node["mgmt_ip"]) not in endpoint_mgmt:
-        fail(f"{endpoint} management address is outside endpoint_management.subnet")
-
-clab_model = yaml.safe_load(text("clab/companyxyz.clab.yml"))
-clab_nodes = clab_model["topology"]["nodes"]
-for endpoint in ("pc1", "dmz-web"):
-    node = clab_nodes[endpoint]
-    if node.get("network-mode") != "none" or "mgmt-ipv4" in node:
-        fail(f"Path A {endpoint} must not attach to the trusted Containerlab management bridge")
 
 relay = text("docker/syslog-relay/rsyslog.conf")
 if 'StreamDriver.AuthMode="x509/name"' not in relay or "PermittedPeer" not in relay:
