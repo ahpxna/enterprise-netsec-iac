@@ -27,6 +27,18 @@ spec:
             - name: POSTGRES_PASSWORD
               valueFrom: { secretKeyRef: { name: cxyz-security-secrets, key: AUTHENTIK_POSTGRES_PASSWORD } }
             - { name: POSTGRES_DB, value: authentik }
+          startupProbe:
+            exec: { command: ["pg_isready", "-U", "authentik", "-d", "authentik"] }
+            periodSeconds: 5
+            failureThreshold: 30
+          readinessProbe:
+            exec: { command: ["pg_isready", "-U", "authentik", "-d", "authentik"] }
+            periodSeconds: 10
+            failureThreshold: 3
+          livenessProbe:
+            exec: { command: ["pg_isready", "-U", "authentik", "-d", "authentik"] }
+            periodSeconds: 20
+            failureThreshold: 6
           volumeMounts: [{ name: data, mountPath: /var/lib/postgresql/data }]
   volumeClaimTemplates:
     - metadata: { name: data }
@@ -55,7 +67,21 @@ spec:
     metadata: { labels: { app: authentik-redis } }
     spec:
       containers:
-        - { name: redis, image: redis:7-alpine, ports: [{ containerPort: 6379 }] }
+        - name: redis
+          image: redis:7-alpine
+          ports: [{ containerPort: 6379 }]
+          startupProbe:
+            exec: { command: ["redis-cli", "ping"] }
+            periodSeconds: 5
+            failureThreshold: 30
+          readinessProbe:
+            exec: { command: ["redis-cli", "ping"] }
+            periodSeconds: 10
+            failureThreshold: 3
+          livenessProbe:
+            exec: { command: ["redis-cli", "ping"] }
+            periodSeconds: 20
+            failureThreshold: 6
 ---
 apiVersion: v1
 kind: Service
@@ -91,6 +117,18 @@ spec:
               valueFrom: { secretKeyRef: { name: cxyz-security-secrets, key: AUTHENTIK_POSTGRES_PASSWORD } }
             - { name: AUTHENTIK_REDIS__HOST, value: authentik-redis }
           ports: [{ containerPort: 9000 }]
+          startupProbe:
+            httpGet: { path: /-/health/ready/, port: 9000 }
+            periodSeconds: 5
+            failureThreshold: 60
+          readinessProbe:
+            httpGet: { path: /-/health/ready/, port: 9000 }
+            periodSeconds: 10
+            failureThreshold: 6
+          livenessProbe:
+            httpGet: { path: /-/health/live/, port: 9000 }
+            periodSeconds: 20
+            failureThreshold: 6
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -116,6 +154,18 @@ spec:
             - name: AUTHENTIK_POSTGRESQL__PASSWORD
               valueFrom: { secretKeyRef: { name: cxyz-security-secrets, key: AUTHENTIK_POSTGRES_PASSWORD } }
             - { name: AUTHENTIK_REDIS__HOST, value: authentik-redis }
+          startupProbe:
+            exec: { command: ["ak", "healthcheck"] }
+            periodSeconds: 10
+            failureThreshold: 30
+          readinessProbe:
+            exec: { command: ["ak", "healthcheck"] }
+            periodSeconds: 15
+            failureThreshold: 4
+          livenessProbe:
+            exec: { command: ["ak", "healthcheck"] }
+            periodSeconds: 30
+            failureThreshold: 5
 ---
 apiVersion: v1
 kind: Service

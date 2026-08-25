@@ -166,10 +166,37 @@ def test_telnet_disabled(evidence):
 def test_ntp_authenticated(evidence):
     config = in_node("server1", "sh", "-c", "cat /etc/chrony/chrony.conf 2>/dev/null")
     tracking = in_node("server1", "chronyc", "tracking")
+    runtime_sources = in_node("server1", "chronyc", "sources", "-n")
     nts_sources = [line for line in config.stdout.splitlines() if line.strip().startswith("server ") and " nts" in line]
-    evidence(control="TIME-01", assertion="chronyd runs with at least two NTS upstreams", observed={"nts_source_count": len(nts_sources), "chronyc_tracking_rc": tracking.returncode})
+    leap = re.search(r"Leap status\s*:\s*(.+)", tracking.stdout)
+    stratum = re.search(r"Stratum\s*:\s*(\d+)", tracking.stdout)
+    offset = re.search(r"System time\s*:\s*([0-9.eE+-]+) seconds", tracking.stdout)
+    selected = any(re.match(r"^\^\*", line.strip()) for line in runtime_sources.stdout.splitlines())
+    offset_seconds = abs(float(offset.group(1))) if offset else None
+    synchronized = bool(
+        leap
+        and leap.group(1).strip().lower() == "normal"
+        and stratum
+        and int(stratum.group(1)) > 0
+        and selected
+    )
+    evidence(
+        control="TIME-01",
+        assertion="chronyd has at least two NTS upstreams and is actively synchronized within 1 second",
+        observed={
+            "nts_source_count": len(nts_sources),
+            "chronyc_tracking_rc": tracking.returncode,
+            "chronyc_sources_rc": runtime_sources.returncode,
+            "leap_status": leap.group(1).strip() if leap else None,
+            "stratum": int(stratum.group(1)) if stratum else None,
+            "selected_source_present": selected,
+            "system_time_offset_seconds": offset_seconds,
+        },
+        enforcement_node="server1",
+    )
     assert len(nts_sources) >= 2, "fewer than two NTS sources configured"
-    assert tracking.returncode == 0, "chronyd runtime health check failed"
+    assert tracking.returncode == 0 and runtime_sources.returncode == 0 and synchronized, "chronyd is not actively synchronized to a selected NTS source"
+    assert offset_seconds is not None and offset_seconds < 1.0, "chronyd system-time offset is >=1 second"
 
 
 def test_no_mgmt_exposed_to_internet(evidence):
@@ -181,14 +208,40 @@ def test_no_mgmt_exposed_to_internet(evidence):
     after = in_node("fw-core", "nft", "list", "counter", "inet", "cxyz", "vpn01_wan_ssh_drop")
     after_match = re.search(r"packets\s+(\d+)", after.stdout)
     assert after.returncode == 0 and after_match, "VPN-01 firewall counter cannot be read"
-    positive = subprocess.run(
+    wg_if = subprocess.run(
         ["docker", "compose", "exec", "-T", "wireguard", "wg", "show", "interfaces"],
         cwd=ROOT,
         capture_output=True,
         text=True,
         check=False,
     )
-    wg_ready = positive.returncode == 0 and bool(positive.stdout.strip())
+    wg_peers = subprocess.run(
+        ["docker", "compose", "exec", "-T", "wireguard", "wg", "show", "all", "peers"],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    wg_handshakes = subprocess.run(
+        ["docker", "compose", "exec", "-T", "wireguard", "wg", "show", "all", "latest-handshakes"],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    now = int(time.time())
+    handshake_ages = []
+    recent_handshake = False
+    if wg_handshakes.returncode == 0:
+        for line in wg_handshakes.stdout.splitlines():
+            fields = line.split()
+            if len(fields) >= 3 and fields[-1].isdigit() and int(fields[-1]) > 0:
+                age = now - int(fields[-1])
+                handshake_ages.append(age)
+                if 0 <= age <= 600:
+                    recent_handshake = True
+    peer_count = len([line for line in wg_peers.stdout.splitlines() if line.strip()]) if wg_peers.returncode == 0 else 0
+    wg_ready = wg_if.returncode == 0 and bool(wg_if.stdout.strip())
     compose_text = (ROOT / "docker-compose.yml").read_text()
     forbidden_publishes = [
         token for token in ("55000:55000", "1515:1515", "1514:1514", "6514:6514", "8081:8080")
@@ -197,10 +250,13 @@ def test_no_mgmt_exposed_to_internet(evidence):
     counter_delta = int(after_match.group(1)) - int(before_match.group(1))
     evidence(
         control="VPN-01",
-        assertion="WireGuard service is operational; routed WAN cannot reach the healthy DC SSH service",
+        assertion="a configured WireGuard peer has recently handshaken while routed WAN cannot reach the healthy DC SSH service",
         observed={
             "ssh_service_healthy": service.returncode == 0,
             "wireguard_ready": wg_ready,
+            "wireguard_peer_count": peer_count,
+            "recent_wireguard_handshake": recent_handshake,
+            "handshake_ages_seconds": handshake_ages,
             "wan_ssh_reachable": negative.returncode == 0,
             "wan_deny_counter_delta": counter_delta,
             "forbidden_host_publishes": forbidden_publishes,
@@ -210,7 +266,8 @@ def test_no_mgmt_exposed_to_internet(evidence):
         counter_after=int(after_match.group(1)),
     )
     assert service.returncode == 0, "DC SSH positive precondition failed"
-    assert wg_ready, "WireGuard positive control failed"
+    assert wg_ready and peer_count > 0, "WireGuard has no operational interface/configured peer"
+    assert recent_handshake, "WireGuard requires at least one real peer handshake within the last 10 minutes"
     assert negative.returncode != 0 and counter_delta > 0, "WAN SSH was not denied by fw-core"
     assert not forbidden_publishes, f"management/backend ports are published on the host: {forbidden_publishes}"
 

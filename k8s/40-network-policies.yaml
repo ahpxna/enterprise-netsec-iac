@@ -1,0 +1,225 @@
+# Namespace micro-segmentation for the Kubernetes security plane.
+# NetworkPolicy enforcement for hostNetwork pods is CNI-dependent; Suricata
+# and WireGuard remain documented host-network exceptions, while all regular
+# pod-network workloads are default-denied and explicitly opened below.
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny
+  namespace: cxyz-security
+spec:
+  podSelector: {}
+  policyTypes: [Ingress, Egress]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-cluster-dns
+  namespace: cxyz-security
+spec:
+  podSelector: {}
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - { protocol: UDP, port: 53 }
+        - { protocol: TCP, port: 53 }
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: traefik-ingress-egress
+  namespace: cxyz-security
+spec:
+  podSelector: { matchLabels: { app: traefik } }
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - ports:
+        - { protocol: TCP, port: 80 }
+        - { protocol: TCP, port: 443 }
+  egress:
+    - to:
+        - podSelector: { matchLabels: { app: authentik-server } }
+      ports:
+        - { protocol: TCP, port: 9000 }
+    # Generic clusters expose the Kubernetes API outside the pod CIDR. Keep
+    # TCP/443 egress so Traefik's Kubernetes providers can watch the API.
+    - ports:
+        - { protocol: TCP, port: 443 }
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: authentik-server
+  namespace: cxyz-security
+spec:
+  podSelector: { matchLabels: { app: authentik-server } }
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from:
+        - podSelector: { matchLabels: { app: traefik } }
+      ports:
+        - { protocol: TCP, port: 9000 }
+  egress:
+    - to:
+        - podSelector: { matchLabels: { app: authentik-postgres } }
+      ports:
+        - { protocol: TCP, port: 5432 }
+    - to:
+        - podSelector: { matchLabels: { app: authentik-redis } }
+      ports:
+        - { protocol: TCP, port: 6379 }
+    - ports:
+        - { protocol: TCP, port: 443 }
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: authentik-worker
+  namespace: cxyz-security
+spec:
+  podSelector: { matchLabels: { app: authentik-worker } }
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - podSelector: { matchLabels: { app: authentik-postgres } }
+      ports:
+        - { protocol: TCP, port: 5432 }
+    - to:
+        - podSelector: { matchLabels: { app: authentik-redis } }
+      ports:
+        - { protocol: TCP, port: 6379 }
+    - ports:
+        - { protocol: TCP, port: 443 }
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: authentik-postgres
+  namespace: cxyz-security
+spec:
+  podSelector: { matchLabels: { app: authentik-postgres } }
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector: { matchLabels: { app: authentik-server } }
+        - podSelector: { matchLabels: { app: authentik-worker } }
+      ports:
+        - { protocol: TCP, port: 5432 }
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: authentik-redis
+  namespace: cxyz-security
+spec:
+  podSelector: { matchLabels: { app: authentik-redis } }
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector: { matchLabels: { app: authentik-server } }
+        - podSelector: { matchLabels: { app: authentik-worker } }
+      ports:
+        - { protocol: TCP, port: 6379 }
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: wazuh-indexer
+  namespace: cxyz-security
+spec:
+  podSelector: { matchLabels: { app: wazuh-indexer } }
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector: { matchLabels: { app: wazuh-manager } }
+        - podSelector: { matchLabels: { app: wazuh-dashboard } }
+      ports:
+        - { protocol: TCP, port: 9200 }
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: wazuh-manager
+  namespace: cxyz-security
+spec:
+  podSelector: { matchLabels: { app: wazuh-manager } }
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from:
+        - podSelector: { matchLabels: { app: suricata } }
+      ports:
+        - { protocol: TCP, port: 1514 }
+        - { protocol: TCP, port: 1515 }
+    - from:
+        - podSelector: { matchLabels: { app: wazuh-dashboard } }
+      ports:
+        - { protocol: TCP, port: 55000 }
+  egress:
+    - to:
+        - podSelector: { matchLabels: { app: wazuh-indexer } }
+      ports:
+        - { protocol: TCP, port: 9200 }
+    - ports:
+        - { protocol: TCP, port: 443 }
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: wazuh-dashboard
+  namespace: cxyz-security
+spec:
+  podSelector: { matchLabels: { app: wazuh-dashboard } }
+  policyTypes: [Ingress, Egress]
+  ingress:
+    # Service remains ClusterIP-only; this keeps kubectl port-forward usable.
+    - ports:
+        - { protocol: TCP, port: 5601 }
+  egress:
+    - to:
+        - podSelector: { matchLabels: { app: wazuh-indexer } }
+      ports:
+        - { protocol: TCP, port: 9200 }
+    - to:
+        - podSelector: { matchLabels: { app: wazuh-manager } }
+      ports:
+        - { protocol: TCP, port: 55000 }
+    - ports:
+        - { protocol: TCP, port: 443 }
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: suricata-wazuh-agent
+  namespace: cxyz-security
+spec:
+  podSelector: { matchLabels: { app: suricata } }
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - podSelector: { matchLabels: { app: wazuh-manager } }
+      ports:
+        - { protocol: TCP, port: 1514 }
+        - { protocol: TCP, port: 1515 }
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: wireguard-vpn
+  namespace: cxyz-security
+spec:
+  podSelector: { matchLabels: { app: wireguard } }
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - ports:
+        - { protocol: UDP, port: 51820 }
+  # VPN replies and routed tunnel traffic may target arbitrary remote peers.
+  egress:
+    - {}

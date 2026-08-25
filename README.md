@@ -35,8 +35,9 @@ verified local `ansible/inventory/known_hosts` file before it will connect.
 an alias for the Containerlab `make audit` suite.
 
 Path C has schema-valid manifests but has not completed live-cluster
-validation. Resource sizing, readiness probes, and security-policy behavior
-remain open validation items.
+validation. NetworkPolicy, service health probes, and Suricata-to-Wazuh agent
+forwarding are now declared in source; their CNI/runtime behavior and resource
+sizing still require validation on the target cluster.
 
 ## Quick start
 
@@ -60,6 +61,11 @@ The lifecycle is:
 3. `make up` starts the routed fabric and security services.
 4. `make configure` applies CIS-aligned Ansible roles.
 5. `make audit` runs policy tests, live validation, attack replay, and report generation.
+
+`VPN-01` is intentionally a live assurance check: before `make validate`/`make audit`,
+connect at least one configured WireGuard peer so the test can prove a real
+handshake occurred within the previous 10 minutes. An idle interface alone no
+longer satisfies the control.
 
 The generated compliance report is written to
 `evidence/COMPLIANCE-REPORT.md`. The Wazuh dashboard is served at

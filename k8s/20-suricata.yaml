@@ -18,6 +18,7 @@ spec:
       labels: { app: suricata }
     spec:
       hostNetwork: true
+      dnsPolicy: ClusterFirstWithHostNet
       containers:
         - name: suricata
           image: jasonish/suricata:8.0.1
@@ -32,7 +33,45 @@ spec:
           resources:
             requests: { cpu: "250m", memory: "512Mi" }
             limits: { cpu: "1", memory: "1Gi" }
+        - name: wazuh-agent
+          image: wazuh/wazuh-agent:4.14.6
+          env:
+            - { name: WAZUH_MANAGER_SERVER, value: "wazuh-manager.cxyz-security.svc" }
+            - { name: WAZUH_REGISTRATION_SERVER, value: "wazuh-manager.cxyz-security.svc" }
+            - name: WAZUH_AGENT_NAME
+              valueFrom: { fieldRef: { fieldPath: metadata.name } }
+          command: ["/bin/sh", "-lc"]
+          args:
+            - |
+              set -eu
+              mkdir -p /wazuh-config-mount/etc
+              cat > /wazuh-config-mount/etc/ossec.conf <<EOF
+              <ossec_config>
+                <client>
+                  <server>
+                    <address>wazuh-manager.cxyz-security.svc</address>
+                    <port>1514</port>
+                    <protocol>tcp</protocol>
+                  </server>
+                  <enrollment>
+                    <enabled>yes</enabled>
+                    <manager_address>wazuh-manager.cxyz-security.svc</manager_address>
+                    <port>1515</port>
+                    <agent_name>CHANGE_AGENT_NAME</agent_name>
+                  </enrollment>
+                </client>
+                <localfile>
+                  <log_format>json</log_format>
+                  <location>/var/log/suricata/eve.json</location>
+                </localfile>
+              </ossec_config>
+              EOF
+              exec /init
+          volumeMounts:
+            - { name: logs, mountPath: /var/log/suricata, readOnly: true }
+            - { name: wazuh-agent-config, mountPath: /wazuh-config-mount/etc }
       volumes:
         - { name: config, configMap: { name: cxyz-suricata-config } }
         - { name: rules, configMap: { name: cxyz-suricata-rules } }
         - { name: logs, emptyDir: {} }
+        - { name: wazuh-agent-config, emptyDir: {} }

@@ -30,6 +30,9 @@ def make_target_body(name: str) -> str:
 
 
 lint_body = make_target_body("lint")
+dev_check_body = make_target_body("dev-check")
+if "bash scripts/dev_check.sh" not in dev_check_body:
+    fail("make dev-check must execute scripts/dev_check.sh")
 
 # These checks are cheap, deterministic source invariants. They must be present
 # in both developer lint and PR CI so one path cannot silently become weaker.
@@ -78,6 +81,21 @@ ci_tokens = {
 for label, token in ci_tokens.items():
     if token not in WORKFLOW:
         fail(f"GitHub Actions lost {label}")
+
+# Third-party Actions and the Batfish service are immutable references. Tags
+# can move and make the same repository commit execute different code later.
+supply_chain_tokens = {
+    "checkout v7.0.0 SHA": "actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0",
+    "setup-python v7.0.0 SHA": "actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97",
+    "setup-terraform v4.0.1 SHA": "hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e",
+    "Terraform CLI pin": 'terraform_version: "1.15.9"',
+    "Batfish image digest": "batfish/allinone@sha256:445818fc17c0e24eb097387c84184334ad3fc42807de1ed9fef773762a0be515",
+}
+for label, token in supply_chain_tokens.items():
+    if token not in WORKFLOW:
+        fail(f"GitHub Actions lost immutable supply-chain pin: {label}")
+if "batfish/allinone:latest" in WORKFLOW:
+    fail("Batfish CI service must never use :latest")
 
 if ERRORS:
     print("CI contract check FAILED:", file=sys.stderr)

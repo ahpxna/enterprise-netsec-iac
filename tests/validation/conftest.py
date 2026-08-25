@@ -11,6 +11,7 @@ from datetime import datetime, timezone
 
 import pytest
 
+from compliance.evidence import automatic_payload, classify_result, mapped_control_for_nodeid
 from compliance.provenance import current_provenance
 
 
@@ -56,6 +57,7 @@ def evidence(request):
     request.node._evidence_started_at = utc_now()
     request.node._evidence_started_monotonic = time.monotonic()
     request.node._evidence_payload = {}
+    request.node._evidence_recorded = False
 
     def _record(
         *,
@@ -66,6 +68,7 @@ def evidence(request):
         counter_before: int | None = None,
         counter_after: int | None = None,
     ) -> None:
+        request.node._evidence_recorded = True
         request.node._evidence_payload = {
             "control_id": control,
             "assertion": assertion,
@@ -86,17 +89,24 @@ def pytest_runtest_makereport(item, call):
         return
 
     recorded = getattr(item, "_evidence_payload", {})
+    evidence_recorded = bool(getattr(item, "_evidence_recorded", False))
+    mapped_control = mapped_control_for_nodeid(item.nodeid)
     if not recorded:
-        return
+        if mapped_control is None:
+            return
+        recorded = automatic_payload(mapped_control)
 
-    if report.passed:
-        result = "PASS"
+    assertion_failure = call.excinfo is not None and call.excinfo.errisinstance(AssertionError)
+    result = classify_result(
+        passed=report.passed,
+        assertion_failure=assertion_failure,
+        evidence_recorded=evidence_recorded,
+    )
+    if result == "PASS":
         failure = None
-    elif call.excinfo is not None and call.excinfo.errisinstance(AssertionError):
-        result = "FAIL"
-        failure = report.longreprtext
+    elif report.passed and not evidence_recorded:
+        failure = "mapped control test passed without calling evidence(); refusing to emit PASS"
     else:
-        result = "ERROR"
         failure = report.longreprtext
 
     started_monotonic = getattr(item, "_evidence_started_monotonic", time.monotonic())

@@ -10,6 +10,7 @@ resources:
   - 30-traefik.yaml
   - 31-authentik.yaml
   - 32-wireguard.yaml
+  - 40-network-policies.yaml
 configMapGenerator:
   - name: cxyz-wazuh-decoders
     files:

@@ -61,18 +61,25 @@ kubectl -n cxyz-security get svc
 
 ## Current validation status and known gaps
 
-- **Live-cluster validation is pending.** The manifests are schema-valid YAML
-  but are not yet proven against the Wazuh, Authentik, and Traefik container
-  entrypoints on Kubernetes. Resource limits and readiness probes may require
-  iteration during the first deployment.
+- **Live-cluster validation is still pending.** Static rendering now covers
+  default-deny NetworkPolicy, core workload startup/readiness/liveness probes,
+  and Suricata EVE forwarding through a same-pod Wazuh agent, but first-cluster
+  deployment is still required before Path C can claim runtime parity.
 - **Wazuh parity is incomplete.** The Kubernetes manifests still need the
   full certificate/API/config wiring used by the Compose deployment before
   this path can claim the same authenticated manager/indexer/dashboard trust.
-- **Suricata-to-Wazuh delivery is incomplete.** Suricata currently writes EVE
-  output to its pod-local `emptyDir`; add an authenticated log shipper or
-  equivalent transport before treating DET-01 as implemented on Kubernetes.
-- No `PriorityClass`, `NetworkPolicy`, or `PodDisruptionBudget` yet. This is
-  acceptable for the lab scope but not for production.
+- **Suricata-to-Wazuh delivery is now wired but not yet live-proven.** A
+  Wazuh-agent sidecar shares Suricata's EVE `emptyDir`, enrolls with the manager,
+  and sends events over the Wazuh secure agent channel on TCP/1514. The manager
+  must still gain the full certificate/API parity described above before Path C
+  can make the same end-to-end trust claim as Compose.
+- **NetworkPolicy now defaults the namespace to deny ingress/egress** and opens
+  the reviewed Traefik/Auth/PostgreSQL/Redis/Wazuh flows plus DNS. Suricata and
+  WireGuard are `hostNetwork` exceptions; enforcement of NetworkPolicy for
+  host-network pods is CNI-dependent and must be checked on the chosen cluster.
+- Core Wazuh, Authentik, Traefik, PostgreSQL, Redis, and WireGuard workloads now
+  have startup/readiness/liveness probes. `PriorityClass` and
+  `PodDisruptionBudget` remain future availability work.
 - WireGuard runs with `hostNetwork: true` and `NET_ADMIN`, but not
   `privileged: true`. Treat that capability as a documented exception and
   keep the rest of the namespace under a stricter Pod Security policy.

@@ -70,6 +70,14 @@ harden: ## Apply CIS-aligned hardening only
 	cd $(ANSIBLE_DIR) && ansible-playbook playbooks/20-security.yml
 
 # ------------------------------------------------------------ validate
+.PHONY: dev-check
+dev-check: ## macOS-friendly CI parity gate without KVM/libvirt/containerlab/nftables
+	bash scripts/dev_check.sh
+
+.PHONY: supply-chain-scan
+supply-chain-scan: ## Generate CycloneDX SBOM + fail on HIGH/CRITICAL IaC findings (requires Trivy)
+	bash scripts/supply_chain_scan.sh
+
 .PHONY: lint
 lint: ## Static checks: yamllint, ansible-lint, terraform, gitleaks
 	python scripts/render_fabric.py --check

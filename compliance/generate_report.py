@@ -6,6 +6,7 @@ import argparse
 import json
 import pathlib
 import sys
+from datetime import datetime
 
 import yaml
 
@@ -21,6 +22,26 @@ REQUIRED_FIELDS = {
     "source_tree_sha256", "control_catalog_sha256", "topology_sha256",
     "test_suite_sha256", "environment",
 }
+
+
+def _parse_timestamp(value: object) -> datetime | None:
+    if not isinstance(value, str) or not value:
+        return None
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    return parsed if parsed.tzinfo is not None else None
+
+
+def _validate_timestamps(payload: dict) -> str | None:
+    started = _parse_timestamp(payload.get("started_at"))
+    ended = _parse_timestamp(payload.get("ended_at"))
+    if started is None or ended is None:
+        return "started_at/ended_at must be timezone-aware ISO-8601 timestamps"
+    if ended < started:
+        return "ended_at precedes started_at"
+    return None
 
 
 def latest_run(runs_root: pathlib.Path) -> pathlib.Path | None:
@@ -49,7 +70,22 @@ def load_evidence(run: pathlib.Path | None) -> tuple[list[dict], list[str]]:
         if payload["result"] not in VALID_RESULTS:
             errors.append(f"{path.name}: invalid result {payload['result']!r}")
             continue
+        timestamp_error = _validate_timestamps(payload)
+        if timestamp_error:
+            errors.append(f"{path.name}: {timestamp_error}")
+            continue
         evidence.append(payload)
+
+    seen: dict[tuple[str, str], str] = {}
+    for item in evidence:
+        key = (str(item["control_id"]), str(item["test_id"]))
+        if key in seen:
+            errors.append(
+                f"duplicate evidence for {key[0]} / {key[1]}: "
+                f"{seen[key]} and another artifact in the same run"
+            )
+        else:
+            seen[key] = key[1]
     return evidence, errors
 
 
@@ -77,8 +113,8 @@ def validate_provenance(evidence: list[dict], run: pathlib.Path | None, *, stric
                 errors.append(f"{label}: stale {field}")
     if profile == "path-b" and baseline.get("environment") != "path-b":
         errors.append("evidence environment is not Path B")
-    if profile == "path-a" and baseline.get("environment") == "path-b":
-        errors.append("Path B evidence cannot satisfy a Path A report")
+    if profile == "path-a" and baseline.get("environment") not in {"local-containerlab", "path-a"}:
+        errors.append("evidence environment is not Path A")
     if strict:
         if baseline.get("git_sha") == "unknown":
             errors.append("strict report requires a resolvable Git SHA")

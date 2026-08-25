@@ -165,6 +165,80 @@ for key in ("POSTGRES_USER", "AUTHENTIK_POSTGRESQL__USER", "AUTHENTIK_POSTGRESQL
     if key not in authentik_k8s:
         fail(f"Kubernetes Authentik deployment lacks explicit dependency setting {key}")
 
+# Path C must retain namespace micro-segmentation and health semantics.
+kustomization = yaml.safe_load(text("k8s/kustomization.yaml"))
+if "40-network-policies.yaml" not in (kustomization.get("resources") or []):
+    fail("Kubernetes NetworkPolicy manifest is not included by k8s/kustomization.yaml")
+network_policies = [doc for doc in k8s_documents if doc.get("kind") == "NetworkPolicy"]
+policy_names = {doc.get("metadata", {}).get("name") for doc in network_policies}
+required_policies = {
+    "default-deny", "allow-cluster-dns", "traefik-ingress-egress",
+    "authentik-server", "authentik-worker", "authentik-postgres",
+    "authentik-redis", "wazuh-indexer", "wazuh-manager",
+    "wazuh-dashboard", "suricata-wazuh-agent", "wireguard-vpn",
+}
+missing_policies = required_policies - policy_names
+if missing_policies:
+    fail(f"Kubernetes NetworkPolicy set is incomplete: {', '.join(sorted(missing_policies))}")
+default_deny = next((doc for doc in network_policies if doc.get("metadata", {}).get("name") == "default-deny"), {})
+default_spec = default_deny.get("spec", {})
+if default_spec.get("podSelector") != {} or set(default_spec.get("policyTypes", [])) != {"Ingress", "Egress"}:
+    fail("Kubernetes default-deny must select every pod and deny both ingress and egress by default")
+
+probe_requirements = {
+    ("StatefulSet", "wazuh-indexer", "wazuh-indexer"),
+    ("Deployment", "wazuh-manager", "wazuh-manager"),
+    ("Deployment", "wazuh-dashboard", "wazuh-dashboard"),
+    ("Deployment", "traefik", "traefik"),
+    ("StatefulSet", "authentik-postgres", "postgres"),
+    ("Deployment", "authentik-redis", "redis"),
+    ("Deployment", "authentik-server", "authentik-server"),
+    ("Deployment", "authentik-worker", "authentik-worker"),
+    ("Deployment", "wireguard", "wireguard"),
+}
+for document in k8s_documents:
+    kind = document.get("kind")
+    name = document.get("metadata", {}).get("name", "")
+    if kind not in {"Deployment", "StatefulSet", "DaemonSet"}:
+        continue
+    containers = document.get("spec", {}).get("template", {}).get("spec", {}).get("containers", []) or []
+    for container in containers:
+        key = (kind, name, container.get("name", ""))
+        if key in probe_requirements:
+            for probe in ("startupProbe", "readinessProbe", "livenessProbe"):
+                if probe not in container:
+                    fail(f"Kubernetes workload {name}/{container.get('name')} lacks {probe}")
+
+suricata_k8s = text("k8s/20-suricata.yaml")
+for token in (
+    "dnsPolicy: ClusterFirstWithHostNet",
+    "name: wazuh-agent",
+    "wazuh/wazuh-agent:4.14.6",
+    "WAZUH_MANAGER_SERVER",
+    "WAZUH_REGISTRATION_SERVER",
+    "WAZUH_AGENT_NAME",
+    "<location>/var/log/suricata/eve.json</location>",
+    "<protocol>tcp</protocol>",
+):
+    if token not in suricata_k8s:
+        fail(f"Kubernetes Suricata-to-Wazuh agent delivery lost required wiring: {token}")
+if "agent-events, port: 1514, protocol: TCP" not in text("k8s/10-wazuh.yaml"):
+    fail("Kubernetes Wazuh secure agent event service must use TCP/1514")
+
+# Collection resolution is exact so a future Galaxy release cannot silently
+# change lint/runtime semantics for the same repository commit.
+requirements = yaml.safe_load(text("ansible/requirements.yml"))["collections"]
+expected_collections = {
+    "community.docker": "5.2.2",
+    "community.general": "13.3.0",
+    "ansible.posix": "2.2.2",
+    "vyos.vyos": "6.0.0",
+}
+resolved = {item.get("name"): str(item.get("version")) for item in requirements}
+for collection, version in expected_collections.items():
+    if resolved.get(collection) != version:
+        fail(f"Ansible collection {collection} must remain pinned to {version}")
+
 
 # Path B Terraform state must never contain long-lived routing credentials.
 tf_main = text("terraform/vyos-fabric/main.tf")

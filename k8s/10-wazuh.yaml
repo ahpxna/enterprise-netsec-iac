@@ -27,6 +27,18 @@ spec:
           env:
             - { name: OPENSEARCH_JAVA_OPTS, value: "-Xms1g -Xmx1g" }
           ports: [{ containerPort: 9200 }]
+          startupProbe:
+            tcpSocket: { port: 9200 }
+            periodSeconds: 10
+            failureThreshold: 60
+          readinessProbe:
+            tcpSocket: { port: 9200 }
+            periodSeconds: 10
+            failureThreshold: 6
+          livenessProbe:
+            tcpSocket: { port: 9200 }
+            periodSeconds: 20
+            failureThreshold: 6
           volumeMounts:
             - { name: data, mountPath: /var/lib/wazuh-indexer }
           resources:
@@ -69,10 +81,22 @@ spec:
             - name: INDEXER_PASSWORD
               valueFrom: { secretKeyRef: { name: cxyz-security-secrets, key: WAZUH_INDEXER_PASSWORD } }
           ports:
-            - { containerPort: 1514, protocol: UDP }
+            - { containerPort: 1514, protocol: TCP }
             - { containerPort: 1515 }
             - { containerPort: 514, protocol: UDP }  # Wazuh local syslog input only; not DET-02 TLS transport
             - { containerPort: 55000 }
+          startupProbe:
+            tcpSocket: { port: 55000 }
+            periodSeconds: 10
+            failureThreshold: 60
+          readinessProbe:
+            tcpSocket: { port: 55000 }
+            periodSeconds: 10
+            failureThreshold: 6
+          livenessProbe:
+            tcpSocket: { port: 55000 }
+            periodSeconds: 20
+            failureThreshold: 6
           volumeMounts:
             - { name: decoders, mountPath: /var/ossec/etc/decoders/local, readOnly: true }
             - { name: rules, mountPath: /var/ossec/etc/rules/local, readOnly: true }
@@ -92,7 +116,7 @@ spec:
   selector: { app: wazuh-manager }
   ports:
     - { name: syslog-udp, port: 514, protocol: UDP }
-    - { name: agent-events, port: 1514, protocol: UDP }
+    - { name: agent-events, port: 1514, protocol: TCP }
     - { name: agent-enroll, port: 1515 }
     - { name: api, port: 55000 }
 ---
@@ -119,6 +143,18 @@ spec:
             - name: DASHBOARD_PASSWORD
               valueFrom: { secretKeyRef: { name: cxyz-security-secrets, key: WAZUH_DASHBOARD_PASSWORD } }
           ports: [{ containerPort: 5601 }]
+          startupProbe:
+            tcpSocket: { port: 5601 }
+            periodSeconds: 10
+            failureThreshold: 60
+          readinessProbe:
+            tcpSocket: { port: 5601 }
+            periodSeconds: 10
+            failureThreshold: 6
+          livenessProbe:
+            tcpSocket: { port: 5601 }
+            periodSeconds: 20
+            failureThreshold: 6
 ---
 apiVersion: v1
 kind: Service
