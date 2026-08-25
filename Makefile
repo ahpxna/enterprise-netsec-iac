@@ -79,6 +79,9 @@ lint: ## Static checks: yamllint, ansible-lint, terraform, gitleaks
 	python scripts/check_vyos_boot.py
 	python scripts/check_path_b_intent.py
 	python scripts/security_static_checks.py
+	python scripts/check_ci_contract.py
+	python -m compileall -q scripts compliance tests
+	find scripts clab/configs -type f -name '*.sh' -print0 | xargs -0 -n1 bash -n
 	python compliance/check_wiring.py
 	python -m pytest tests/unit -q
 	docker compose --env-file .env.example --profile siem --profile ids --profile ztna --profile dmz config --quiet

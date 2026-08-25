@@ -109,6 +109,47 @@ if "k8s/01-secrets.yaml" not in text(".gitignore").splitlines():
 for document in k8s_documents:
     kind = document.get("kind")
     metadata = document.get("metadata", {})
+    name = metadata.get("name", "")
+
+    if kind in {"Deployment", "StatefulSet", "DaemonSet"}:
+        pod_spec = document.get("spec", {}).get("template", {}).get("spec", {})
+        if pod_spec.get("hostPID") is True:
+            fail(f"Kubernetes workload {name} must not use hostPID")
+        if pod_spec.get("hostIPC") is True:
+            fail(f"Kubernetes workload {name} must not use hostIPC")
+        for volume in pod_spec.get("volumes", []) or []:
+            if isinstance(volume, dict) and "hostPath" in volume:
+                fail(f"Kubernetes workload {name} must not mount hostPath volumes")
+
+        host_network_allowlist = {("DaemonSet", "suricata"), ("Deployment", "wireguard")}
+        if pod_spec.get("hostNetwork") is True and (kind, name) not in host_network_allowlist:
+            fail(f"Kubernetes workload {name} uses hostNetwork outside the reviewed allowlist")
+
+        capability_allowlist = {
+            ("DaemonSet", "suricata", "suricata"): {"NET_ADMIN", "NET_RAW", "SYS_NICE"},
+            ("Deployment", "wireguard", "wireguard"): {"NET_ADMIN"},
+        }
+        pod_containers = list(pod_spec.get("containers", []) or []) + list(pod_spec.get("initContainers", []) or [])
+        for container in pod_containers:
+            if not isinstance(container, dict):
+                continue
+            container_name = container.get("name", "")
+            security_context = container.get("securityContext", {}) or {}
+            if security_context.get("privileged") is True:
+                fail(f"Kubernetes container {name}/{container_name} must not be privileged")
+            added = set((security_context.get("capabilities", {}) or {}).get("add", []) or [])
+            allowed = capability_allowlist.get((kind, name, container_name), set())
+            unexpected = added - allowed
+            if unexpected:
+                fail(
+                    f"Kubernetes container {name}/{container_name} adds unreviewed capabilities: "
+                    f"{', '.join(sorted(unexpected))}"
+                )
+            if name == "traefik":
+                args = container.get("args", []) or []
+                if any(str(arg).strip().lower() == "--api.insecure=true" for arg in args):
+                    fail("Traefik Kubernetes dashboard must not enable api.insecure")
+
     if kind == "Service" and metadata.get("name") == "traefik":
         spec = document.get("spec", {})
         if spec.get("type") == "NodePort":
