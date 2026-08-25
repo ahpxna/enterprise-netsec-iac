@@ -1,6 +1,14 @@
 ---
 galaxy_info:
-  author: CompanyXYZ
+  author: CompanyXYZ-NG
+  role_name: vyos_syslog_tls
   description: Configure VyOS 1.4 mutual-TLS remote syslog
+  license: MIT
   min_ansible_version: "2.15"
+  platforms:
+    - name: GenericLinux
+      versions: [all]
 dependencies: []
+collections:
+  - vyos.vyos
+  - ansible.netcommon
