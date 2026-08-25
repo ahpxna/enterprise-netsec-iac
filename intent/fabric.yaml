@@ -7,6 +7,13 @@ management:
   subnet: 10.1.1.0/24
   gateway: 10.1.1.1
 
+# Host-only/test-harness management for untrusted endpoints on Path B.
+# These nodes must never share the trusted OOB L2 with routers/firewalls.
+endpoint_management:
+  network: cxyz_endpoint_mgmt
+  subnet: 10.1.2.0/24
+  gateway: 10.1.2.1
+
 links:
   isp1_edge:
     network_name: cxyz-isp1
@@ -127,7 +134,8 @@ nodes:
       - {link: vlan40, address: 192.168.40.253/24}
   pc1:
     role: endpoint
-    mgmt_ip: 10.1.1.111
+    management_plane: endpoint
+    mgmt_ip: 10.1.2.111
     attachments:
       - {link: vlan10, address: 192.168.10.1/24}
     routes:
@@ -158,7 +166,8 @@ nodes:
       - {to: 192.168.0.0/16, via: 10.255.0.9}
   dmz-web:
     role: endpoint
-    mgmt_ip: 10.1.1.61
+    management_plane: endpoint
+    mgmt_ip: 10.1.2.61
     attachments:
       - {link: dmz, address: 195.1.1.161/29}
     routes:

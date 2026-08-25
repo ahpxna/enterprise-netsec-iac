@@ -12,6 +12,7 @@ docker/zero-trust-gateway/secrets/
 docker/syslog-relay/certs/
 docker/wazuh/certs/
 docker/wazuh/generated/
+k8s/01-secrets.yaml
 *.decrypted.*
 
 # ---- Terraform ----

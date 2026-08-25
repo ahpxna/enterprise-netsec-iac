@@ -13,7 +13,7 @@ controls:
       - NIST-800-41r1
       - ISO-27002-8.22
     ref: default-deny + segmentation
-    objective: User VLAN cannot reach DC management/RADIUS ports; only DNS/NTP.
+    objective: User VLAN cannot reach DC management/RADIUS ports or the trusted OOB plane; only approved services such as DNS/NTP.
     implemented_by: clab/configs/fw-core.nft
     verified_by: test_segmentation.py::test_user_vlan_blocked_from_radius
     severity: high
@@ -24,7 +24,7 @@ controls:
       - NIST-800-41r1
       - ISO-27002-8.22
     ref: DMZ isolation
-    objective: DMZ web host cannot initiate connections into internal zones.
+    objective: DMZ web host cannot initiate connections into internal zones or the trusted OOB management plane.
     implemented_by: clab/configs/fw-dmz.nft
     verified_by: test_segmentation.py::test_dmz_cannot_pivot_internal
     severity: high
@@ -113,7 +113,7 @@ controls:
       - NIST-800-53r5-SC-45
       - ISO-27002-8.17
     ref: authenticated time
-    objective: NTP uses NTS/authenticated upstreams so log timestamps can't be spoofed.
+    objective: NTP uses NTS/authenticated upstreams and proves an active synchronized source with bounded clock offset.
     implemented_by: ansible/roles/ntp_secure
     verified_by: test_hardening.py::test_ntp_authenticated
     severity: moderate
@@ -147,7 +147,7 @@ controls:
       - NIST-800-53-AC-17
       - ISO-27002-6.7
     ref: secure remote access
-    objective: Remote admin path is WireGuard only; no management port on the Internet.
+    objective: Remote admin path is WireGuard only, with a recent real peer handshake and no management port on the Internet.
     implemented_by: docker-compose.yml#wireguard,clab/configs/fw-core.nft
     verified_by: test_hardening.py::test_no_mgmt_exposed_to_internet
     severity: high

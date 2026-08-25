@@ -44,9 +44,10 @@ wazuh-config: secrets ## Generate Wazuh TLS certificates and password hashes
 	bash scripts/render_wazuh_users.sh
 
 .PHONY: render
-render: ## Render Path A and Batfish models from canonical fabric intent
+render: ## Render Path A, Batfish, and Kubernetes-local generated assets
 	python scripts/render_fabric.py
 	python scripts/render_batfish_snapshot.py
+	python scripts/render_k8s_assets.py
 
 .PHONY: runtime-config
 runtime-config: secrets ## Render secret-bearing Path A runtime configs outside Git
@@ -74,6 +75,7 @@ lint: ## Static checks: yamllint, ansible-lint, terraform, gitleaks
 	python scripts/render_fabric.py --check
 	python scripts/render_batfish_snapshot.py --check
 	python scripts/render_vm_inventory.py --check
+	python scripts/render_k8s_assets.py --check
 	python scripts/check_vyos_boot.py
 	python scripts/check_path_b_intent.py
 	python scripts/security_static_checks.py
@@ -168,8 +170,12 @@ vm-down: ## Destroy the real VyOS VM fabric
 # ---------------------------------------------------------- kubernetes path
 # Alternative to `make security`: same SIEM/IDS/ZTNA stack, on k8s. See
 # k8s/README.md for cluster prereqs (k3s recommended) and CRD setup.
+.PHONY: k8s-assets
+k8s-assets: ## Refresh Kustomize-local generated config from canonical Docker IDS/SIEM sources
+	python scripts/render_k8s_assets.py
+
 .PHONY: k8s-up
-k8s-up: ## Deploy the security plane (Wazuh/Suricata/Traefik/Authentik/WG) to k8s
+k8s-up: k8s-assets ## Deploy the security plane (Wazuh/Suricata/Traefik/Authentik/WG) to k8s
 	kubectl apply -k k8s/
 	@echo "==> kubectl -n cxyz-security get pods -w"
 

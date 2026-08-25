@@ -106,7 +106,7 @@ topology:
       cmd: bash /usr/local/bin/cxyz-frr-start
     pc1:
       kind: linux
-      mgmt-ipv4: 10.1.1.111
+      network-mode: none
       image: wbitt/network-multitool:sha-2e883bc
       exec:
         - apk add --no-cache python3 rsyslog rsyslog-tls netcat-openbsd freeradius-utils
@@ -147,7 +147,7 @@ topology:
         - nft -f /etc/nftables/policy.nft
     dmz-web:
       kind: linux
-      mgmt-ipv4: 10.1.1.61
+      network-mode: none
       image: wbitt/network-multitool:sha-2e883bc
       exec:
         - apk add --no-cache python3 rsyslog rsyslog-tls netcat-openbsd

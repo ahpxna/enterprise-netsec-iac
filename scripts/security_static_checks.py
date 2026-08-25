@@ -2,9 +2,12 @@
 """Fail-closed repository invariants for previously audited security regressions."""
 from __future__ import annotations
 
+import ipaddress
 import pathlib
 import re
 import sys
+
+import yaml
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 ERRORS: list[str] = []
@@ -29,6 +32,59 @@ if re.search(r"(?m)^\s*image:\s*\S+:latest\s*$", compose):
 if '127.0.0.1:5601:5601' not in compose:
     fail("Wazuh dashboard must remain loopback-only in the Docker path")
 
+compose_model = yaml.safe_load(compose)
+services = compose_model.get("services", {})
+relay_volumes = services.get("syslog-relay", {}).get("volumes", [])
+relay_mounts = [item if isinstance(item, str) else str(item) for item in relay_volumes]
+if any("docker/syslog-relay/certs:/run/certs" in item for item in relay_mounts):
+    fail("syslog relay must not receive the entire PKI directory")
+if any("ca.key" in item or "/clients" in item for item in relay_mounts):
+    fail("syslog relay must never receive the CA signing key or client private-key directory")
+for required in ("ca.crt:/run/certs/ca.crt:ro", "relay.crt:/run/certs/relay.crt:ro", "relay.key:/run/certs/relay.key:ro"):
+    if not any(required in item for item in relay_mounts):
+        fail(f"syslog relay is missing least-privilege certificate mount {required}")
+
+def service_networks(name: str) -> set[str]:
+    value = services.get(name, {}).get("networks", [])
+    if isinstance(value, dict):
+        return set(value)
+    return set(value or [])
+
+if service_networks("dmz-web") & service_networks("authentik-postgres"):
+    fail("protected DMZ application must not share a Docker network with the identity database")
+if service_networks("dmz-web") & service_networks("authentik-redis"):
+    fail("protected DMZ application must not share a Docker network with the identity cache")
+if service_networks("traefik").isdisjoint(service_networks("dmz-web")):
+    fail("Traefik must retain a private network path to the protected DMZ application")
+if service_networks("traefik").isdisjoint(service_networks("authentik-server")):
+    fail("Traefik must retain a private network path to Authentik forward-auth")
+identity_env = services.get("authentik-server", {}).get("environment", {})
+for key in ("AUTHENTIK_POSTGRESQL__HOST", "AUTHENTIK_POSTGRESQL__USER", "AUTHENTIK_POSTGRESQL__NAME", "AUTHENTIK_REDIS__HOST"):
+    if key not in identity_env:
+        fail(f"Authentik server lacks explicit dependency setting {key}")
+postgres_env = services.get("authentik-postgres", {}).get("environment", {})
+if postgres_env.get("POSTGRES_USER") != "authentik":
+    fail("Authentik PostgreSQL must create the same explicit database user Authentik uses")
+
+intent = yaml.safe_load(text("intent/fabric.yaml"))
+trusted_mgmt = ipaddress.ip_network(intent["management"]["subnet"])
+endpoint_mgmt = ipaddress.ip_network(intent["endpoint_management"]["subnet"])
+if trusted_mgmt.overlaps(endpoint_mgmt):
+    fail("trusted and endpoint management planes must use non-overlapping subnets")
+for endpoint in ("pc1", "dmz-web"):
+    node = intent["nodes"][endpoint]
+    if node.get("management_plane") != "endpoint":
+        fail(f"{endpoint} must use the isolated endpoint management plane")
+    if ipaddress.ip_address(node["mgmt_ip"]) not in endpoint_mgmt:
+        fail(f"{endpoint} management address is outside endpoint_management.subnet")
+
+clab_model = yaml.safe_load(text("clab/companyxyz.clab.yml"))
+clab_nodes = clab_model["topology"]["nodes"]
+for endpoint in ("pc1", "dmz-web"):
+    node = clab_nodes[endpoint]
+    if node.get("network-mode") != "none" or "mgmt-ipv4" in node:
+        fail(f"Path A {endpoint} must not attach to the trusted Containerlab management bridge")
+
 relay = text("docker/syslog-relay/rsyslog.conf")
 if 'StreamDriver.AuthMode="x509/name"' not in relay or "PermittedPeer" not in relay:
     fail("syslog relay must authenticate client certificates with an allowlist")
@@ -51,6 +107,7 @@ for name in ("fw-core.boot", "fw-dmz.boot"):
         fail(f"{name} lacks the reviewed VyOS 1.4 IPv4 forward filter")
 
 k8s_files = list((ROOT / "k8s").glob("*.yaml")) + list((ROOT / "k8s").glob("*.yml"))
+k8s_documents: list[dict] = []
 for path in k8s_files:
     body = path.read_text()
     if re.search(r"(?m)^\s*image:\s*\S+:latest\s*$", body):
@@ -59,6 +116,33 @@ for path in k8s_files:
         fail(f"{path.relative_to(ROOT)} uses privileged: true")
     if "SYS_MODULE" in body:
         fail(f"{path.relative_to(ROOT)} grants SYS_MODULE")
+    for document in yaml.safe_load_all(body):
+        if isinstance(document, dict):
+            k8s_documents.append(document)
+
+kustomization = text("k8s/kustomization.yaml")
+if "../" in kustomization:
+    fail("Kustomize inputs must remain inside k8s/ so default LoadRestrictionsRootOnly works")
+if "k8s/01-secrets.yaml" not in text(".gitignore").splitlines():
+    fail("documented local Kubernetes Secret file k8s/01-secrets.yaml must be gitignored")
+
+for document in k8s_documents:
+    kind = document.get("kind")
+    metadata = document.get("metadata", {})
+    if kind == "Service" and metadata.get("name") == "traefik":
+        spec = document.get("spec", {})
+        if spec.get("type") == "NodePort":
+            exposed_names = {port.get("name") for port in spec.get("ports", [])}
+            if "dashboard" in exposed_names:
+                fail("Traefik dashboard must not receive an automatically allocated Kubernetes NodePort")
+    if kind == "IngressRoute" and metadata.get("name") == "authentik":
+        if "tls" not in document.get("spec", {}):
+            fail("Authentik websecure IngressRoute must explicitly enable TLS")
+
+authentik_k8s = text("k8s/31-authentik.yaml")
+for key in ("POSTGRES_USER", "AUTHENTIK_POSTGRESQL__USER", "AUTHENTIK_POSTGRESQL__NAME", "AUTHENTIK_REDIS__HOST"):
+    if key not in authentik_k8s:
+        fail(f"Kubernetes Authentik deployment lacks explicit dependency setting {key}")
 
 
 # Path B Terraform state must never contain long-lived routing credentials.

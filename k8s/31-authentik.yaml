@@ -23,6 +23,7 @@ spec:
         - name: postgres
           image: postgres:16-alpine
           env:
+            - { name: POSTGRES_USER, value: authentik }
             - name: POSTGRES_PASSWORD
               valueFrom: { secretKeyRef: { name: cxyz-security-secrets, key: AUTHENTIK_POSTGRES_PASSWORD } }
             - { name: POSTGRES_DB, value: authentik }
@@ -84,8 +85,11 @@ spec:
             - name: AUTHENTIK_SECRET_KEY
               valueFrom: { secretKeyRef: { name: cxyz-security-secrets, key: AUTHENTIK_SECRET_KEY } }
             - { name: AUTHENTIK_POSTGRESQL__HOST, value: authentik-postgres }
+            - { name: AUTHENTIK_POSTGRESQL__USER, value: authentik }
+            - { name: AUTHENTIK_POSTGRESQL__NAME, value: authentik }
             - name: AUTHENTIK_POSTGRESQL__PASSWORD
               valueFrom: { secretKeyRef: { name: cxyz-security-secrets, key: AUTHENTIK_POSTGRES_PASSWORD } }
+            - { name: AUTHENTIK_REDIS__HOST, value: authentik-redis }
           ports: [{ containerPort: 9000 }]
 ---
 apiVersion: apps/v1
@@ -107,8 +111,11 @@ spec:
             - name: AUTHENTIK_SECRET_KEY
               valueFrom: { secretKeyRef: { name: cxyz-security-secrets, key: AUTHENTIK_SECRET_KEY } }
             - { name: AUTHENTIK_POSTGRESQL__HOST, value: authentik-postgres }
+            - { name: AUTHENTIK_POSTGRESQL__USER, value: authentik }
+            - { name: AUTHENTIK_POSTGRESQL__NAME, value: authentik }
             - name: AUTHENTIK_POSTGRESQL__PASSWORD
               valueFrom: { secretKeyRef: { name: cxyz-security-secrets, key: AUTHENTIK_POSTGRES_PASSWORD } }
+            - { name: AUTHENTIK_REDIS__HOST, value: authentik-redis }
 ---
 apiVersion: v1
 kind: Service
@@ -140,6 +147,7 @@ metadata:
   namespace: cxyz-security
 spec:
   entryPoints: [websecure]
+  tls: {}
   routes:
     - match: "Host(`sso.companyxyz.lab`)"
       kind: Rule

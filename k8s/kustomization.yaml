@@ -13,13 +13,13 @@ resources:
 configMapGenerator:
   - name: cxyz-wazuh-decoders
     files:
-      - ../docker/siem/decoders/cxyz_decoders.xml
+      - generated/cxyz_decoders.xml
   - name: cxyz-wazuh-rules
     files:
-      - ../docker/siem/rules/cxyz_rules.xml
+      - generated/cxyz_rules.xml
   - name: cxyz-suricata-config
     files:
-      - suricata.yaml=../docker/ids/suricata.yaml
+      - suricata.yaml=generated/suricata.yaml
   - name: cxyz-suricata-rules
     files:
-      - ../docker/ids/rules/cxyz.rules
+      - generated/cxyz.rules

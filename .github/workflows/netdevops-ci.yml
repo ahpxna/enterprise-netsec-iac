@@ -29,7 +29,9 @@ jobs:
           python scripts/render_fabric.py --check
           python scripts/render_batfish_snapshot.py --check
           python scripts/render_vm_inventory.py --check
+          python scripts/render_k8s_assets.py --check
           python scripts/check_vyos_boot.py
+          python scripts/check_path_b_intent.py
           python scripts/security_static_checks.py
 
       - name: Unit-test evidence semantics
@@ -44,6 +46,9 @@ jobs:
           --profile ztna
           --profile dmz
           config --quiet
+
+      - name: Render Kubernetes manifests with default Kustomize restrictions
+        run: kubectl kustomize k8s/ >/tmp/cxyz-k8s-rendered.yaml
 
       - name: yamllint
         run: yamllint .

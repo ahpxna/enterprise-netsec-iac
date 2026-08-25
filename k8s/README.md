@@ -1,12 +1,11 @@
 # k8s/ — Kubernetes path for the security plane
 
-Alternative to `docker-compose.yml` for the SIEM/IDS/ZTNA layer, same
-images and config as the compose file, restructured into real k8s
-primitives (StatefulSets for stateful stores, DaemonSet for the IDS
-sensor, Traefik's native Kubernetes CRD provider instead of its Docker
-provider). This path runs the security plane on Kubernetes rather than plain
-Docker Compose; the network fabric
-(containerlab or `terraform/vyos-fabric`) is unaffected either way.
+Experimental Kubernetes alternative for the SIEM/IDS/ZTNA layer. It shares
+reviewed images plus selected IDS/SIEM rules with the Compose path, but it is
+**not yet security-control-equivalent to Docker Compose**. StatefulSets,
+DaemonSets, and Traefik's native Kubernetes CRD provider are used where
+appropriate. The network fabric (containerlab or `terraform/vyos-fabric`) is
+unaffected either way.
 
 ## Recommended cluster for testing
 
@@ -36,10 +35,14 @@ export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
    $EDITOR 01-secrets.yaml   # or generate with kubectl create secret --from-literal
    kubectl apply -f 01-secrets.yaml
    ```
-3. **ConfigMaps from existing docker/ files** — `kustomization.yaml`'s
-   `configMapGenerator` does this automatically on `kubectl apply -k .`,
-   so the Wazuh rules/decoders and Suricata rules stay a single source
-   of truth shared with the docker-compose path.
+3. **Generated Kustomize-local assets** — Kustomize's default root-only
+   loader intentionally rejects `../docker/...` references. Keep the Docker
+   IDS/SIEM files canonical and refresh their checked-in Kubernetes mirrors:
+   ```bash
+   python scripts/render_k8s_assets.py
+   ```
+   `make k8s-up` performs this refresh automatically and CI runs `--check`
+   before rendering the manifests with the default load restrictions.
 
 ## Deploy
 
@@ -52,8 +55,8 @@ kubectl -n cxyz-security get pods -w
 
 ```bash
 kubectl -n cxyz-security get svc
-# wazuh-dashboard NodePort 30561  -> https://<node-ip>:30561
-# traefik         NodePort 30080/30443
+# traefik NodePort 30080/30443
+# Wazuh dashboard is ClusterIP-only; use kubectl port-forward when needed.
 ```
 
 ## Current validation status and known gaps
@@ -62,12 +65,19 @@ kubectl -n cxyz-security get svc
   but are not yet proven against the Wazuh, Authentik, and Traefik container
   entrypoints on Kubernetes. Resource limits and readiness probes may require
   iteration during the first deployment.
+- **Wazuh parity is incomplete.** The Kubernetes manifests still need the
+  full certificate/API/config wiring used by the Compose deployment before
+  this path can claim the same authenticated manager/indexer/dashboard trust.
+- **Suricata-to-Wazuh delivery is incomplete.** Suricata currently writes EVE
+  output to its pod-local `emptyDir`; add an authenticated log shipper or
+  equivalent transport before treating DET-01 as implemented on Kubernetes.
 - No `PriorityClass`, `NetworkPolicy`, or `PodDisruptionBudget` yet. This is
   acceptable for the lab scope but not for production.
-- WireGuard runs `privileged: true` + `hostNetwork: true`, which is
-  normal for a VPN concentrator but means the cluster's PodSecurity
-  admission must allow `privileged` in this namespace (k3s default does).
-- `authentik-server` alone is enough to boot, but a full working outpost
+- WireGuard runs with `hostNetwork: true` and `NET_ADMIN`, but not
+  `privileged: true`. Treat that capability as a documented exception and
+  keep the rest of the namespace under a stricter Pod Security policy.
+- Authentik server/worker explicitly share the same PostgreSQL user/database
+  and Redis service names; a full working outpost
   (the `/outpost.goauthentik.io/auth/traefik` forward-auth endpoint used
   by `31-authentik.yaml`'s Middleware) needs a one-time setup flow inside
   the Authentik UI (create the embedded outpost, an application, and a

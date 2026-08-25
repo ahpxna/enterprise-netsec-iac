@@ -75,6 +75,7 @@ def test_user_vlan_blocked_from_radius(evidence):
     ssh_before = _counter("fw-core", "cxyz", "seg01_ssh_drop")
     _udp_probe("pc1", "172.16.50.1", 1812)
     user_ssh = _tcp_reachable("pc1", "172.16.50.1", 22)
+    alternate_oob_ssh = _tcp_reachable("pc1", "10.1.1.50", 22)
     time.sleep(0.25)
     radius_after = _counter("fw-core", "cxyz", "seg01_radius_drop")
     ssh_after = _counter("fw-core", "cxyz", "seg01_ssh_drop")
@@ -90,6 +91,7 @@ def test_user_vlan_blocked_from_radius(evidence):
         "positive_mgmt_radius_response": radius_positive,
         "positive_user_dns": dns_allowed,
         "user_ssh_reachable": user_ssh,
+        "alternate_oob_ssh_reachable": alternate_oob_ssh,
         "radius_counter_delta": radius_after - radius_before,
         "ssh_counter_delta": ssh_after - ssh_before,
     }
@@ -106,6 +108,7 @@ def test_user_vlan_blocked_from_radius(evidence):
     assert mgmt_ssh and radius_positive, "management positive-control flow failed"
     assert dns_allowed, "allowed user-to-DC DNS flow failed"
     assert not user_ssh, "user VLAN reached DC SSH"
+    assert not alternate_oob_ssh, "user endpoint bypassed routed policy through the trusted OOB network"
     assert radius_after > radius_before, "RADIUS deny not attributed to fw-core"
     assert ssh_after > ssh_before, "SSH deny not attributed to fw-core"
 
@@ -116,6 +119,7 @@ def test_dmz_cannot_pivot_internal(evidence):
     positive_control = _tcp_reachable("pc4", "172.16.50.1", 22)
     before = _counter("fw-dmz", "dmz", "dmz_pivot_drop")
     dmz_to_dc = _tcp_reachable("dmz-web", "172.16.50.1", 22)
+    alternate_oob_ssh = _tcp_reachable("dmz-web", "10.1.1.50", 22)
     time.sleep(0.25)
     after = _counter("fw-dmz", "dmz", "dmz_pivot_drop")
 
@@ -123,6 +127,7 @@ def test_dmz_cannot_pivot_internal(evidence):
         "precondition_ssh_listener": target_healthy,
         "positive_mgmt_ssh": positive_control,
         "dmz_to_dc_reachable": dmz_to_dc,
+        "alternate_oob_ssh_reachable": alternate_oob_ssh,
         "pivot_counter_delta": after - before,
     }
     evidence(
@@ -135,4 +140,5 @@ def test_dmz_cannot_pivot_internal(evidence):
     )
     assert target_healthy and positive_control, "internal service precondition failed"
     assert not dmz_to_dc, "DMZ reached the DC SSH service"
+    assert not alternate_oob_ssh, "DMZ endpoint bypassed routed policy through the trusted OOB network"
     assert after > before, "DMZ deny not attributed to fw-dmz"
