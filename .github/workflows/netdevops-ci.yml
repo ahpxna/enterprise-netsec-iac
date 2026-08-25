@@ -36,7 +36,14 @@ jobs:
         run: pytest tests/unit -q
 
       - name: Validate Docker Compose model
-        run: docker compose --profile siem --profile ids --profile ztna --profile dmz config --quiet
+        run: >-
+          docker compose
+          --env-file .env.example
+          --profile siem
+          --profile ids
+          --profile ztna
+          --profile dmz
+          config --quiet
 
       - name: yamllint
         run: yamllint .
@@ -83,8 +90,8 @@ jobs:
       - uses: actions/checkout@v7
       - uses: hashicorp/setup-terraform@v4
       - run: terraform -chdir=terraform/libvirt init -backend=false
-      - run: terraform -chdir=terraform/libvirt fmt -check -recursive
+      - run: terraform -chdir=terraform/libvirt fmt -check -diff -recursive
       - run: terraform -chdir=terraform/libvirt validate
       - run: terraform -chdir=terraform/vyos-fabric init -backend=false
-      - run: terraform -chdir=terraform/vyos-fabric fmt -check -recursive
+      - run: terraform -chdir=terraform/vyos-fabric fmt -check -diff -recursive
       - run: terraform -chdir=terraform/vyos-fabric validate
