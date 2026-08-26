@@ -10,17 +10,16 @@
   failed_when: false
 
 - name: Detect whether OpenSSH server is installed
-  ansible.builtin.shell: command -v sshd
+  ansible.builtin.stat:
+    path: /usr/sbin/sshd
   register: common_hardening_sshd
-  changed_when: false
-  failed_when: false
 
 - name: Ensure OpenSSH drop-in directory exists
   ansible.builtin.file:
     path: /etc/ssh/sshd_config.d
     state: directory
     mode: "0755"
-  when: common_hardening_sshd.rc == 0
+  when: common_hardening_sshd.stat.exists
 
 - name: Enforce SSH idle timeout and root policy where SSH exists (HRD-01 / CIS 1.8, 5.x)
   ansible.builtin.copy:
@@ -33,7 +32,7 @@
       PermitRootLogin {{ common_hardening_ssh_permit_root_login }}
       Protocol 2
       Banner /etc/issue.net
-  when: common_hardening_sshd.rc == 0
+  when: common_hardening_sshd.stat.exists
   notify: restart sshd
 
 - name: Enforce interactive shell timeout
