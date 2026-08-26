@@ -3,14 +3,14 @@ schema_version: 1
 resolved_at: '2026-08-25'
 policy:
   portable_runtime_required_platforms:
-  - linux/amd64
-  - linux/arm64
+    - linux/amd64
+    - linux/arm64
   path_a_required_platforms:
-  - linux/amd64
+    - linux/amd64
   ci_required_platforms:
-  - linux/amd64
+    - linux/amd64
   local_image_prefixes:
-  - cxyz/
+    - cxyz/
   rule: Multi-architecture images are pinned to the OCI image-index / Docker manifest-list digest, never
     to one architecture-specific child manifest.
 images:
@@ -19,10 +19,10 @@ images:
     pinned_ref: debian@sha256:abd67ffcfa541b485a3dff59865ab629aa048a6c613e639d36e7456b0b229241
     status: verified
     scopes:
-    - dockerfile
+      - dockerfile
     required_platforms:
-    - linux/amd64
-    - linux/arm64
+      - linux/amd64
+      - linux/arm64
     verification:
       level: registry-metadata
       kind: multi-platform-index
@@ -33,10 +33,10 @@ images:
     pinned_ref: alpine@sha256:d9e853e87e55526f6b2917df91a2115c36dd7c696a35be12163d44e6e2a4b6bc
     status: verified
     scopes:
-    - containerlab
+      - containerlab
     required_platforms:
-    - linux/amd64
-    - linux/arm64
+      - linux/amd64
+      - linux/arm64
     verification:
       level: registry-metadata
       kind: multi-platform-index
@@ -46,11 +46,11 @@ images:
     pinned_ref: wazuh/wazuh-manager@sha256:8665c9807a5765253c79e4b072a1b7462c997bd69be949118a8d82ce44dd33e9
     status: verified
     scopes:
-    - compose
-    - kubernetes
+      - compose
+      - kubernetes
     required_platforms:
-    - linux/amd64
-    - linux/arm64
+      - linux/amd64
+      - linux/arm64
     verification:
       level: registry-metadata
       kind: multi-platform-index
@@ -60,12 +60,12 @@ images:
     pinned_ref: wazuh/wazuh-indexer@sha256:66b7640cce54f5f20a65e8320601b4570a1306d9f9b334d30bcaa324720a517c
     status: verified
     scopes:
-    - compose
-    - kubernetes
-    - helper
+      - compose
+      - kubernetes
+      - helper
     required_platforms:
-    - linux/amd64
-    - linux/arm64
+      - linux/amd64
+      - linux/arm64
     verification:
       level: registry-metadata
       kind: multi-platform-index
@@ -75,11 +75,11 @@ images:
     pinned_ref: wazuh/wazuh-dashboard@sha256:eeff857a664b3c09d3df4407b8749a351f321e4f366ca60ea1dffaa76f2146a7
     status: verified
     scopes:
-    - compose
-    - kubernetes
+      - compose
+      - kubernetes
     required_platforms:
-    - linux/amd64
-    - linux/arm64
+      - linux/amd64
+      - linux/arm64
     verification:
       level: registry-metadata
       kind: multi-platform-index
@@ -89,10 +89,10 @@ images:
     pinned_ref: wazuh/wazuh-agent@sha256:150e7af098fbe34ec7d4825a0943ec2ab87525bff3d62488f104094c3354032e
     status: verified
     scopes:
-    - kubernetes
+      - kubernetes
     required_platforms:
-    - linux/amd64
-    - linux/arm64
+      - linux/amd64
+      - linux/arm64
     verification:
       level: registry-metadata
       kind: multi-platform-index
@@ -102,10 +102,10 @@ images:
     pinned_ref: wazuh/wazuh-certs-generator@sha256:369b4d58509aab074b188596870c81584f7120e653d9ef83c591f0f785dcf325
     status: verified
     scopes:
-    - compose-helper
+      - compose-helper
     required_platforms:
-    - linux/amd64
-    - linux/arm64
+      - linux/amd64
+      - linux/arm64
     verification:
       level: registry-metadata
       kind: multi-platform-index
@@ -115,11 +115,11 @@ images:
     pinned_ref: traefik@sha256:5203c3f39ca70de6790d964624e042463ffbd57715bc82be155cf224c0dd5144
     status: verified
     scopes:
-    - compose
-    - kubernetes
+      - compose
+      - kubernetes
     required_platforms:
-    - linux/amd64
-    - linux/arm64
+      - linux/amd64
+      - linux/arm64
     verification:
       level: registry-metadata
       kind: multi-platform-index
@@ -130,11 +130,11 @@ images:
     pinned_ref: postgres@sha256:cf78e76683b9ca8c5733cbbdce6c9262b45b6767934dd0a95e671f9a0fc20685
     status: verified
     scopes:
-    - compose
-    - kubernetes
+      - compose
+      - kubernetes
     required_platforms:
-    - linux/amd64
-    - linux/arm64
+      - linux/amd64
+      - linux/arm64
     verification:
       level: registry-metadata
       kind: multi-platform-index
@@ -144,11 +144,11 @@ images:
     pinned_ref: redis@sha256:ff02b58f971e7d7d156a1267e283fcbbeee91773b6aa36c49dac28ecfe28eadf
     status: verified
     scopes:
-    - compose
-    - kubernetes
+      - compose
+      - kubernetes
     required_platforms:
-    - linux/amd64
-    - linux/arm64
+      - linux/amd64
+      - linux/arm64
     verification:
       level: registry-metadata
       kind: multi-platform-index
@@ -158,11 +158,11 @@ images:
     pinned_ref: nginxinc/nginx-unprivileged@sha256:93722936b82ec8a1178d48448e619226680d2de3706a1640800e186cd5fa7fd3
     status: verified
     scopes:
-    - compose
-    - kubernetes
+      - compose
+      - kubernetes
     required_platforms:
-    - linux/amd64
-    - linux/arm64
+      - linux/amd64
+      - linux/arm64
     verification:
       level: registry-metadata
       kind: multi-platform-index
@@ -173,11 +173,11 @@ images:
     pinned_ref: linuxserver/wireguard@sha256:ee2db24277b43ec4e7529e93967dc3cea00a02bf81b749c680b2b102a6e4aa5b
     status: inherited-pinned
     scopes:
-    - compose
-    - kubernetes
+      - compose
+      - kubernetes
     required_platforms:
-    - linux/amd64
-    - linux/arm64
+      - linux/amd64
+      - linux/arm64
     verification:
       level: registry-metadata
       kind: image-index
@@ -189,9 +189,9 @@ images:
     pinned_ref: batfish/allinone@sha256:445818fc17c0e24eb097387c84184334ad3fc42807de1ed9fef773762a0be515
     status: inherited-pinned
     scopes:
-    - ci
+      - ci
     required_platforms:
-    - linux/amd64
+      - linux/amd64
     verification:
       level: inherited
       kind: pinned-ci-image
@@ -201,9 +201,9 @@ images:
     pinned_ref: ghcr.io/gitleaks/gitleaks@sha256:e1b35e12a8c6fa8901f060459cfb6b2fc4c484d3afbe3b029733a3bbfab07055
     status: verified
     scopes:
-    - ci
+      - ci
     required_platforms:
-    - linux/amd64
+      - linux/amd64
     verification:
       level: registry-metadata
       kind: package-digest
@@ -213,11 +213,11 @@ images:
     pinned_ref: jasonish/suricata@sha256:ca6a3fad1e7765a8cf9f20a1f5e2cc3698dcda3ac10901a979b296e50601f99e
     status: verified
     scopes:
-    - compose
-    - kubernetes
+      - compose
+      - kubernetes
     required_platforms:
-    - linux/amd64
-    - linux/arm64
+      - linux/amd64
+      - linux/arm64
     verification:
       level: registry-metadata
       source: https://hub.docker.com/r/jasonish/suricata/tags
@@ -228,11 +228,11 @@ images:
     pinned_ref: ghcr.io/goauthentik/server@sha256:f2e5c18e922b40bd0cc3b5a2e9ac96ffb9f4109282bbc92f43c9d4e8f232c381
     status: verified
     scopes:
-    - compose
-    - kubernetes
+      - compose
+      - kubernetes
     required_platforms:
-    - linux/amd64
-    - linux/arm64
+      - linux/amd64
+      - linux/arm64
     verification:
       level: first-party-package-metadata
       kind: multi-platform-index
@@ -245,9 +245,9 @@ images:
     pinned_ref: quay.io/frrouting/frr@sha256:f310c2ebb3827fa03b9674ee05e70a7d5eef2123bcc3b475eb2ef14dafcb52b4
     status: verified
     scopes:
-    - containerlab
+      - containerlab
     required_platforms:
-    - linux/amd64
+      - linux/amd64
     verification:
       level: registry-link-plus-platform-metadata
       kind: single-platform-manifest
@@ -260,10 +260,10 @@ images:
     pinned_ref: wbitt/network-multitool@sha256:db2810fe2c8d36db074eab5d98fbf861c8ed55e0786d648d3477b3de9135632e
     status: verified
     scopes:
-    - containerlab
+      - containerlab
     required_platforms:
-    - linux/amd64
-    - linux/arm64
+      - linux/amd64
+      - linux/arm64
     verification:
       level: registry-metadata
       kind: multi-platform-index
@@ -274,10 +274,10 @@ images:
     pinned_ref: hashicorp/terraform@sha256:fd5debae63188975d6febc6aa5bd1a982a588f55e4a4ddb7de28be923f250456
     status: verified
     scopes:
-    - developer-tool
+      - developer-tool
     required_platforms:
-    - linux/amd64
-    - linux/arm64
+      - linux/amd64
+      - linux/arm64
     verification:
       level: registry-metadata
       kind: multi-platform-index
