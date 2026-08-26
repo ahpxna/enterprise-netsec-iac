@@ -12,12 +12,11 @@ users:
       - ${ssh_key}
 
 ssh_pwauth: false
-package_update: true
-packages:
-  - curl
-  - netcat-openbsd
-  - python3
-  - rsyslog
 
+# Do not run apt during first boot. Path B deliberately keeps BGP/OSPF
+# authentication fail-closed until Ansible reconciles the real routing
+# secrets, so Internet package repositories are not a valid bootstrap
+# dependency. The pinned Ubuntu cloud image already contains Python/SSH;
+# Day-2 installs the remaining packages after routing is established.
 runcmd:
   - [systemctl, enable, --now, ssh]

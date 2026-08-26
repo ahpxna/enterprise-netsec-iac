@@ -42,8 +42,6 @@ spec:
     - to:
         - podSelector: { matchLabels: { app: ztna-demo-app } }
       ports: [{ protocol: TCP, port: 8080 }]
-    # Kubernetes API egress is intentionally NOT widened here.  `make k8s-up`
-    # renders an ignored /32 policy for the actual kubernetes.default ClusterIP.
 ---
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
@@ -155,16 +153,3 @@ spec:
       ports:
         - { protocol: TCP, port: 1514 }
         - { protocol: TCP, port: 1515 }
----
-apiVersion: networking.k8s.io/v1
-kind: NetworkPolicy
-metadata: { name: wireguard-vpn, namespace: cxyz-security }
-spec:
-  podSelector: { matchLabels: { app: wireguard } }
-  policyTypes: [Ingress, Egress]
-  ingress:
-    - ports: [{ protocol: UDP, port: 51820 }]
-  # hostNetwork VPN replies/routed peer traffic are an explicit CNI-dependent
-  # exception and are not represented as namespace pod-to-pod application flow.
-  egress:
-    - {}

@@ -60,4 +60,4 @@ terraform/vyos-fabric/runtime-configs/
 wireguard/probe/
 docker/zero-trust-gateway/certs/
 k8s/runtime-secrets.yaml
-k8s/runtime-networkpolicy.yaml
+k8s/runtime-config.yaml

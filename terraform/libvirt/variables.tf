@@ -28,3 +28,13 @@ variable "base_image_sha256" {
     error_message = "base_image_sha256 must be a 64-character SHA-256 hexadecimal digest."
   }
 }
+
+variable "ssh_public_key" {
+  description = "Reviewed SSH public key installed for the ansible bootstrap user"
+  type        = string
+
+  validation {
+    condition     = can(regex("^(ssh-ed25519|ssh-rsa|ecdsa-sha2-nistp256) [A-Za-z0-9+/=]+( .*)?$", trimspace(var.ssh_public_key)))
+    error_message = "ssh_public_key must be a complete OpenSSH public key, not a placeholder."
+  }
+}

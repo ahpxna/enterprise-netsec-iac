@@ -2,6 +2,7 @@
 """Build a VPN-01 client config that traverses the host-published UDP entrypoint."""
 from __future__ import annotations
 
+import os
 import pathlib
 import re
 import sys
@@ -12,6 +13,20 @@ DEST = ROOT / "wireguard/probe/wg_confs/wg0.conf"
 TARGET = "172.16.50.1/32"
 
 
+def env_value(name: str, default: str) -> str:
+    configured = os.environ.get(name)
+    if configured:
+        return configured
+    env_file = ROOT / ".env"
+    if env_file.exists():
+        for raw in env_file.read_text().splitlines():
+            key, sep, value = raw.partition("=")
+            if sep and key.strip() == name:
+                value = value.strip().strip('"').strip("'")
+                return value or default
+    return default
+
+
 def main() -> int:
     if not SOURCE.exists():
         print(
@@ -19,12 +34,21 @@ def main() -> int:
             file=sys.stderr,
         )
         return 1
+    try:
+        port = int(env_value("WG_SERVER_PORT", "51820"))
+    except ValueError:
+        print("WG_SERVER_PORT must be an integer", file=sys.stderr)
+        return 1
+    if not 1 <= port <= 65535:
+        print("WG_SERVER_PORT must be between 1 and 65535", file=sys.stderr)
+        return 1
+
     text = SOURCE.read_text()
     if "[Interface]" not in text or "[Peer]" not in text:
         print("peer1.conf does not look like a WireGuard client profile", file=sys.stderr)
         return 1
     text, endpoint_count = re.subn(
-        r"(?m)^Endpoint\s*=.*$", "Endpoint = host.docker.internal:51820", text, count=1
+        r"(?m)^Endpoint\s*=.*$", f"Endpoint = host.docker.internal:{port}", text, count=1
     )
     text, allowed_count = re.subn(
         r"(?m)^AllowedIPs\s*=.*$", f"AllowedIPs = {TARGET}", text, count=1

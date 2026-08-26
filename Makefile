@@ -52,6 +52,7 @@ images: ## Build deterministic local service images used by Path A
 wazuh-config: secrets ## Generate Wazuh TLS certificates and password hashes
 	@test -f docker/wazuh/certs/root-ca.pem || \
 		docker compose -f docker/wazuh/generate-indexer-certs.yml run --rm generator
+	python scripts/check_wazuh_pki.py
 	bash scripts/render_wazuh_users.sh
 
 .PHONY: render
@@ -67,6 +68,7 @@ runtime-config: secrets ## Render secret-bearing Path A runtime configs outside 
 .PHONY: net
 net: dc-network runtime-config ## Deploy the routed network fabric (containerlab + FRR/VyOS)
 	sudo containerlab deploy -t $(CLAB_TOPO) --reconfigure
+	python scripts/isolate_path_a_management.py
 
 .PHONY: authentik-preflight
 authentik-preflight: ## Block unsafe reuse of a legacy Authentik database volume
@@ -223,7 +225,7 @@ vm-down: ## Destroy the real VyOS VM fabric
 
 # ---------------------------------------------------------- kubernetes path
 # Alternative to `make security`: same SIEM/IDS/ZTNA stack, on k8s. See
-# k8s/README.md for cluster prereqs (k3s recommended) and CRD setup.
+# k8s/README.md for cluster prerequisites and ignored runtime material.
 .PHONY: k8s-assets
 k8s-assets: ## Refresh Kustomize-local generated config from canonical Docker IDS/SIEM sources
 	python scripts/render_k8s_assets.py
@@ -233,14 +235,14 @@ k8s-assets: ## Refresh Kustomize-local generated config from canonical Docker ID
 k8s-runtime-secrets: secrets wazuh-config k8s-assets ## Render ignored Path C secrets from the same local PKI/.env as Compose
 	python scripts/render_k8s_runtime_secrets.py
 
-.PHONY: k8s-runtime-policy
-k8s-runtime-policy: ## Render exact Traefik -> kubernetes.default API /32 egress policy
-	python scripts/render_k8s_runtime_policy.py
+.PHONY: k8s-runtime-config
+k8s-runtime-config: secrets ## Render non-secret Path C domain/WireGuard/Traefik runtime settings
+	python scripts/render_k8s_runtime_config.py
 
 .PHONY: k8s-up
-k8s-up: preflight-k8s k8s-runtime-secrets k8s-runtime-policy ## Deploy the security plane (Wazuh/Suricata/Traefik/Authentik/WG) to k8s
+k8s-up: preflight-k8s k8s-runtime-secrets k8s-runtime-config ## Deploy the security plane (Wazuh/Suricata/Traefik/Authentik/WG) to k8s
 	kubectl apply -f k8s/00-namespace.yaml
-	kubectl apply -f k8s/runtime-networkpolicy.yaml
+	kubectl apply -f k8s/runtime-config.yaml
 	kubectl apply -f k8s/runtime-secrets.yaml
 	kubectl apply -k k8s/
 	@echo "==> kubectl -n cxyz-security get pods -w"
@@ -251,7 +253,7 @@ k8s-smoke: ## Live Path C rollout/trust/policy checkpoint (requires deployed clu
 
 .PHONY: k8s-down
 k8s-down: ## Tear down the k8s security plane
-	@test ! -f k8s/runtime-networkpolicy.yaml || kubectl delete -f k8s/runtime-networkpolicy.yaml --ignore-not-found
+	@test ! -f k8s/runtime-config.yaml || kubectl delete -f k8s/runtime-config.yaml --ignore-not-found
 	kubectl delete -k k8s/ --ignore-not-found
 	@test ! -f k8s/runtime-secrets.yaml || kubectl delete -f k8s/runtime-secrets.yaml --ignore-not-found
 
@@ -271,7 +273,8 @@ audit: lint batfish validate attack report ## Everything an auditor would ask fo
 # ---------------------------------------------------------------- misc
 .PHONY: urls
 urls: ## Print service URLs
-	@bash scripts/urls.sh
+	@test -f .env || (echo "missing .env; run make secrets" >&2; exit 1)
+	@python scripts/env_exec.py --env-file .env -- bash scripts/urls.sh
 
 .PHONY: logs
 logs: ## Tail the SIEM manager

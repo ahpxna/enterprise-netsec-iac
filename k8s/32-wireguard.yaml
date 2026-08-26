@@ -28,10 +28,12 @@ spec:
           env:
             - { name: PUID, value: "1000" }
             - { name: PGID, value: "1000" }
-            - { name: SERVERPORT, value: "51820" }
-            - { name: PEERS, value: "4" }
-            - { name: SERVERURL, value: "auto" }
-          ports: [{ containerPort: 51820, protocol: UDP }]
+            - name: SERVERPORT
+              valueFrom: { configMapKeyRef: { name: cxyz-runtime-settings, key: WG_SERVER_PORT } }
+            - name: PEERS
+              valueFrom: { configMapKeyRef: { name: cxyz-runtime-settings, key: WG_PEER_COUNT } }
+            - name: SERVERURL
+              valueFrom: { configMapKeyRef: { name: cxyz-runtime-settings, key: WG_ENDPOINT } }
           startupProbe:
             exec: { command: ["wg", "show", "interfaces"] }
             periodSeconds: 5

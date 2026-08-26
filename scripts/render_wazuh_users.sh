@@ -11,6 +11,7 @@ read_env_value() {
 
 WAZUH_INDEXER_PASSWORD="$(read_env_value WAZUH_INDEXER_PASSWORD)"
 WAZUH_DASHBOARD_PASSWORD="$(read_env_value WAZUH_DASHBOARD_PASSWORD)"
+WAZUH_REGISTRATION_PASSWORD="$(read_env_value WAZUH_REGISTRATION_PASSWORD)"
 
 hash_password() {
   printf '%s\n' "$1" | docker run --rm -i wazuh/wazuh-indexer@sha256:66b7640cce54f5f20a65e8320601b4570a1306d9f9b334d30bcaa324720a517c \
@@ -30,4 +31,6 @@ awk -v admin="$admin_hash" -v dashboard="$dashboard_hash" '
   {gsub(/__ADMIN_HASH__/, admin); gsub(/__DASHBOARD_HASH__/, dashboard); print}
 ' docker/wazuh/internal_users.yml.tmpl > docker/wazuh/generated/internal_users.yml
 chmod 600 docker/wazuh/generated/internal_users.yml
-echo "generated Wazuh internal user database (passwords not printed)"
+printf '%s\n' "$WAZUH_REGISTRATION_PASSWORD" > docker/wazuh/generated/authd.pass
+chmod 600 docker/wazuh/generated/authd.pass
+echo "generated Wazuh internal user database + authenticated enrollment secret (values not printed)"

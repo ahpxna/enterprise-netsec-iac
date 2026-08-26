@@ -50,7 +50,7 @@ services:
     hostname: wazuh.manager
     restart: unless-stopped
     environment:
-      - INDEXER_URL=https://wazuh.indexer:9200
+      - INDEXER_URL=https://wazuh-indexer:9200
       - INDEXER_USERNAME=admin
       - INDEXER_PASSWORD=${WAZUH_INDEXER_PASSWORD:?run make secrets}
       - FILEBEAT_SSL_VERIFICATION_MODE=full
@@ -80,14 +80,15 @@ services:
       - ./docker/siem/decoders:/var/ossec/etc/decoders/local:ro
       - ./docker/siem/rules:/var/ossec/etc/rules/local:ro
       - ./docker/siem/ossec.conf:/wazuh-config-mount/etc/ossec.conf:ro
+      - ./docker/wazuh/generated/authd.pass:/var/ossec/etc/authd.pass:ro
       - ./docker/ids/logs:/var/log/suricata:ro
       - cxyz_remote_logs:/var/log/cxyz:ro
     networks: { cxyz_dc: { ipv4_address: 172.16.50.10 } }
 
-  wazuh.indexer:
+  wazuh-indexer:
     profiles: ["siem"]
     image: wazuh/wazuh-indexer@sha256:66b7640cce54f5f20a65e8320601b4570a1306d9f9b334d30bcaa324720a517c
-    hostname: wazuh.indexer
+    hostname: wazuh-indexer
     restart: unless-stopped
     environment:
       - OPENSEARCH_JAVA_OPTS=-Xms1g -Xmx1g
@@ -95,8 +96,8 @@ services:
     volumes:
       - wazuh_indexer_data:/var/lib/wazuh-indexer
       - ./docker/wazuh/certs/root-ca.pem:/usr/share/wazuh-indexer/config/certs/root-ca.pem:ro
-      - ./docker/wazuh/certs/wazuh.indexer-key.pem:/usr/share/wazuh-indexer/config/certs/wazuh.indexer.key:ro
-      - ./docker/wazuh/certs/wazuh.indexer.pem:/usr/share/wazuh-indexer/config/certs/wazuh.indexer.pem:ro
+      - ./docker/wazuh/certs/wazuh-indexer-key.pem:/usr/share/wazuh-indexer/config/certs/wazuh-indexer.key:ro
+      - ./docker/wazuh/certs/wazuh-indexer.pem:/usr/share/wazuh-indexer/config/certs/wazuh-indexer.pem:ro
       - ./docker/wazuh/certs/admin.pem:/usr/share/wazuh-indexer/config/certs/admin.pem:ro
       - ./docker/wazuh/certs/admin-key.pem:/usr/share/wazuh-indexer/config/certs/admin-key.pem:ro
       - ./docker/wazuh/indexer.yml:/usr/share/wazuh-indexer/config/opensearch.yml:ro
@@ -108,7 +109,7 @@ services:
     image: wazuh/wazuh-dashboard@sha256:eeff857a664b3c09d3df4407b8749a351f321e4f366ca60ea1dffaa76f2146a7
     hostname: wazuh.dashboard
     restart: unless-stopped
-    depends_on: [wazuh.indexer, wazuh.manager]
+    depends_on: [wazuh-indexer, wazuh.manager]
     ports: ["127.0.0.1:5601:5601"]
     environment:
       - INDEXER_USERNAME=admin
@@ -230,7 +231,7 @@ services:
       - VPN_PEER_SUBNET=10.13.13.0/24
       - VPN_ADMIN_SUBNET=172.16.50.0/24
       - VPN_ADMIN_PROBE_IP=172.16.50.1
-    ports: ["51820:51820/udp"]
+    ports: ["${WG_SERVER_PORT:-51820}:${WG_SERVER_PORT:-51820}/udp"]
     sysctls:
       - net.ipv4.conf.all.src_valid_mark=1
       - net.ipv4.ip_forward=1

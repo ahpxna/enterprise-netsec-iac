@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Emit a schema-v1 evidence artifact for non-pytest test runners."""
+"""Emit a schema-v2 evidence artifact for non-pytest test runners."""
 
 from __future__ import annotations
 
@@ -50,7 +50,7 @@ def main() -> int:
 
     provenance = current_provenance()
     payload = {
-        "schema_version": 1,
+        "schema_version": 2,
         "control_id": args.control,
         "test_id": args.test_id,
         "result": args.result,

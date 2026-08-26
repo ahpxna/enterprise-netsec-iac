@@ -1,3 +1,6 @@
 libvirt_uri   = "qemu:///system"
 siem_vcpu     = 2
 siem_ram_mb   = 4096
+
+# Public material only; paste the complete reviewed OpenSSH public key.
+ssh_public_key = "ssh-ed25519 AAAA_REPLACE_WITH_REAL_PUBLIC_KEY ansible@example"

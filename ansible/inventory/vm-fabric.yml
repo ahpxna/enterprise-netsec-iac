@@ -37,6 +37,8 @@ all:
       vars:
         ansible_connection: ssh
         ansible_user: ansible
+        ansible_become: true
+        ansible_become_method: sudo
       children:
         clients:
           hosts:

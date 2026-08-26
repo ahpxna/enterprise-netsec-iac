@@ -29,7 +29,7 @@ resource "libvirt_volume" "dc_disk" {
 resource "libvirt_cloudinit_disk" "dc" {
   name      = "dc-cloudinit.iso"
   pool      = libvirt_pool.cxyz.name
-  user_data = file("${path.module}/cloud-init/user-data.yml")
+  user_data = templatefile("${path.module}/cloud-init/user-data.yml", { ssh_public_key = var.ssh_public_key })
 }
 
 check "pinned_dc_base_image" {

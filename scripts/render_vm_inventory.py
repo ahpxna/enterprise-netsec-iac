@@ -71,7 +71,12 @@ def render(intent: dict) -> str:
                     }
                 },
                 "linux_nodes": {
-                    "vars": {"ansible_connection": "ssh", "ansible_user": "ansible"},
+                    "vars": {
+                        "ansible_connection": "ssh",
+                        "ansible_user": "ansible",
+                        "ansible_become": True,
+                        "ansible_become_method": "sudo",
+                    },
                     "children": {
                         "clients": {"hosts": endpoint_hosts(nodes, clients)},
                         "servers": {"hosts": endpoint_hosts(nodes, servers)},

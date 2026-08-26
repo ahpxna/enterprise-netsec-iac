@@ -45,6 +45,16 @@ firewall {
                 }
             }
         }
+        forward {
+            filter {
+                default-action accept
+                rule 5 {
+                    action drop
+                    description "OOB management subnet is never a transit destination"
+                    destination { address 10.1.1.0/24 }
+                }
+            }
+        }
     }
 }
 system {

@@ -1,16 +1,16 @@
 ---
 network.host: 0.0.0.0
-node.name: wazuh.indexer
+node.name: wazuh-indexer
 cluster.name: wazuh-cluster
 path.data: /var/lib/wazuh-indexer
 path.logs: /var/log/wazuh-indexer
 discovery.type: single-node
 compatibility.override_main_response_version: true
-plugins.security.ssl.http.pemcert_filepath: certs/wazuh.indexer.pem
-plugins.security.ssl.http.pemkey_filepath: certs/wazuh.indexer.key
+plugins.security.ssl.http.pemcert_filepath: certs/wazuh-indexer.pem
+plugins.security.ssl.http.pemkey_filepath: certs/wazuh-indexer.key
 plugins.security.ssl.http.pemtrustedcas_filepath: certs/root-ca.pem
-plugins.security.ssl.transport.pemcert_filepath: certs/wazuh.indexer.pem
-plugins.security.ssl.transport.pemkey_filepath: certs/wazuh.indexer.key
+plugins.security.ssl.transport.pemcert_filepath: certs/wazuh-indexer.pem
+plugins.security.ssl.transport.pemkey_filepath: certs/wazuh-indexer.key
 plugins.security.ssl.transport.pemtrustedcas_filepath: certs/root-ca.pem
 plugins.security.ssl.http.enabled: true
 plugins.security.ssl.transport.enforce_hostname_verification: false
@@ -18,7 +18,7 @@ plugins.security.ssl.transport.resolve_hostname: false
 plugins.security.authcz.admin_dn:
   - CN=admin,OU=Wazuh,O=Wazuh,L=California,C=US
 plugins.security.nodes_dn:
-  - CN=wazuh.indexer,OU=Wazuh,O=Wazuh,L=California,C=US
+  - CN=wazuh-indexer,OU=Wazuh,O=Wazuh,L=California,C=US
 plugins.security.restapi.roles_enabled:
   - all_access
   - security_rest_api_access

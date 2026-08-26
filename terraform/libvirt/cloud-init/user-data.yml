@@ -7,7 +7,7 @@ users:
     sudo: ALL=(ALL) NOPASSWD:ALL
     shell: /bin/bash
     ssh_authorized_keys:
-      - ssh-ed25519 REPLACE_WITH_YOUR_PUBLIC_KEY
+      - ${ssh_public_key}
 ssh_pwauth: false
 package_update: true
 packages: [python3, qemu-guest-agent]

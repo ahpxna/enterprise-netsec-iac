@@ -1,52 +1,7 @@
-# Traefik ingress for the cxyz-security namespace only.
-# Apply the matching v3.7.11 CRDs once per cluster before this file:
-# kubectl apply -f https://raw.githubusercontent.com/traefik/traefik/v3.7.11/docs/content/reference/dynamic-configuration/kubernetes-crd-definition-v1.yml
----
-apiVersion: v1
-kind: ServiceAccount
-metadata:
-  name: traefik
-  namespace: cxyz-security
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: Role
-metadata:
-  name: traefik-cxyz
-  namespace: cxyz-security
-rules:
-  - apiGroups: [""]
-    resources: [services, configmaps, secrets]
-    verbs: [get, list, watch]
-  - apiGroups: ["discovery.k8s.io"]
-    resources: [endpointslices]
-    verbs: [list, watch]
-  - apiGroups: ["traefik.io"]
-    resources:
-      - middlewares
-      - middlewaretcps
-      - ingressroutes
-      - ingressroutetcps
-      - ingressrouteudps
-      - traefikservices
-      - tlsoptions
-      - tlsstores
-      - serverstransports
-      - serverstransporttcps
-    verbs: [get, list, watch]
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: RoleBinding
-metadata:
-  name: traefik-cxyz
-  namespace: cxyz-security
-roleRef:
-  apiGroup: rbac.authorization.k8s.io
-  kind: Role
-  name: traefik-cxyz
-subjects:
-  - kind: ServiceAccount
-    name: traefik
-    namespace: cxyz-security
+# Public Path C ingress.  Traefik deliberately does not watch the Kubernetes
+# API: a public reverse proxy must not inherit namespace-wide Secret read
+# privileges.  `make k8s-runtime-config` supplies the file-provider routes and
+# TLS material is mounted by kubelet, not fetched with a service-account token.
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -61,15 +16,13 @@ spec:
     metadata:
       labels: { app: traefik }
     spec:
-      serviceAccountName: traefik
+      automountServiceAccountToken: false
       containers:
         - name: traefik
           image: traefik@sha256:5203c3f39ca70de6790d964624e042463ffbd57715bc82be155cf224c0dd5144
           args:
-            - --providers.kubernetescrd=true
-            - --providers.kubernetescrd.namespaces=cxyz-security
-            - --providers.kubernetescrd.allowCrossNamespace=false
-            - --providers.kubernetescrd.disableClusterScopeResources=true
+            - --providers.file.filename=/etc/traefik/dynamic/dynamic.yaml
+            - --providers.file.watch=true
             - --entrypoints.web.address=:80
             - --entrypoints.websecure.address=:443
             - --entrypoints.health.address=:8082
@@ -95,6 +48,12 @@ spec:
             httpGet: { path: /ping, port: health }
             periodSeconds: 20
             failureThreshold: 3
+          volumeMounts:
+            - { name: dynamic-config, mountPath: /etc/traefik/dynamic, readOnly: true }
+            - { name: ztna-tls, mountPath: /run/cxyz-ztna, readOnly: true }
+      volumes:
+        - { name: dynamic-config, configMap: { name: cxyz-traefik-dynamic } }
+        - { name: ztna-tls, secret: { secretName: cxyz-ztna-tls } }
 ---
 apiVersion: v1
 kind: Service

@@ -13,7 +13,7 @@ from compliance.generate_report import load_evidence, status_for, validate_prove
 
 def artifact(result: str) -> dict:
     return {
-        "schema_version": 1,
+        "schema_version": 2,
         "control_id": "SEG-01",
         "test_id": "tests/validation/test_segmentation.py::test_user_vlan_blocked_from_radius",
         "result": result,
@@ -28,6 +28,7 @@ def artifact(result: str) -> dict:
         "control_catalog_sha256": "a",
         "topology_sha256": "b",
         "test_suite_sha256": "c",
+        "deployment_config_sha256": "cfg",
         "environment": "local-containerlab",
     }
 
@@ -49,6 +50,7 @@ def expected_from(item: dict) -> dict:
             "control_catalog_sha256",
             "topology_sha256",
             "test_suite_sha256",
+            "deployment_config_sha256",
         )
     }
 
@@ -130,6 +132,15 @@ def test_test_suite_hash_mismatch_is_rejected(tmp_path: pathlib.Path, monkeypatc
     monkeypatch.setattr(report_module, "current_provenance", lambda: expected)
     errors = validate_provenance([item], tmp_path / "unit")
     assert any("stale test_suite_sha256" in error for error in errors)
+
+
+def test_deployment_config_mismatch_is_rejected(tmp_path: pathlib.Path, monkeypatch):
+    item = artifact("PASS")
+    expected = expected_from(item)
+    expected["deployment_config_sha256"] = "different-runtime-config"
+    monkeypatch.setattr(report_module, "current_provenance", lambda: expected)
+    errors = validate_provenance([item], tmp_path / "unit")
+    assert any("stale deployment_config_sha256" in error for error in errors)
 
 
 def test_duplicate_control_artifacts_are_rejected(tmp_path: pathlib.Path):

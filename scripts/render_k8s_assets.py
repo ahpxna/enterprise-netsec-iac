@@ -2,10 +2,10 @@
 """Render Kubernetes-local assets from canonical Docker-side source files.
 
 Kustomize's default LoadRestrictionsRootOnly rejects ../docker/... references.
-Most files are mirrored byte-for-byte. Wazuh endpoint names are adapted from
-Compose DNS (wazuh.indexer / wazuh.manager) to Kubernetes Service DNS
-(wazuh-indexer / wazuh-manager) while retaining the Docker files as canonical.
-CI rejects drift in every generated derivative.
+Most files are mirrored byte-for-byte. Compose and Kubernetes share the
+canonical `wazuh-indexer` TLS identity; only Path-A-only local-file collectors
+are stripped from the Kubernetes manager derivative. CI rejects drift in every
+generated derivative.
 """
 from __future__ import annotations
 
@@ -30,8 +30,6 @@ MAPPINGS = {
 
 def rendered_content(source: pathlib.Path) -> bytes:
     content = source.read_bytes()
-    if source.name in {"opensearch_dashboards.yml", "ossec.conf"}:
-        content = content.replace(b"https://wazuh.indexer:9200", b"https://wazuh-indexer:9200")
     if source.name == "ossec.conf":
         # Suricata reaches the Kubernetes manager through its Wazuh-agent
         # sidecar; those Path A host-file collectors are not mounted in Path C.
@@ -67,7 +65,7 @@ def main() -> int:
         print("run: python scripts/render_k8s_assets.py", file=sys.stderr)
         return 1
     if args.check:
-        print("OK: Kubernetes generated assets match canonical Docker config + K8s DNS adaptations")
+        print("OK: Kubernetes generated assets match canonical Docker config + Path C adaptations")
     else:
         print("rendered Kubernetes-local IDS/SIEM/Auth assets")
     return 0

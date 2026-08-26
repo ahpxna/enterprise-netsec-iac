@@ -53,6 +53,7 @@ def main() -> int:
             "WAZUH_INDEXER_PASSWORD",
             "WAZUH_DASHBOARD_PASSWORD",
             "WAZUH_API_PASSWORD",
+            "WAZUH_REGISTRATION_PASSWORD",
             "AUTHENTIK_SECRET_KEY",
             "AUTHENTIK_POSTGRES_PASSWORD",
         )
@@ -74,8 +75,8 @@ def main() -> int:
                     for name in (
                         "root-ca.pem",
                         "root-ca-manager.pem",
-                        "wazuh.indexer.pem",
-                        "wazuh.indexer-key.pem",
+                        "wazuh-indexer.pem",
+                        "wazuh-indexer-key.pem",
                         "admin.pem",
                         "admin-key.pem",
                         "wazuh.manager.pem",

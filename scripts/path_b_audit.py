@@ -146,7 +146,7 @@ def _safe_name(test_id: str) -> str:
 
 def emit(control: str, test_id: str, result: str, assertion: str, observed: dict, started: str, failure: str | None = None) -> None:
     payload = {
-        "schema_version": 1,
+        "schema_version": 2,
         "control_id": control,
         "test_id": test_id,
         "result": result,
@@ -194,6 +194,8 @@ def test_seg01() -> tuple[str, dict]:
     ]
     pc1_management_bypass = {address: tcp_from_linux("pc1", address, 22) for address in management_targets}
     dmz_management_bypass = {address: tcp_from_linux("dmz-web", address, 22) for address in management_targets}
+    pc1_mgmt_gateway_ping = linux("pc1", "ping -c 1 -W 1 10.1.1.1", timeout=5).returncode == 0
+    dmz_mgmt_gateway_ping = linux("dmz-web", "ping -c 1 -W 1 10.1.1.1", timeout=5).returncode == 0
 
     pc4_secret = require_secret("RADIUS_SECRET_PC4")
     positive_cmd = (
@@ -224,6 +226,8 @@ def test_seg01() -> tuple[str, dict]:
         "user_radius_received_response": radius_user_response,
         "pc1_management_ssh_reachable": pc1_management_bypass,
         "dmz_management_ssh_reachable": dmz_management_bypass,
+        "pc1_management_gateway_reachable": pc1_mgmt_gateway_ping,
+        "dmz_management_gateway_reachable": dmz_mgmt_gateway_ping,
     }
     assert radius_ready and dns_ready and ssh_ready, "SEG-01 DC service preconditions are not healthy"
     assert mgmt_ssh and radius_mgmt_response, "SEG-01 management positive controls failed"
@@ -231,7 +235,8 @@ def test_seg01() -> tuple[str, dict]:
     assert not user_ssh and not radius_user_response, "SEG-01 user VLAN reached prohibited SSH/RADIUS service"
     assert not any(pc1_management_bypass.values()), "SEG-01 user VLAN reached an OOB management SSH address"
     assert not any(dmz_management_bypass.values()), "SEG-01 DMZ reached an OOB management SSH address"
-    return "healthy DC services; user DNS allowed; user SSH/RADIUS and every OOB SSH address denied", observed
+    assert not pc1_mgmt_gateway_ping and not dmz_mgmt_gateway_ping, "SEG-01 untrusted endpoint reached the OOB management LAN gateway"
+    return "healthy DC services; user DNS allowed; user SSH/RADIUS and the OOB management subnet are unreachable from untrusted endpoints", observed
 
 
 def test_seg02() -> tuple[str, dict]:

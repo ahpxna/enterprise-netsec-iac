@@ -644,10 +644,12 @@ VPN-01 specifically requires the generated peer fixture.
 
 The first attempted fix (`network-mode:none`) broke package provisioning. The
 redesign keeps Docker management only during bootstrap. `pc1` and the canonical
-`dmz-web` receive their data-plane address/default route first and then bring
-`eth0` down. `pc4` remains the reviewed administration endpoint. SEG-01/02 now
-assert both routed firewall behavior and absence of the alternate management
-path.
+`dmz-web` receive their data-plane address/default route first, then
+`scripts/isolate_path_a_management.py` physically disconnects those containers
+from `cxyz_mgmt`. An administratively-DOWN interface is not treated as a
+security boundary against a compromised root user. `pc4` remains the reviewed
+administration endpoint. SEG-01/02 now assert both routed firewall behavior and
+physical absence of the alternate management attachment.
 
 ### BUG-051-B — HRD wording exceeded node coverage
 
@@ -669,44 +671,46 @@ negative connectivity proof.
 
 **Status:** source/static verified; runtime UNVERIFIED until `make k8s-smoke`.
 
-### BUG-052-A — NetworkPolicy still allowed arbitrary TCP/443 from Traefik
+### BUG-052-A — Public Traefik previously inherited Kubernetes API/Secret access
 
-Traefik needs the Kubernetes API but a static egress rule with only port 443
-allowed arbitrary HTTPS destinations. The API Service ClusterIP is not portable
-between clusters.
+Earlier Path C revisions used the Kubernetes CRD provider, which required
+Traefik to watch namespace resources and created CNI-dependent API egress
+exceptions. That made a public reverse-proxy compromise materially more useful
+because the pod could read namespace Secrets.
 
-**Implementation:** removed destination-unbounded 443 from the checked-in
-policy. `scripts/render_k8s_runtime_policy.py` queries
-`kubernetes.default`, validates the IPv4 address and writes an ignored `/32`
-NetworkPolicy. `make k8s-up` creates the namespace, applies that exact policy,
-then applies runtime secrets and Kustomize resources.
+**Current implementation:** Traefik uses only the file provider,
+`automountServiceAccountToken: false`, an ignored runtime ConfigMap for routes,
+and a dedicated ZTNA TLS Secret mounted by kubelet. It has no Role/RoleBinding,
+no Kubernetes provider, and no Kubernetes API NetworkPolicy exception.
 
-### BUG-052-B — Wazuh Compose DNS leaked into Kubernetes derivatives
+### BUG-052-B — Wazuh service identity differed between Compose and Kubernetes
 
-The canonical Docker config uses `wazuh.indexer`; Kubernetes Service DNS uses
-`wazuh-indexer`. Both Dashboard and Manager derivatives are now transformed by
-`render_k8s_assets.py`, and static guards reject Compose DNS in the generated
-manager configuration.
+Using `wazuh.indexer` in Compose and `wazuh-indexer` in Kubernetes made strict
+TLS hostname verification impossible with one reviewed PKI. Compose and Path C
+now use the same `wazuh-indexer` service/DNS identity. `make wazuh-config` runs a
+SAN/chain/expiry checker and refuses stale PKI rather than lowering hostname
+verification.
 
 ### BUG-052-C — Path C trust/RBAC/hardening was incomplete
 
-Wazuh certificate/API/Filebeat trust is source-wired from the local PKI,
-Traefik uses namespace Role/RoleBinding and a namespace-scoped CRD provider,
-the Dashboard accepts no ordinary pod-network ingress, and privileged network
-workloads drop all capabilities before adding only reviewed capabilities. All
-containers explicitly disable privilege escalation and use RuntimeDefault
-seccomp. Vendor-specific `runAsNonRoot`/read-only-root changes remain subject to
-runtime proof instead of blanket enforcement.
+Wazuh certificate/API/Filebeat trust is source-wired from the local PKI; agent
+enrollment now requires a generated registration password. Public Traefik has
+no Kubernetes API token/RBAC. The Dashboard accepts no ordinary pod-network
+ingress, and privileged network workloads drop all capabilities before adding
+only reviewed capabilities. All containers explicitly disable privilege
+escalation and use RuntimeDefault seccomp. Vendor-specific `runAsNonRoot`/
+read-only-root changes remain subject to runtime proof instead of blanket
+enforcement.
 
 ### Runtime checkpoint
 
 `scripts/k8s_smoke.sh` waits for all core deployments/statefulsets/daemonsets,
-requires both static and runtime NetworkPolicies, verifies the runtime API
-policy against the cluster, and exercises Traefik's real CRD/IngressRoute/TLS
-path through a temporary local port-forward. It also injects a unique synthetic
-Suricata EVE marker and requires the same marker to appear in Wazuh manager
-alerts after traversing the sidecar agent. This checkpoint is deliberately
-outside PR CI because a real CNI/cluster is required.
+requires static/runtime NetworkPolicies, and exercises Traefik's file-provider
+ZTNA/TLS path through a temporary local port-forward. It iterates every
+Suricata DaemonSet pod, verifies the stable node-bound Wazuh agent identity,
+and injects a unique EVE marker per sensor that must appear in Wazuh manager
+alerts. This checkpoint is deliberately outside PR CI because a real CNI/
+cluster is required.
 
 ---
 
@@ -779,3 +783,82 @@ Path B source/design readiness remains separate from runtime evidence. The
 sandbox and must be reported as **UNVERIFIED**, not converted to a numerical
 runtime-confidence score. Existing `vm-health`, `vm-idempotency` and `vm-audit`
 targets remain the required live checkpoint.
+
+
+---
+
+## INC-055 — OOB, HA, identity and runtime-config assurance closure
+
+**Status:** source/static/unit verified; Path A/B/C live checkpoints remain required.
+
+### BUG-055-A — HA-01 failed the wrong VLAN
+
+The Path A HA probe originates from PC1/VLAN10, but the failure injection shut
+`dist1 eth2` (VLAN40). The test could therefore report sub-five-second recovery
+without disrupting PC1's active gateway at all. The injector now shuts the
+VLAN10-facing interface, observes DIST2 become MASTER during the failure, and
+keeps the failure long enough to exercise VRRP master-down behavior before
+restoration.
+
+### BUG-055-B — OOB management was still a routed destination
+
+Removing endpoint management NICs alone does not stop a forwarding router with
+a connected `10.1.1.0/24` interface from routing untrusted data-plane traffic
+into the OOB LAN. All Path B VyOS devices now drop forwarded traffic whose
+destination is the management subnet, and the live audit requires PC1 and the
+DMZ endpoint to fail even a probe to the management gateway. Path A untrusted
+endpoints are physically detached from the Docker management network after
+bootstrap rather than relying on `eth0 DOWN`.
+
+### BUG-055-C — Wazuh identity/enrollment trust was incomplete
+
+Compose and Kubernetes now share one hostname-verified `wazuh-indexer` TLS
+identity. `check_wazuh_pki.py` rejects stale SAN/chain/expiry state, Dashboard
+verification is `full`, and agent enrollment requires a generated password via
+`authd.pass`. This avoids both CA-only server verification and network-location-
+only agent enrollment.
+
+### BUG-055-D — Public Traefik could read high-value namespace Secrets
+
+Path C Traefik previously used Kubernetes CRDs and a Role that included Secrets.
+The public proxy now uses a file provider, has no service-account token/RBAC,
+and receives only a runtime routing ConfigMap plus the dedicated ZTNA TLS
+Secret mounted by kubelet. Domain-specific routes are rendered from `.env`, so
+custom `ORG_DOMAIN` no longer drifts from checked-in manifests.
+
+### BUG-055-E — configurable WireGuard values were only partially honored
+
+`WG_SERVER_PORT`, endpoint and peer-count values are now consumed by Compose,
+the VPN probe and Path C runtime configuration. Static tests prevent a return
+to literal port 51820 where the operator contract is configurable.
+
+### BUG-055-F — DET-02 and Path C sensor smoke sampled one identity
+
+Path A DET-02 now emits a unique marker from every audited logging identity and
+requires each marker at both relay and Wazuh. Path C uses stable
+`suricata-<nodeName>` Wazuh identities and smoke-tests every DaemonSet sensor
+with a unique EVE marker.
+
+### BUG-055-G — Path B Linux first boot depended on Internet before routing auth
+
+Path B intentionally starts BGP/OSPF with mismatched fail-closed bootstrap
+authentication. Cloud-init therefore no longer performs `apt update/install`
+before routing reconciliation. Day-2 installs packages after VyOS secrets are
+reconciled. The generated Linux inventory explicitly enables passwordless sudo
+through `ansible_become`, matching the cloud-init user contract; otherwise all
+root-owned roles/package tasks would fail.
+
+### BUG-055-H — evidence was not bound to behavior-changing deployment knobs
+
+Evidence schema v2 adds a sanitized deployment-configuration digest covering
+domain, WireGuard listener/endpoint/peer count, NTP upstreams and Path B public-
+key location. Reports reject evidence captured against a different resolved
+non-secret deployment configuration while continuing to exclude credentials.
+
+### Remaining validation boundary
+
+The source checks do not convert these controls into runtime PASS. Path A still
+requires `make audit`; Path C requires `make k8s-smoke`; and Path B requires the
+12-node `vm-configure`/idempotency/`vm-audit` sequence. Wazuh PKI identity
+changes require the explicit rotation/reissue runbook instead of a verification
+bypass.

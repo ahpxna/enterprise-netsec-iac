@@ -77,10 +77,13 @@ spec:
             - { name: AUTHENTIK_POSTGRESQL__NAME, value: authentik }
             - name: AUTHENTIK_POSTGRESQL__PASSWORD
               valueFrom: { secretKeyRef: { name: cxyz-security-secrets, key: AUTHENTIK_POSTGRES_PASSWORD } }
-            - { name: AUTHENTIK_WEB__BASE_URL, value: "https://sso.companyxyz.lab" }
+            - name: AUTHENTIK_WEB__BASE_URL
+              valueFrom: { configMapKeyRef: { name: cxyz-runtime-settings, key: AUTHENTIK_BASE_URL } }
             - { name: AUTHENTIK_DISABLE_UPDATE_CHECK, value: "true" }
-            - { name: CXYZ_AUTHENTIK_APP_URL, value: "https://app.companyxyz.lab" }
-            - { name: CXYZ_AUTHENTIK_SSO_URL, value: "https://sso.companyxyz.lab" }
+            - name: CXYZ_AUTHENTIK_APP_URL
+              valueFrom: { configMapKeyRef: { name: cxyz-runtime-settings, key: AUTHENTIK_APP_URL } }
+            - name: CXYZ_AUTHENTIK_SSO_URL
+              valueFrom: { configMapKeyRef: { name: cxyz-runtime-settings, key: AUTHENTIK_SSO_URL } }
           ports: [{ containerPort: 9000 }]
           startupProbe:
             httpGet: { path: /-/health/ready/, port: 9000 }
@@ -126,10 +129,13 @@ spec:
             - { name: AUTHENTIK_POSTGRESQL__NAME, value: authentik }
             - name: AUTHENTIK_POSTGRESQL__PASSWORD
               valueFrom: { secretKeyRef: { name: cxyz-security-secrets, key: AUTHENTIK_POSTGRES_PASSWORD } }
-            - { name: AUTHENTIK_WEB__BASE_URL, value: "https://sso.companyxyz.lab" }
+            - name: AUTHENTIK_WEB__BASE_URL
+              valueFrom: { configMapKeyRef: { name: cxyz-runtime-settings, key: AUTHENTIK_BASE_URL } }
             - { name: AUTHENTIK_DISABLE_UPDATE_CHECK, value: "true" }
-            - { name: CXYZ_AUTHENTIK_APP_URL, value: "https://app.companyxyz.lab" }
-            - { name: CXYZ_AUTHENTIK_SSO_URL, value: "https://sso.companyxyz.lab" }
+            - name: CXYZ_AUTHENTIK_APP_URL
+              valueFrom: { configMapKeyRef: { name: cxyz-runtime-settings, key: AUTHENTIK_APP_URL } }
+            - name: CXYZ_AUTHENTIK_SSO_URL
+              valueFrom: { configMapKeyRef: { name: cxyz-runtime-settings, key: AUTHENTIK_SSO_URL } }
           startupProbe:
             exec: { command: ["ak", "healthcheck"] }
             periodSeconds: 10
@@ -182,40 +188,3 @@ metadata: { name: ztna-demo-app, namespace: cxyz-security }
 spec:
   selector: { app: ztna-demo-app }
   ports: [{ port: 8080, targetPort: 8080 }]
----
-apiVersion: traefik.io/v1alpha1
-kind: Middleware
-metadata: { name: authentik-forwardauth, namespace: cxyz-security }
-spec:
-  forwardAuth:
-    address: "http://authentik-server.cxyz-security.svc:9000/outpost.goauthentik.io/auth/traefik"
-    trustForwardHeader: false
-    maxResponseBodySize: 4194304
-    authResponseHeaders: [X-authentik-username, X-authentik-groups, X-authentik-email]
----
-apiVersion: traefik.io/v1alpha1
-kind: IngressRoute
-metadata: { name: authentik, namespace: cxyz-security }
-spec:
-  entryPoints: [websecure]
-  tls: { secretName: cxyz-ztna-tls }
-  routes:
-    - match: "Host(`sso.companyxyz.lab`)"
-      kind: Rule
-      services: [{ name: authentik-server, port: 9000 }]
----
-apiVersion: traefik.io/v1alpha1
-kind: IngressRoute
-metadata: { name: ztna-demo, namespace: cxyz-security }
-spec:
-  entryPoints: [websecure]
-  tls: { secretName: cxyz-ztna-tls }
-  routes:
-    - match: "Host(`app.companyxyz.lab`) && PathPrefix(`/outpost.goauthentik.io/`)"
-      kind: Rule
-      priority: 100
-      services: [{ name: authentik-server, port: 9000 }]
-    - match: "Host(`app.companyxyz.lab`)"
-      kind: Rule
-      middlewares: [{ name: authentik-forwardauth }]
-      services: [{ name: ztna-demo-app, port: 8080 }]

@@ -46,8 +46,8 @@ spec:
             secretName: cxyz-wazuh-tls
             items:
               - { key: root-ca.pem, path: root-ca.pem }
-              - { key: wazuh.indexer.pem, path: wazuh.indexer.pem }
-              - { key: wazuh.indexer-key.pem, path: wazuh.indexer.key }
+              - { key: wazuh-indexer.pem, path: wazuh-indexer.pem }
+              - { key: wazuh-indexer-key.pem, path: wazuh-indexer.key }
               - { key: admin.pem, path: admin.pem }
               - { key: admin-key.pem, path: admin-key.pem }
         - { name: runtime-config, configMap: { name: cxyz-wazuh-runtime-config } }
@@ -112,6 +112,7 @@ spec:
           volumeMounts:
             - { name: manager-tls, mountPath: /etc/ssl, readOnly: true }
             - { name: runtime-config, mountPath: /wazuh-config-mount/etc/ossec.conf, subPath: ossec.conf, readOnly: true }
+            - { name: registration, mountPath: /var/ossec/etc/authd.pass, subPath: WAZUH_REGISTRATION_PASSWORD, readOnly: true }
             - { name: decoders, mountPath: /var/ossec/etc/decoders/local, readOnly: true }
             - { name: rules, mountPath: /var/ossec/etc/rules/local, readOnly: true }
           resources:
@@ -126,6 +127,12 @@ spec:
               - { key: wazuh.manager.pem, path: filebeat.pem }
               - { key: wazuh.manager-key.pem, path: filebeat.key }
         - { name: runtime-config, configMap: { name: cxyz-wazuh-runtime-config } }
+        - name: registration
+          secret:
+            secretName: cxyz-security-secrets
+            defaultMode: 256
+            items:
+              - { key: WAZUH_REGISTRATION_PASSWORD, path: WAZUH_REGISTRATION_PASSWORD }
         - { name: decoders, configMap: { name: cxyz-wazuh-decoders } }
         - { name: rules, configMap: { name: cxyz-wazuh-rules } }
 ---

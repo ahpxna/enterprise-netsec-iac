@@ -114,7 +114,7 @@ def pytest_runtest_makereport(item, call):
 
     started_monotonic = getattr(item, "_evidence_started_monotonic", time.monotonic())
     payload = {
-        "schema_version": 1,
+        "schema_version": 2,
         "test_id": item.nodeid,
         "result": result,
         **recorded,

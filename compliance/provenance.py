@@ -10,6 +10,7 @@ import hashlib
 import os
 import pathlib
 import subprocess
+import sys
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 FALLBACK_EXCLUDES = {
@@ -98,6 +99,49 @@ def git_dirty() -> bool:
     return bool(result.stdout.strip())
 
 
+DEPLOYMENT_CONFIG_KEYS = (
+    "ORG_DOMAIN", "DEPLOY_ENV", "PUBLIC_HOSTNAME",
+    "WAZUH_MANAGER_IP",
+    "WG_SERVER_PORT", "WG_ENDPOINT", "WG_PEER_COUNT",
+    "NTP_UPSTREAM_1", "NTP_UPSTREAM_2",
+    "PATH_B_SSH_PUBLIC_KEY_FILE",
+)
+
+
+def deployment_config_hash() -> str:
+    """Hash only non-secret deployment knobs that can change control behavior.
+
+    Evidence intentionally never embeds dotenv values.  The digest binds a run
+    to domain/listener/upstream choices while passwords and routing secrets stay
+    outside provenance.  When .env is absent (for static/unit contexts), the
+    reviewed .env.example defaults are used.
+    """
+    scripts = ROOT / "scripts"
+    if str(scripts) not in sys.path:
+        sys.path.insert(0, str(scripts))
+    from env_exec import parse_dotenv  # local import avoids shell evaluation
+
+    source = ROOT / ".env"
+    if not source.is_file():
+        source = ROOT / ".env.example"
+    values = parse_dotenv(source) if source.is_file() else {}
+    digest = hashlib.sha256()
+    for key in DEPLOYMENT_CONFIG_KEYS:
+        value = str(values.get(key, ""))
+        record = f"{key}={value}\n".encode()
+        digest.update(record)
+        if key == "PATH_B_SSH_PUBLIC_KEY_FILE" and value:
+            key_path = pathlib.Path(value).expanduser()
+            if not key_path.is_absolute():
+                key_path = ROOT / key_path
+            if key_path.is_file():
+                digest.update(b"PATH_B_SSH_PUBLIC_KEY_SHA256=")
+                digest.update(hashlib.sha256(key_path.read_bytes()).hexdigest().encode())
+                digest.update(b"\n")
+            else:
+                digest.update(b"PATH_B_SSH_PUBLIC_KEY_SHA256=<missing>\n")
+    return digest.hexdigest()
+
 def current_provenance() -> dict[str, object]:
     return {
         "git_sha": git_sha(),
@@ -106,4 +150,5 @@ def current_provenance() -> dict[str, object]:
         "control_catalog_sha256": sha256_file(ROOT / "compliance" / "controls.yaml"),
         "topology_sha256": sha256_file(ROOT / "intent" / "fabric.yaml"),
         "test_suite_sha256": test_suite_hash(),
+        "deployment_config_sha256": deployment_config_hash(),
     }

@@ -15,6 +15,16 @@
 - name: Harden Path B Linux endpoints
   hosts: linux_nodes
   gather_facts: true
+  pre_tasks:
+    - name: Install the Linux baseline only after routing reconciliation
+      ansible.builtin.package:
+        name:
+          - curl
+          - netcat-openbsd
+          - python3
+          - rsyslog
+        state: present
+      tags: [baseline]
   roles:
     - role: common_hardening
       tags: [baseline, cis]

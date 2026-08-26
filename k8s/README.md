@@ -2,9 +2,10 @@
 
 Experimental Kubernetes alternative for the SIEM/IDS/ZTNA layer. It shares
 reviewed images and canonical IDS/SIEM configuration with the Compose path.
-Source-level trust, NetworkPolicy, probes, and generated assets are now wired,
-but **live-cluster parity is not claimed until `make k8s-smoke` passes**.
-The routed network fabric remains Path A or Path B.
+Source-level trust, NetworkPolicy, probes, generated assets, authenticated Wazuh
+enrollment, and a least-privilege Traefik file-provider path are wired, but
+**live-cluster parity is not claimed until `make k8s-smoke` passes**. The routed
+network fabric remains Path A or Path B.
 
 ## Recommended cluster for testing
 
@@ -18,45 +19,47 @@ export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
 
 Budget roughly 4 vCPU / 8 GiB free; Wazuh Indexer is the heaviest pod.
 
-## One-time prerequisites
+## Prerequisites and generated runtime state
 
-1. Install the CRDs matching the repository's Traefik 3.7.11 intent:
+Path C does **not** require Traefik CRDs. The public Traefik process uses only a
+file provider and has no service-account token or Kubernetes Secret read
+permission. This deliberately avoids turning a reverse-proxy compromise into
+namespace-wide credential access.
 
-   ```bash
-   kubectl apply -f https://raw.githubusercontent.com/traefik/traefik/v3.7.11/docs/content/reference/dynamic-configuration/kubernetes-crd-definition-v1.yml
-   ```
+Generate local credentials/PKI and Kubernetes runtime material:
 
-2. Generate local credentials/PKI and Kubernetes runtime material:
+```bash
+make secrets
+make wazuh-config
+make k8s-runtime-secrets
+make k8s-runtime-config
+```
 
-   ```bash
-   make secrets
-   make wazuh-config
-   make k8s-runtime-secrets
-   ```
+- `k8s/runtime-secrets.yaml` contains the ignored local credentials, Wazuh PKI,
+  and ZTNA TLS keypair used by the cluster.
+- `k8s/runtime-config.yaml` contains only non-secret operator settings derived
+  from `.env` (`ORG_DOMAIN`, WireGuard port/endpoint/peer count), the Traefik
+  file-provider routing configuration, and the matching WireGuard policy.
+- Both files are gitignored. Do not replace them with committed plaintext
+  Secrets or hard-coded environment-specific manifests.
 
-   `k8s/runtime-secrets.yaml` is generated from the same local trust material
-   as Compose and is gitignored. Do not replace this with a committed plaintext
-   Secret.
+Generated Kustomize-local assets remain derived from the canonical Docker-side
+Wazuh/Suricata/Authentik source:
 
-3. Generated Kustomize-local assets are derived from the canonical Docker-side
-   Wazuh/Suricata/Authentik source:
+```bash
+python scripts/render_k8s_assets.py
+python scripts/render_k8s_assets.py --check
+```
 
-   ```bash
-   python scripts/render_k8s_assets.py
-   python scripts/render_k8s_assets.py --check
-   ```
-
-   The renderer adapts Compose DNS names such as `wazuh.indexer` to Kubernetes
-   Service DNS such as `wazuh-indexer`; CI rejects drift.
+Compose and Kubernetes now use the same hostname-verified Wazuh indexer
+identity (`wazuh-indexer`). `make wazuh-config` fails closed if an older local
+certificate set does not contain the reviewed SAN/chain; follow
+`docs/PKI-ROTATION.md` rather than disabling TLS hostname verification.
 
 ## Deploy
 
-Use the Make target rather than raw `kubectl apply -k`. Traefik needs to watch
-Kubernetes CRDs, but a static `egress: TCP/443 anywhere` exception is forbidden.
-`k8s-runtime-policy` resolves both the `kubernetes.default` Service ClusterIP
-and its current API endpoint IPs, then creates an ignored set of exact `/32`
-NetworkPolicy destinations. Keeping both forms avoids relying on whether a CNI
-observes Service traffic before or after DNAT.
+Use the Make target rather than raw `kubectl apply -k` so ignored runtime state
+is rendered first:
 
 ```bash
 make k8s-up
@@ -70,11 +73,12 @@ make k8s-smoke
 ```
 
 The smoke gate waits for every core rollout, verifies the required static and
-runtime NetworkPolicies, exercises Traefik's namespace-scoped CRD/IngressRoute
-through CA-verified HTTPS, and checks Suricata plus its Wazuh sidecar. It then
-injects a unique synthetic EVE marker and requires the marker to reach Wazuh
-manager alerts. It is intentionally not part of PR CI because it needs a real
-cluster.
+runtime NetworkPolicies, and proves Traefik loaded its protected file-provider
+route by making a CA-verified HTTPS request that must receive an Authentik
+redirect. It then iterates **every** Suricata DaemonSet pod, requires the stable
+node-bound Wazuh agent identity to be enrolled, injects a unique synthetic EVE
+marker, and requires each marker to reach Wazuh manager alerts. It is
+intentionally not part of PR CI because it needs a real cluster/CNI.
 
 ## Access
 
@@ -85,29 +89,39 @@ kubectl -n cxyz-security get svc
 kubectl -n cxyz-security port-forward svc/wazuh-dashboard 5601:5601
 ```
 
+WireGuard uses `hostNetwork`; its actual UDP listener, endpoint and peer count
+come from the same `.env` contract as Compose. NetworkPolicy semantics for
+host-network pods remain CNI-dependent and must be observed on the chosen
+cluster.
+
 ## Security model and validation boundary
 
 - Namespace ingress/egress defaults to deny. Application flows are explicit.
-- Traefik uses namespace Role/RoleBinding and a namespace-scoped CRD provider;
-  its Kubernetes API egress is runtime-rendered to exact Service/endpoint `/32`
-  destinations, not arbitrary HTTPS egress.
-- Wazuh manager/indexer/dashboard are wired to the same local CA/certificate
-  trust material used by Compose. The generated manager/dashboard config uses
-  Kubernetes Service DNS.
-- Suricata writes EVE to a shared pod `emptyDir`; a same-pod Wazuh agent reads
-  the file and uses the secure agent channel TCP/1514 to the manager.
+- Public Traefik has `automountServiceAccountToken: false`, uses no Kubernetes
+  provider/RBAC, and gets only its file-provider ConfigMap plus the dedicated
+  ZTNA TLS Secret mounted by kubelet. It cannot enumerate Authentik/Postgres/
+  Wazuh Secrets through the Kubernetes API.
+- Wazuh manager/indexer/dashboard use the same local CA/certificate trust
+  material as Compose and verify the canonical `wazuh-indexer` server identity.
+- Wazuh agent enrollment requires a generated registration password; the
+  manager receives `authd.pass` from an ignored Secret instead of relying only
+  on network location.
+- Suricata writes EVE to a shared pod `emptyDir`; a same-pod Wazuh agent uses a
+  stable `suricata-<nodeName>` identity and sends the secure agent channel over
+  TCP/1514.
 - Authentik provider/application/embedded-outpost state is declared by
-  `docker/authentik/blueprints/cxyz-ztna.yaml` and mirrored into the K8s
-  ConfigMap. No manual first-run UI state is part of the intended deployment.
+  `docker/authentik/blueprints/cxyz-ztna.yaml`; domain-specific URLs are supplied
+  from the runtime ConfigMap, not hard-coded in checked-in Kubernetes YAML.
 - Suricata and WireGuard remain reviewed `hostNetwork` capability exceptions.
-  They drop all capabilities first, add only their required networking caps,
-  disable privilege escalation, and use `RuntimeDefault` seccomp. NetworkPolicy
-  behavior for host-network pods remains CNI-dependent and must be observed on
-  the chosen cluster.
+  They drop all capabilities first, add only required networking caps, disable
+  privilege escalation, and use `RuntimeDefault` seccomp.
 - Other vendor containers explicitly disable privilege escalation and use
   `RuntimeDefault`. `runAsNonRoot`, read-only root filesystems, and dropping all
   capabilities are not blanket-forced where upstream images have not been
   runtime-proven with those constraints.
+- Wazuh vulnerability-feed egress is intentionally not widened to arbitrary
+  Internet HTTPS. Path C does not claim fresh vulnerability-feed parity until a
+  reviewed egress/offline-feed design is live-proven.
 
 A successful static render is **not** Path C runtime evidence. Treat Path C as
 source-validated until `make k8s-smoke` and the relevant live security controls

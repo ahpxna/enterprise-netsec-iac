@@ -67,7 +67,7 @@ step2_scan_detected() {
 
 restore_vrrp_master() {
   docker exec "$(n dist1)" vtysh \
-    -c "configure terminal" -c "interface eth2" -c "no shutdown" >/dev/null 2>&1 || true
+    -c "configure terminal" -c "interface eth1" -c "no shutdown" >/dev/null 2>&1 || true
 }
 
 vrrp_bootstrap_ready() {
@@ -106,7 +106,7 @@ PY
 }
 
 step5_vrrp_failover() {
-  local started d1_state d2_state d1_json d2_json bootstrap_ready advertisements_ready gap result ping_file
+  local started d1_state d2_state d1_json d2_json d2_failover_state bootstrap_ready advertisements_ready gap result ping_file
   started="$(utc_now)"
   ping_file="$EV/step5_vrrp_failover.txt"
   d1_state="$(docker exec "$(n dist1)" vtysh -c "show vrrp" 2>/dev/null || true)"
@@ -127,14 +127,16 @@ step5_vrrp_failover() {
 
   trap restore_vrrp_master EXIT
   docker exec "$(n pc1)" sh -c \
-    "ping -D -i 0.1 -c 140 198.10.10.1 > /tmp/cxyz-ha01-ping.txt 2>&1 &"
+    "ping -D -i 0.1 -c 170 198.10.10.1 > /tmp/cxyz-ha01-ping.txt 2>&1 &"
   sleep 1
   docker exec "$(n dist1)" vtysh \
-    -c "configure terminal" -c "interface eth2" -c "shutdown" >/dev/null
-  sleep 3
+    -c "configure terminal" -c "interface eth1" -c "shutdown" >/dev/null
+  sleep 5
+  d2_failover_state="$(docker exec "$(n dist2)" vtysh -c "show vrrp" 2>/dev/null || true)"
+  sleep 1
   restore_vrrp_master
   trap - EXIT
-  sleep 7
+  sleep 10
   docker exec "$(n pc1)" cat /tmp/cxyz-ha01-ping.txt > "$ping_file"
 
   gap="$(python3 - "$ping_file" <<'PY'
@@ -152,6 +154,7 @@ PY
   if [[ "$bootstrap_ready" == true && "$advertisements_ready" == true ]] \
       && grep -qi master <<<"$d1_state" \
       && grep -qi backup <<<"$d2_state" \
+      && grep -qi master <<<"$d2_failover_state" \
       && python3 - "$gap" <<'PY'
 import sys
 raise SystemExit(0 if float(sys.argv[1]) < 5.0 else 1)
@@ -167,6 +170,7 @@ PY
     --started-at "$started" \
     --observed "dist1_master=$(grep -qi master <<<"$d1_state" && echo true || echo false)" \
     --observed "dist2_backup=$(grep -qi backup <<<"$d2_state" && echo true || echo false)" \
+    --observed "dist2_took_master_after_vlan10_failure=$(grep -qi master <<<"$d2_failover_state" && echo true || echo false)" \
     --observed "macvlan_bootstrap_ready=$bootstrap_ready" \
     --observed "vrrp_advertisements_seen=$advertisements_ready" \
     --observed "max_reply_gap_seconds=$gap"

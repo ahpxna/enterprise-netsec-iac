@@ -32,6 +32,11 @@ firewall {
             filter {
                 default-action drop
                 default-log
+                rule 5 {
+                    action drop
+                    description "OOB management subnet is never a transit destination"
+                    destination { address 10.1.1.0/24 }
+                }
                 rule 20 {
                     action accept
                     description "Public HTTP and HTTPS to DMZ web host"

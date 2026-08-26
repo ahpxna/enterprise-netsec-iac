@@ -20,7 +20,7 @@ REQUIRED_FIELDS = {
     "schema_version", "control_id", "test_id", "result", "assertion",
     "observed", "started_at", "ended_at", "run_id", "git_sha", "git_dirty",
     "source_tree_sha256", "control_catalog_sha256", "topology_sha256",
-    "test_suite_sha256", "environment",
+    "test_suite_sha256", "deployment_config_sha256", "environment",
 }
 
 
@@ -64,7 +64,7 @@ def load_evidence(run: pathlib.Path | None) -> tuple[list[dict], list[str]]:
         if missing:
             errors.append(f"{path.name}: missing fields: {', '.join(missing)}")
             continue
-        if payload["schema_version"] != 1:
+        if payload["schema_version"] != 2:
             errors.append(f"{path.name}: unsupported schema_version")
             continue
         if payload["result"] not in VALID_RESULTS:
@@ -99,7 +99,7 @@ def validate_provenance(evidence: list[dict], run: pathlib.Path | None, *, stric
     baseline = evidence[0]
     fields = (
         "git_sha", "git_dirty", "source_tree_sha256", "control_catalog_sha256",
-        "topology_sha256", "test_suite_sha256", "environment",
+        "topology_sha256", "test_suite_sha256", "deployment_config_sha256", "environment",
     )
     for item in evidence:
         label = item["test_id"]

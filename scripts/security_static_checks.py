@@ -180,7 +180,7 @@ required_policies = {
     "default-deny", "allow-cluster-dns", "traefik-ingress-egress",
     "authentik-server", "authentik-worker", "authentik-postgres",
     "wazuh-indexer", "wazuh-manager",
-    "wazuh-dashboard", "suricata-wazuh-agent", "wireguard-vpn", "ztna-demo-app",
+    "wazuh-dashboard", "suricata-wazuh-agent", "ztna-demo-app",
 }
 missing_policies = required_policies - policy_names
 if missing_policies:
@@ -317,8 +317,6 @@ for token in (
         fail(f"Traefik ZTNA config lost required declarative/TLS token: {token}")
 if "trustForwardHeader: false" not in dynamic_ztna or "maxResponseBodySize: 4194304" not in dynamic_ztna:
     fail("Docker Traefik ForwardAuth must sanitize client forwarded headers and bound auth response bodies")
-if "trustForwardHeader: false" not in authentik_k8s or "maxResponseBodySize: 4194304" not in authentik_k8s:
-    fail("Kubernetes Traefik ForwardAuth must sanitize client forwarded headers and bound auth response bodies")
 path_b_audit = text("scripts/path_b_audit.py")
 if "--insecure" in path_b_audit or "--cacert" not in path_b_audit:
     fail("Path B ZTNA validation must verify the lab CA instead of disabling TLS verification")
@@ -343,8 +341,12 @@ if "cxyz_vpn_test_external" not in service_networks("vpn-probe") or "cxyz_edge" 
 probe_hosts = [str(item) for item in probe.get("extra_hosts", []) or []]
 if not any("host.docker.internal:host-gateway" in item for item in probe_hosts):
     fail("vpn-probe must reach WireGuard through the host-published UDP entrypoint")
-if "Endpoint = host.docker.internal:51820" not in text("scripts/prepare_vpn_probe.py"):
-    fail("VPN probe config must target the host UDP publish rather than Docker service DNS")
+probe_renderer = text("scripts/prepare_vpn_probe.py")
+for token in ("WG_SERVER_PORT", "host.docker.internal:{port}"):
+    if token not in probe_renderer:
+        fail(f"VPN probe config lost dynamic host-published UDP port handling: {token}")
+if '${WG_SERVER_PORT:-51820}:${WG_SERVER_PORT:-51820}/udp' not in compose:
+    fail("WireGuard Compose publish must follow WG_SERVER_PORT on both host and container")
 wg_volumes = [str(v) for v in services.get("wireguard", {}).get("volumes", []) or []]
 if not any("wireguard-dc-route.sh:/custom-cont-init.d/40-cxyz-dc-route.sh:ro" in v for v in wg_volumes):
     fail("WireGuard server must install the reviewed DC forwarding/NAT init hook")
@@ -361,22 +363,23 @@ if "scripts/host_time_status.py" not in hardening_test:
 if "-x" in text("docker/server1/supervisord.conf"):
     fail("chronyd -x tracking-only mode is forbidden as TIME-01 enforcement")
 
-# Untrusted Path A endpoints retain Docker management only for bootstrap, then
-# drop eth0 after their data-plane route exists. This avoids the previous
-# network-mode:none provisioning regression while closing the alternate path.
+# Untrusted Path A endpoints may use Docker management for bootstrap only.
+# After containerlab deploy they are physically disconnected from cxyz_mgmt;
+# an administratively-DOWN eth0 is not a security boundary against root.
 intent = yaml.safe_load(text("intent/fabric.yaml"))
 for endpoint in ("pc1", "dmz-web"):
     if intent.get("nodes", {}).get(endpoint, {}).get("disable_management_after_boot") is not True:
-        fail(f"{endpoint} must disable its Docker management interface after bootstrap")
-clab_model = yaml.safe_load(text("clab/companyxyz.clab.yml"))
-for endpoint in ("pc1", "dmz-web"):
-    commands = clab_model.get("topology", {}).get("nodes", {}).get(endpoint, {}).get("exec", []) or []
-    if "sh -c 'ip link set eth0 down'" not in commands:
-        fail(f"rendered Path A endpoint {endpoint} does not drop its bootstrap management interface")
+        fail(f"{endpoint} must be marked for post-bootstrap management isolation")
+isolation_script = text("scripts/isolate_path_a_management.py")
+for token in ("docker", "network", "disconnect", "cxyz_mgmt", "clab-companyxyz-pc1", "clab-companyxyz-dmz-web"):
+    if token not in isolation_script:
+        fail(f"Path A physical OOB detach lost token: {token}")
+if "python scripts/isolate_path_a_management.py" not in text("Makefile"):
+    fail("Path A deployment must physically detach untrusted endpoints from cxyz_mgmt after bootstrap")
 segmentation_test = text("tests/validation/test_segmentation.py")
-for token in ("pc1_management_interface_down", "dmz_management_interface_down", "10.1.1.50"):
+for token in ("pc1_management_network_detached", "dmz_management_network_detached", "10.1.1.50"):
     if token not in segmentation_test:
-        fail(f"Path A segmentation test lost alternate-management-path proof: {token}")
+        fail(f"Path A segmentation test lost physical alternate-management-path proof: {token}")
 render_fabric = text("scripts/render_fabric.py")
 for token in ("management_forward_guards", "iif eth{index} to {subnet} prohibit"):
     if token not in render_fabric:
@@ -397,9 +400,18 @@ for token in ("if try(node.path_b_management, true)", "endpoint_management_isola
 if "management = try(local.management_plan[node_name], null)" not in path_b_tf:
     fail("Path B interface-plan output must tolerate endpoint nodes without management NICs")
 path_b_audit = text("scripts/path_b_audit.py")
-for token in ("pc1_management_ssh_reachable", "dmz_management_ssh_reachable", "OOB management SSH address"):
+for token in ("pc1_management_ssh_reachable", "dmz_management_ssh_reachable", "pc1_management_gateway_reachable", "dmz_management_gateway_reachable", "10.1.1.1"):
     if token not in path_b_audit:
         fail(f"Path B audit lost OOB bypass negative proof: {token}")
+for name in ("isp1", "isp2", "edge", "core", "dist1", "dist2", "fw-core", "fw-dmz"):
+    body = text(f"terraform/vyos-fabric/configs/{name}.boot")
+    for token in ("OOB management subnet is never a transit destination", "destination {", "address 10.1.1.0/24", "action drop"):
+        if token not in body:
+            fail(f"Path B {name} lost data-plane -> OOB forwarding guard: {token}")
+path_b_inventory_renderer = text("scripts/render_vm_inventory.py")
+for token in ('"ansible_become": True', '"ansible_become_method": "sudo"'):
+    if token not in path_b_inventory_renderer:
+        fail(f"Path B Linux Day-2 must use passwordless sudo via Ansible become: {token}")
 
 # HRD controls use one canonical managed-node set and effective sshd settings.
 node_sets = text("tests/validation/node_sets.py")
@@ -411,20 +423,16 @@ if '"sshd", "-T"' not in hardening_test:
 if "clab-companyxyz-dmz-web" not in text("ansible/inventory/hosts.yml"):
     fail("canonical dmz-web endpoint is missing from Path A Ansible inventory")
 
-# Path C: namespace-scoped Traefik RBAC and explicit micro-segmentation.
+# Path C: the public Traefik proxy uses a file provider and no Kubernetes API
+# token.  This prevents a proxy compromise from becoming namespace-wide Secret
+# read access and removes CNI-dependent API Service-DNAT policy assumptions.
 traefik_k8s = text("k8s/30-traefik.yaml")
-for forbidden in ("kind: ClusterRole\n", "kind: ClusterRoleBinding\n", "--providers.kubernetesingress=true"):
+for forbidden in ("kind: ClusterRole\n", "kind: ClusterRoleBinding\n", "kind: Role\n", "kind: RoleBinding\n", "providers.kubernetes", 'resources: ["services", "configmaps", "secrets"]'):
     if forbidden in traefik_k8s:
-        fail(f"Traefik Kubernetes scope widened unexpectedly: {forbidden.strip()}")
-for required in (
-    "kind: Role\n",
-    "kind: RoleBinding\n",
-    "--providers.kubernetescrd.namespaces=cxyz-security",
-    "--providers.kubernetescrd.allowCrossNamespace=false",
-    "--providers.kubernetescrd.disableClusterScopeResources=true",
-):
+        fail(f"Traefik must not hold Kubernetes API/RBAC privileges: {forbidden.strip()}")
+for required in ("automountServiceAccountToken: false", "--providers.file.filename=/etc/traefik/dynamic/dynamic.yaml", "cxyz-traefik-dynamic", "cxyz-ztna-tls"):
     if required not in traefik_k8s:
-        fail(f"Traefik Kubernetes namespace-scope invariant missing: {required.strip()}")
+        fail(f"Traefik file-provider invariant missing: {required}")
 
 policy_by_name = {doc.get("metadata", {}).get("name"): doc for doc in network_policies}
 dashboard_policy = policy_by_name.get("wazuh-dashboard", {})
@@ -436,10 +444,10 @@ for policy_name in ("traefik-ingress-egress", "authentik-server", "authentik-wor
         if "to" not in rule and any(port.get("port") == 443 for port in rule.get("ports", []) or []):
             fail(f"{policy_name} must not have destination-unbounded HTTPS egress")
 
-runtime_policy_renderer = text("scripts/render_k8s_runtime_policy.py")
-for token in ("service", "jsonpath={.spec.clusterIP}", "endpoints", "jsonpath={.subsets[*].addresses[*].ip}", "ipBlock", "port: 443"):
-    if token not in runtime_policy_renderer:
-        fail(f"Path C runtime API policy renderer lost service/endpoint destination token: {token}")
+runtime_config_renderer = text("scripts/render_k8s_runtime_config.py")
+for token in ("ORG_DOMAIN", "WG_SERVER_PORT", "WG_PEER_COUNT", "cxyz-traefik-dynamic", "trustForwardHeader: false", "maxResponseBodySize: 4194304", "wireguard-vpn"):
+    if token not in runtime_config_renderer:
+        fail(f"Path C runtime config renderer lost token: {token}")
 makefile_text = text("Makefile")
 for token in ("preflight-path-a", "preflight-audit", "preflight-path-b", "preflight-k8s"):
     if token not in makefile_text:
@@ -448,11 +456,11 @@ preflight_script = text("scripts/preflight.sh")
 for token in ("path-a", "audit", "path-b", "k8s", "docker compose version", "pybatfish"):
     if token not in preflight_script:
         fail(f"profile-aware preflight lost required token: {token}")
-for token in ("k8s-runtime-policy", "k8s/runtime-networkpolicy.yaml", "k8s-smoke"):
+for token in ("k8s-runtime-config", "k8s/runtime-config.yaml", "k8s-smoke"):
     if token not in makefile_text:
         fail(f"Path C deployment lifecycle lost required target/artifact: {token}")
-if "k8s/runtime-networkpolicy.yaml" not in text(".gitignore").splitlines():
-    fail("cluster-specific Kubernetes API NetworkPolicy must remain ignored")
+if "k8s/runtime-config.yaml" not in text(".gitignore").splitlines():
+    fail("operator-specific Path C runtime config must remain ignored")
 
 # Privileged networking workloads must start from an empty capability set and
 # use the default seccomp profile; other reviewed workloads must at least
@@ -485,9 +493,16 @@ if "https://wazuh-indexer:9200" not in text("k8s/generated/ossec.conf"):
 for stale_path in ("/var/log/suricata/eve.json", "/var/log/cxyz/remote.log"):
     if stale_path in text("k8s/generated/ossec.conf"):
         fail(f"generated Kubernetes Wazuh config retains unavailable Path A collector {stale_path}")
-for token in ("<auth>", "<port>1515</port>", "<decoder_dir>ruleset/decoders</decoder_dir>", "<rule_dir>ruleset/rules</rule_dir>"):
+for token in ("<auth>", "<port>1515</port>", "<use_password>yes</use_password>", "<decoder_dir>ruleset/decoders</decoder_dir>", "<rule_dir>ruleset/rules</rule_dir>"):
     if token not in text("docker/siem/ossec.conf") or token not in text("k8s/generated/ossec.conf"):
-        fail(f"Wazuh managed config must explicitly preserve enrollment/default ruleset behavior: {token}")
+        fail(f"Wazuh managed config must explicitly preserve authenticated enrollment/default ruleset behavior: {token}")
+for token in ("wazuh-indexer.pem", "wazuh-indexer-key.pem", "https://wazuh-indexer:9200"):
+    if token not in wazuh_k8s or token not in compose:
+        fail(f"Compose/Kubernetes Wazuh indexer TLS identity is not unified: {token}")
+if "opensearch.ssl.verificationMode: full" not in text("docker/wazuh/opensearch_dashboards.yml"):
+    fail("Wazuh dashboard must verify the indexer hostname, not only its CA")
+if "WAZUH_REGISTRATION_PASSWORD" not in text("k8s/20-suricata.yaml") or "WAZUH_REGISTRATION_PASSWORD" not in text("scripts/render_wazuh_users.sh"):
+    fail("Wazuh agent enrollment must use the generated registration password")
 
 for token in (
     "cxyz-wazuh-tls",
@@ -531,7 +546,7 @@ if not authentik_preflight.exists() or "authentik-preflight" not in makefile_tex
 secret_script = text("scripts/gen-secrets.sh")
 if "umask 077" not in secret_script:
     fail("secret generator must enforce umask 077 before creating or replacing secret files")
-for token in ("openssl x509 -checkend", 'cert_has_days "$relay_certs/relay.crt" 30', 'cert_has_days "$relay_certs/ca.crt" 90', "zero-trust-gateway/certs"):
+for token in ("openssl x509 -checkend", 'cert_has_days "$relay_certs/relay.crt" 30', 'cert_has_days "$relay_certs/ca.crt" 90', "cert_has_dns_san", "zero-trust-gateway/certs"):
     if token not in secret_script:
         fail(f"certificate lifecycle guard missing token: {token}")
 render_wazuh_users = text("scripts/render_wazuh_users.sh")
@@ -545,7 +560,7 @@ if (
 k8s_smoke = text("scripts/k8s_smoke.sh")
 if "statefulset/authentik-postgres" not in k8s_smoke or "deployment/authentik-postgres" in k8s_smoke:
     fail("Kubernetes smoke gate must wait for the Authentik PostgreSQL StatefulSet")
-for token in ("render_k8s_runtime_policy.py --check", "port-forward service/traefik", "CXYZ-K8S-SURICATA-MARKER", "alerts/alerts.json"):
+for token in ("render_k8s_runtime_config.py --check", "port-forward service/traefik", "CXYZ-K8S-SURICATA-MARKER", "alerts/alerts.json", 'agent_name="suricata-${node_name}"'):
     if token not in k8s_smoke:
         fail(f"Kubernetes smoke gate lost runtime route/detection proof: {token}")
 if "docker/zero-trust-gateway/certs/" not in text(".gitignore"):
@@ -567,7 +582,25 @@ if not legacy_lock.exists() or 'version     = "0.8.3"' not in legacy_lock.read_t
 if "providers lock -platform=linux_amd64" not in makefile_text or "-platform=darwin_arm64" not in makefile_text:
     fail("Makefile must retain the cross-platform terraform-lock helper")
 
-for required_path in ("scripts/check_yaml_syntax.py", "scripts/k8s_smoke.sh", "docs/AUTHENTIK-UPGRADE.md", "docs/PKI-ROTATION.md", "supply-chain/lifecycle.yml"):
+legacy_main = text("terraform/libvirt/main.tf")
+legacy_user_data = text("terraform/libvirt/cloud-init/user-data.yml")
+if "templatefile(" not in legacy_main or "var.ssh_public_key" not in legacy_main or "${ssh_public_key}" not in legacy_user_data or "REPLACE_WITH_YOUR_PUBLIC_KEY" in legacy_user_data:
+    fail("legacy libvirt cloud-init must require and render a real SSH public key")
+if "deployment_config_sha256" not in text("compliance/provenance.py") or "deployment_config_sha256" not in text("compliance/generate_report.py"):
+    fail("evidence provenance must bind non-secret deployment behavior knobs")
+ha_script = text("scripts/attack_chain.sh")
+for token in ('-c "interface eth1" -c "shutdown"', "restore_vrrp_master", "d2_failover_state", "sleep 5"):
+    if token not in ha_script:
+        fail(f"HA-01 Path A failure injection lost VLAN10/master-takeover proof: {token}")
+for token in ("server1", "edge", "core", "dist1", "dist2", "fw-core", "fw-dmz", "configured_nodes", "relay_received"):
+    if token not in hardening_test:
+        fail(f"DET-02 Path A lost per-identity end-to-end proof: {token}")
+if "--profile vpn-test" not in text("scripts/dev_check.sh"):
+    fail("local dev-check must validate the vpn-test Compose profile used by CI")
+if "env_exec.py --env-file .env -- bash scripts/urls.sh" not in makefile_text:
+    fail("make urls must honor ORG_DOMAIN and other non-secret dotenv settings")
+
+for required_path in ("scripts/check_yaml_syntax.py", "scripts/k8s_smoke.sh", "scripts/check_wazuh_pki.py", "scripts/render_k8s_runtime_config.py", "scripts/isolate_path_a_management.py", "docs/AUTHENTIK-UPGRADE.md", "docs/PKI-ROTATION.md", "supply-chain/lifecycle.yml"):
     if not (ROOT / required_path).exists():
         fail(f"required assurance/lifecycle artifact is missing: {required_path}")
 lifecycle_path = ROOT / "supply-chain/lifecycle.yml"

@@ -44,12 +44,15 @@ spec:
           env:
             - { name: WAZUH_MANAGER_SERVER, value: "wazuh-manager.cxyz-security.svc" }
             - { name: WAZUH_REGISTRATION_SERVER, value: "wazuh-manager.cxyz-security.svc" }
-            - name: WAZUH_AGENT_NAME
-              valueFrom: { fieldRef: { fieldPath: metadata.name } }
+            - name: CXYZ_NODE_NAME
+              valueFrom: { fieldRef: { fieldPath: spec.nodeName } }
+            - name: WAZUH_REGISTRATION_PASSWORD
+              valueFrom: { secretKeyRef: { name: cxyz-security-secrets, key: WAZUH_REGISTRATION_PASSWORD } }
           command: ["/bin/sh", "-lc"]
           args:
             - |
               set -eu
+              export WAZUH_AGENT_NAME="suricata-${CXYZ_NODE_NAME}"
               mkdir -p /wazuh-config-mount/etc
               cat > /wazuh-config-mount/etc/ossec.conf <<EOF
               <ossec_config>

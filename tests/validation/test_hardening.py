@@ -85,9 +85,7 @@ def test_radius_shared_secret_strength(evidence):
 
 
 def test_syslog_transport_is_tls(evidence):
-    result = in_node("server1", "sh", "-c", "cat /etc/rsyslog.d/*.conf 2>/dev/null")
-    tls = all(token in result.stdout for token in ("gtls", 'port="6514"', 'StreamDriverMode="1"', 'StreamDriverAuthMode="x509/name"'))
-    cleartext = 'port="514"' in result.stdout
+    nodes = ("server1", "edge", "core", "dist1", "dist2", "fw-core", "fw-dmz")
     relay_cfg = subprocess.run(
         ["docker", "compose", "exec", "-T", "syslog-relay", "cat", "/etc/rsyslog.conf"],
         cwd=ROOT, capture_output=True, text=True, check=False,
@@ -97,46 +95,60 @@ def test_syslog_transport_is_tls(evidence):
         and 'StreamDriver.AuthMode="x509/name"' in relay_cfg.stdout
         and "PermittedPeer" in relay_cfg.stdout
     )
-    marker = f"CXYZ-DET02-TLS-MARKER-{uuid.uuid4()}"
-    submitted = in_node("server1", "logger", "-p", "local0.notice", "-t", "cxyz-det02", marker)
-    relay_received = False
-    wazuh_alert_received = False
-    for _ in range(10):
-        relay = subprocess.run(
-            ["docker", "compose", "exec", "-T", "syslog-relay", "grep", "-F", marker, "/var/log/cxyz/remote.log"],
-            cwd=ROOT,
-            capture_output=True,
-            text=True,
-            check=False,
+
+    configured = {}
+    cleartext = {}
+    markers = {node: f"CXYZ-DET02-TLS-MARKER-{node}-{uuid.uuid4()}" for node in nodes}
+    submitted = {}
+    for node in nodes:
+        result = in_node(node, "sh", "-c", "cat /etc/rsyslog.d/*.conf 2>/dev/null")
+        configured[node] = result.returncode == 0 and all(
+            token in result.stdout
+            for token in ("gtls", 'port="6514"', 'StreamDriverMode="1"', 'StreamDriverAuthMode="x509/name"')
         )
-        alert = subprocess.run(
-            ["docker", "compose", "exec", "-T", "wazuh.manager", "sh", "-c", f"grep -Fq '{marker}' /var/ossec/logs/alerts/alerts.json"],
-            cwd=ROOT,
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-        relay_received = relay.returncode == 0
-        wazuh_alert_received = alert.returncode == 0
-        if relay_received and wazuh_alert_received:
+        cleartext[node] = 'port="514"' in result.stdout
+        submitted[node] = in_node(
+            node, "logger", "-p", "local0.notice", "-t", "cxyz-det02", markers[node]
+        ).returncode == 0
+
+    relay_seen = {node: False for node in nodes}
+    alert_seen = {node: False for node in nodes}
+    deadline = time.monotonic() + 30
+    while time.monotonic() < deadline:
+        for node, marker in markers.items():
+            if not relay_seen[node]:
+                relay = subprocess.run(
+                    ["docker", "compose", "exec", "-T", "syslog-relay", "grep", "-Fq", marker, "/var/log/cxyz/remote.log"],
+                    cwd=ROOT, capture_output=True, text=True, check=False,
+                )
+                relay_seen[node] = relay.returncode == 0
+            if not alert_seen[node]:
+                alert = subprocess.run(
+                    ["docker", "compose", "exec", "-T", "wazuh.manager", "grep", "-Fq", marker, "/var/ossec/logs/alerts/alerts.json"],
+                    cwd=ROOT, capture_output=True, text=True, check=False,
+                )
+                alert_seen[node] = alert.returncode == 0
+        if all(relay_seen.values()) and all(alert_seen.values()):
             break
         time.sleep(1)
+
     evidence(
         control="DET-02",
-        assertion="unique marker traverses authenticated TLS syslog relay and creates a Wazuh alert",
+        assertion="every audited Path A identity sends a unique marker through authenticated TLS syslog and Wazuh",
         observed={
-            "tls_configured": tls,
+            "configured_nodes": configured,
             "relay_mutual_tls": relay_mutual_tls,
             "cleartext_514": cleartext,
-            "marker_submitted": submitted.returncode == 0,
-            "relay_received": relay_received,
-            "wazuh_alert_received": wazuh_alert_received,
+            "marker_submitted": submitted,
+            "relay_received": relay_seen,
+            "wazuh_alert_received": alert_seen,
         },
-        enforcement_node="server1,syslog-relay,wazuh.manager",
+        enforcement_node="server1,edge,core,dist1,dist2,fw-core,fw-dmz,syslog-relay,wazuh.manager",
     )
-    assert tls and relay_mutual_tls and not cleartext, "device-to-relay logging is not mutually authenticated TLS-only"
-    assert submitted.returncode == 0, "unable to submit DET-02 marker"
-    assert relay_received and wazuh_alert_received, "TLS marker did not reach relay and Wazuh"
+    assert relay_mutual_tls, "syslog relay is not enforcing mutually authenticated TLS"
+    assert all(configured.values()) and not any(cleartext.values()), "one or more Path A identities are not TLS-only"
+    assert all(submitted.values()), "one or more Path A identities could not submit DET-02 marker"
+    assert all(relay_seen.values()) and all(alert_seen.values()), "one or more Path A mTLS identities failed end-to-end relay/Wazuh delivery"
 
 
 def test_ssh_idle_timeout(evidence):

@@ -11,6 +11,7 @@ chmod 600 .env
 # Add fields introduced after an operator's initial bootstrap without replacing
 # any existing local values.
 for required in \
+  'WAZUH_REGISTRATION_PASSWORD=CHANGE_ME_agent_enrollment_min_32_chars' \
   'RADIUS_TEST_PASSWORD=CHANGE_ME_ephemeral_integration_password' \
   'RADIUS_TEST_CRYPT=CHANGE_ME_see_scripts_mkhash' \
   'RADIUS_SECRET_PC1_PROBE=CHANGE_ME_unique_pc1_probe_min_32_chars'; do
@@ -49,6 +50,13 @@ fi
 cert_has_days() {
   local cert="$1" days="$2"
   [ -f "$cert" ] && openssl x509 -checkend "$((days * 86400))" -noout -in "$cert" >/dev/null 2>&1
+}
+
+cert_has_dns_san() {
+  local cert="$1" dns="$2"
+  [ -f "$cert" ] || return 1
+  openssl x509 -in "$cert" -noout -ext subjectAltName 2>/dev/null \
+    | tr ',' '\n' | grep -Eq "^[[:space:]]*DNS:${dns//./\.}[[:space:]]*$"
 }
 
 require_signing_key() {
@@ -130,7 +138,9 @@ elif ! cert_has_days "$ztna_certs/ca.crt" 90; then
   echo "ZTNA CA expires within 90 days; perform planned CA overlap/rotation" >&2
   exit 1
 fi
-if [ ! -f "$ztna_certs/tls.key" ] || ! cert_has_days "$ztna_certs/tls.crt" 30; then
+if [ ! -f "$ztna_certs/tls.key" ] || ! cert_has_days "$ztna_certs/tls.crt" 30 \
+    || ! cert_has_dns_san "$ztna_certs/tls.crt" "app.${org_domain}" \
+    || ! cert_has_dns_san "$ztna_certs/tls.crt" "sso.${org_domain}"; then
   require_signing_key "$ztna_certs/ca.key"
   [ -f "$ztna_certs/tls.key" ] || openssl genrsa -out "$ztna_certs/tls.key" 3072 >/dev/null 2>&1
   openssl req -new -key "$ztna_certs/tls.key" \
