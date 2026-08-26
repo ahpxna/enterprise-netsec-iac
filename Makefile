@@ -190,7 +190,7 @@ vm-idempotency: secrets vm-inventory ## Require a zero-change second Path B Day-
 	python scripts/env_exec.py --env-file .env -- python scripts/check_path_b_idempotency.py
 
 .PHONY: vm-audit
-vm-audit: vm-configure security ## Audit the real Path B VM data plane and fail closed
+vm-audit: vm-configure security vpn-probe ## Audit the real Path B VM data plane and fail closed
 	@$(MAKE) vm-health
 	@$(MAKE) vm-idempotency
 	@mkdir -p $(EVIDENCE)-path-b

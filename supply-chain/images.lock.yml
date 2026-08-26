@@ -224,8 +224,8 @@ images:
       note: Resolved multi-platform 8.0.6 index; closes the only deferred runtime image.
       kind: multi-platform-index
   authentik:
-    intent_ref: ghcr.io/goauthentik/server:2024.8
-    pinned_ref: ghcr.io/goauthentik/server@sha256:f2e5c18e922b40bd0cc3b5a2e9ac96ffb9f4109282bbc92f43c9d4e8f232c381
+    intent_ref: ghcr.io/goauthentik/server:2026.8
+    pinned_ref: ghcr.io/goauthentik/server@sha256:7421753cfea67e89a6d295a1f0173ccea3866b33768c88dad90453b151cdcfd5
     status: verified
     scopes:
       - compose
@@ -236,10 +236,10 @@ images:
     verification:
       level: first-party-package-metadata
       kind: multi-platform-index
-      source: https://github.com/goauthentik/authentik/pkgs/container/server/310014232?tag=2024.8.6
-      note: GitHub Packages maps both 2024.8.6 and 2024.8 to this top-level digest and lists linux/amd64
-        and linux/arm64 children. This makes the legacy branch selection immutable; it does not make the
-        unsupported branch current or remove the separate lifecycle-upgrade debt.
+      source: https://github.com/goauthentik/authentik/pkgs/container/server
+      note: Registry inspection of the 2026.8 release tag resolved this top-level OCI index digest with
+        linux/amd64 and linux/arm64 child manifests. Existing 2024.8 databases still require the controlled
+        sequential migration in docs/AUTHENTIK-UPGRADE.md; this pin is the fresh-deployment default.
   frr:
     intent_ref: quay.io/frrouting/frr:9.1.0
     pinned_ref: quay.io/frrouting/frr@sha256:f310c2ebb3827fa03b9674ee05e70a7d5eef2123bcc3b475eb2ef14dafcb52b4

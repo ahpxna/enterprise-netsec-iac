@@ -2,14 +2,14 @@
 
 ## Current state
 
-The repository intentionally still pins the existing Authentik 2024.8 package
-by immutable OCI index digest.  That closes supply-chain mutability but does
-**not** make the 2024.8 release train supported.
+Fresh repository deployments pin the supported Authentik 2026.8 package by
+immutable OCI index digest. This remediates the ForwardAuth vulnerability
+present in the legacy 2024.8 train.
 
-This debt is not auto-fixed by changing the image reference because an existing
-Authentik database must follow Authentik's supported sequential-major upgrade
-path.  A direct jump from 2024.8 to a 2026 release can turn a security upgrade
-into an unrecoverable schema/application migration failure.
+An existing 2024.8 Authentik database is not auto-upgraded by this repository.
+It must follow Authentik's supported sequential-major upgrade path. A direct
+jump from 2024.8 to the fresh-deployment 2026.8 image can turn a security
+upgrade into an unrecoverable schema/application migration failure.
 
 Official references used for this runbook:
 
@@ -69,5 +69,5 @@ when all of the following exist for the target supported train:
 - server/worker health and database backup/restore are demonstrated;
 - Compose and Path C manifests use the same accepted release.
 
-Until then, leaving the old version visibly documented is safer than a
-syntactically simple but operationally unsafe direct version jump.
+Until then, do not point a legacy database volume at the 2026.8 default. Keep
+the legacy migration isolated and follow this runbook.

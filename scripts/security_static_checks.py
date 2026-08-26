@@ -289,6 +289,9 @@ else:
     for token in (
         "authentik_providers_proxy.proxyprovider",
         "authentik_core.application",
+        "authentik_core.group",
+        "authentik_policies.policybinding",
+        "cxyz-ztna-users",
         "authentik_outposts.outpost",
         "forward_single",
         "CXYZ_AUTHENTIK_APP_URL",
@@ -311,6 +314,16 @@ for token in (
 ):
     if token not in dynamic_ztna:
         fail(f"Traefik ZTNA config lost required declarative/TLS token: {token}")
+if "trustForwardHeader: false" not in dynamic_ztna or "maxResponseBodySize: 4194304" not in dynamic_ztna:
+    fail("Docker Traefik ForwardAuth must sanitize client forwarded headers and bound auth response bodies")
+if "trustForwardHeader: false" not in authentik_k8s or "maxResponseBodySize: 4194304" not in authentik_k8s:
+    fail("Kubernetes Traefik ForwardAuth must sanitize client forwarded headers and bound auth response bodies")
+path_b_audit = text("scripts/path_b_audit.py")
+if "--insecure" in path_b_audit or "--cacert" not in path_b_audit:
+    fail("Path B ZTNA validation must verify the lab CA instead of disabling TLS verification")
+for token in ("vpn_probe_admin_ssh_reachable", "vpn_probe_route_uses_wg0"):
+    if token not in path_b_audit:
+        fail(f"Path B VPN-01 assurance lost required end-to-end probe: {token}")
 hardening_test = text("tests/validation/test_hardening.py")
 if "--insecure" in hardening_test:
     fail("ZTNA live validation must verify the lab CA instead of using curl --insecure")
@@ -455,9 +468,19 @@ for component, entry in IMAGE_LOCK.items():
 # Certificate lifecycle: leaves renew before expiry; CA requires an explicit
 # overlap/rotation operation instead of silently expiring in place.
 secret_script = text("scripts/gen-secrets.sh")
+if "umask 077" not in secret_script:
+    fail("secret generator must enforce umask 077 before creating or replacing secret files")
 for token in ("openssl x509 -checkend", 'cert_has_days "$relay_certs/relay.crt" 30', 'cert_has_days "$relay_certs/ca.crt" 90', "zero-trust-gateway/certs"):
     if token not in secret_script:
         fail(f"certificate lifecycle guard missing token: {token}")
+render_wazuh_users = text("scripts/render_wazuh_users.sh")
+if (
+    re.search(r"(?m)^\s*(?:source|\.)\s+\.env(?:\s|$)", render_wazuh_users)
+    or "scripts/env_exec.py" not in render_wazuh_users
+    or "read_env_value WAZUH_INDEXER_PASSWORD" not in render_wazuh_users
+    or "read_env_value WAZUH_DASHBOARD_PASSWORD" not in render_wazuh_users
+):
+    fail("Wazuh user renderer must parse required dotenv values without shell sourcing")
 if "docker/zero-trust-gateway/certs/" not in text(".gitignore"):
     fail("local ZTNA CA/private key directory must be gitignored")
 
@@ -482,9 +505,14 @@ if lifecycle_path.exists():
     lifecycle = yaml.safe_load(lifecycle_path.read_text()) or {}
     authentik_lifecycle = (lifecycle.get("components") or {}).get("authentik", {})
     if authentik_lifecycle.get("state") != "migration-required":
-        fail("unsupported Authentik 2024.8 debt must remain explicitly marked migration-required until the runbook is completed")
+        fail("legacy Authentik database migration debt must remain explicitly marked migration-required until the runbook is completed")
+    if authentik_lifecycle.get("current_intent") != "2026.8":
+        fail("fresh Authentik deployment must use the reviewed 2026.8 security release")
     if authentik_lifecycle.get("runbook") != "docs/AUTHENTIK-UPGRADE.md":
         fail("Authentik lifecycle debt must reference the controlled sequential-upgrade runbook")
+authentik_pin = IMAGE_LOCK["authentik"]["pinned_ref"]
+if "2024.8" in IMAGE_LOCK["authentik"]["intent_ref"] or authentik_pin not in compose or authentik_pin not in authentik_k8s:
+    fail("Compose and Kubernetes Authentik must use the reviewed immutable 2026.8 image index")
 
 root_report = ROOT / "COMPLIANCE-REPORT.md"
 if root_report.exists():

@@ -472,6 +472,11 @@ def test_vpn01() -> tuple[str, dict]:
     wg_if = compose_exec("wireguard", "wg show interfaces")
     wg_peers = compose_exec("wireguard", "wg show all peers")
     wg_handshakes = compose_exec("wireguard", "wg show all latest-handshakes")
+    probe_route = compose_exec("vpn-probe", "ip route get 172.16.50.1")
+    probe_admin = compose_exec(
+        "vpn-probe",
+        "timeout 4 bash -lc 'exec 3<>/dev/tcp/172.16.50.1/22'",
+    )
     now = int(time.time())
     recent_handshake = False
     handshake_ages: list[int] = []
@@ -492,20 +497,26 @@ def test_vpn01() -> tuple[str, dict]:
         "wireguard_peer_count": len([line for line in wg_peers.stdout.splitlines() if line.strip()]),
         "recent_wireguard_handshake": recent_handshake,
         "handshake_ages_seconds": handshake_ages,
+        "vpn_probe_route_uses_wg0": probe_route.returncode == 0 and "dev wg0" in probe_route.stdout,
+        "vpn_probe_admin_ssh_reachable": probe_admin.returncode == 0,
         "forbidden_management_publish_present": forbidden_publish,
     }
     assert ssh_ready, "VPN-01 healthy DC SSH positive control failed"
     assert wan.returncode != 0, "VPN-01 routed ISP reached DC management SSH"
     assert observed["wireguard_interface_ready"] and observed["wireguard_peer_count"] > 0, "VPN-01 WireGuard has no operational interface/configured peer"
     assert recent_handshake, "VPN-01 requires at least one real WireGuard peer handshake within the last 10 minutes"
+    assert observed["vpn_probe_route_uses_wg0"], "VPN-01 probe route to DC SSH does not use wg0"
+    assert observed["vpn_probe_admin_ssh_reachable"], "VPN-01 probe cannot reach DC SSH through WireGuard"
     assert not forbidden_publish, "VPN-01 management/backend port is host-published"
     return "a real WireGuard peer has recently handshaken while routed WAN management access is denied and management/backend ports remain unpublished", observed
 
 def test_ztna01() -> tuple[str, dict]:
     domain = os.environ.get("ORG_DOMAIN") or ENV.get("ORG_DOMAIN", "companyxyz.lab")
     host = f"app.{domain}"
+    ca_file = ROOT / "docker/zero-trust-gateway/certs/ca.crt"
+    assert ca_file.is_file(), "ZTNA-01 lab CA is missing; run make secrets"
     response = run([
-        "curl", "--silent", "--show-error", "--insecure",
+        "curl", "--silent", "--show-error", "--cacert", str(ca_file),
         "--output", "/dev/null", "--dump-header", "-",
         "--resolve", f"{host}:443:127.0.0.1", f"https://{host}/",
     ], timeout=15)
@@ -517,6 +528,7 @@ def test_ztna01() -> tuple[str, dict]:
     bypass = run(["curl", "--silent", "--max-time", "3", "http://127.0.0.1:8081/"], timeout=5)
     observed = {
         "gateway_curl_rc": response.returncode,
+        "trusted_ca_file": str(ca_file),
         "status_code": code,
         "redirects_to_authentik": redirect,
         "direct_backend_8081_reachable": bypass.returncode == 0,

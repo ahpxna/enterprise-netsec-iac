@@ -157,7 +157,7 @@ services:
 
   authentik-server:
     profiles: ["ztna"]
-    image: ghcr.io/goauthentik/server@sha256:f2e5c18e922b40bd0cc3b5a2e9ac96ffb9f4109282bbc92f43c9d4e8f232c381
+    image: ghcr.io/goauthentik/server@sha256:7421753cfea67e89a6d295a1f0173ccea3866b33768c88dad90453b151cdcfd5
     hostname: authentik
     restart: unless-stopped
     command: server
@@ -180,7 +180,7 @@ services:
   # worker in addition to the web server.
   authentik-worker:
     profiles: ["ztna"]
-    image: ghcr.io/goauthentik/server@sha256:f2e5c18e922b40bd0cc3b5a2e9ac96ffb9f4109282bbc92f43c9d4e8f232c381
+    image: ghcr.io/goauthentik/server@sha256:7421753cfea67e89a6d295a1f0173ccea3866b33768c88dad90453b151cdcfd5
     hostname: authentik-worker
     restart: unless-stopped
     command: worker

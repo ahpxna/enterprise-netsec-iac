@@ -15,7 +15,7 @@ rollout() {
 
 for workload in \
   statefulset/wazuh-indexer deployment/wazuh-manager deployment/wazuh-dashboard \
-  deployment/authentik-postgres deployment/authentik-redis deployment/authentik-server \
+  statefulset/authentik-postgres deployment/authentik-redis deployment/authentik-server \
   deployment/authentik-worker deployment/traefik deployment/wireguard daemonset/suricata; do
   rollout "$workload"
 done

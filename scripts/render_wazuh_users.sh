@@ -3,10 +3,14 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
-set -a
-# shellcheck disable=SC1091
-source .env
-set +a
+
+# Do not source .env: crypt hashes such as $6$... are data, not shell code.
+read_env_value() {
+  python3 scripts/env_exec.py --env-file .env --print-var "$1"
+}
+
+WAZUH_INDEXER_PASSWORD="$(read_env_value WAZUH_INDEXER_PASSWORD)"
+WAZUH_DASHBOARD_PASSWORD="$(read_env_value WAZUH_DASHBOARD_PASSWORD)"
 
 hash_password() {
   printf '%s\n' "$1" | docker run --rm -i wazuh/wazuh-indexer@sha256:66b7640cce54f5f20a65e8320601b4570a1306d9f9b334d30bcaa324720a517c \

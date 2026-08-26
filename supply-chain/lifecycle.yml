@@ -2,12 +2,12 @@
 reviewed_on: 2026-08-25
 components:
   authentik:
-    current_intent: "2024.8.6"
+    current_intent: "2026.8"
     state: migration-required
     reason: >-
-      Immutable pin retained for the existing database, but the release train
-      is outside the currently supported Authentik trains. Existing databases
-      require sequential major-release upgrades.
+      Fresh deployments use the supported 2026.8 train. Existing 2024.8
+      databases require a controlled sequential major-release migration and
+      must not be pointed directly at the fresh-deployment default.
     runbook: docs/AUTHENTIK-UPGRADE.md
   traefik:
     current_intent: "3.7.11"

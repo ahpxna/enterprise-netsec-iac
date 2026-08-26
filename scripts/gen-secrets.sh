@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Idempotent secret bootstrap. Never prints secrets to stdout. Never commits.
 set -euo pipefail
+umask 077
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 

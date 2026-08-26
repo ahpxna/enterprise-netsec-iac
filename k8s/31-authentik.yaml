@@ -100,7 +100,7 @@ spec:
     spec:
       containers:
         - name: authentik-server
-          image: ghcr.io/goauthentik/server@sha256:f2e5c18e922b40bd0cc3b5a2e9ac96ffb9f4109282bbc92f43c9d4e8f232c381
+          image: ghcr.io/goauthentik/server@sha256:7421753cfea67e89a6d295a1f0173ccea3866b33768c88dad90453b151cdcfd5
           args: ["server"]
           securityContext:
             allowPrivilegeEscalation: false
@@ -149,7 +149,7 @@ spec:
     spec:
       containers:
         - name: authentik-worker
-          image: ghcr.io/goauthentik/server@sha256:f2e5c18e922b40bd0cc3b5a2e9ac96ffb9f4109282bbc92f43c9d4e8f232c381
+          image: ghcr.io/goauthentik/server@sha256:7421753cfea67e89a6d295a1f0173ccea3866b33768c88dad90453b151cdcfd5
           args: ["worker"]
           securityContext:
             allowPrivilegeEscalation: false
@@ -225,7 +225,8 @@ metadata: { name: authentik-forwardauth, namespace: cxyz-security }
 spec:
   forwardAuth:
     address: "http://authentik-server.cxyz-security.svc:9000/outpost.goauthentik.io/auth/traefik"
-    trustForwardHeader: true
+    trustForwardHeader: false
+    maxResponseBodySize: 4194304
     authResponseHeaders: [X-authentik-username, X-authentik-groups, X-authentik-email]
 ---
 apiVersion: traefik.io/v1alpha1

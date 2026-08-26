@@ -37,11 +37,14 @@ def parse_dotenv(path: pathlib.Path) -> dict[str, str]:
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--env-file", default=".env", type=pathlib.Path)
+    parser.add_argument("--print-var", metavar="KEY", help="print one parsed dotenv value without shell evaluation")
     parser.add_argument("command", nargs=argparse.REMAINDER)
     args = parser.parse_args()
     if args.command and args.command[0] == "--":
         args.command = args.command[1:]
-    if not args.command:
+    if args.print_var and args.command:
+        parser.error("--print-var cannot be combined with a command")
+    if not args.print_var and not args.command:
         parser.error("a command is required after options")
     if not args.env_file.is_file():
         parser.error(f"environment file not found: {args.env_file}")
@@ -49,6 +52,11 @@ def main() -> int:
         values = parse_dotenv(args.env_file)
     except ValueError as exc:
         parser.error(str(exc))
+    if args.print_var:
+        if args.print_var not in values:
+            parser.error(f"dotenv variable not found: {args.print_var}")
+        print(values[args.print_var])
+        return 0
     # Path-valued variables are expanded here rather than by a shell. This
     # preserves the no-eval property while allowing portable ~/.ssh paths.
     for key, value in list(values.items()):
