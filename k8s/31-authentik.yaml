@@ -52,6 +52,7 @@ metadata: { name: authentik-postgres, namespace: cxyz-security }
 spec:
   selector: { app: authentik-postgres }
   ports: [{ port: 5432 }]
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata: { name: authentik-server, namespace: cxyz-security }

@@ -15,9 +15,20 @@ help: ## Show this help
 		| awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-22s\033[0m %s\n", $$1, $$2}'
 
 # ---------------------------------------------------------------- setup
-.PHONY: preflight
-preflight: ## Check host prerequisites (docker, clab, ansible, terraform)
-	@bash scripts/preflight.sh
+.PHONY: preflight preflight-path-a preflight-audit preflight-path-b preflight-k8s
+preflight: preflight-audit ## Check everything needed for the full Path A audit workflow
+
+preflight-path-a: ## Check only tools required to bring up Path A
+	@bash scripts/preflight.sh path-a
+
+preflight-audit: ## Check Path A plus lint/audit dependencies
+	@bash scripts/preflight.sh audit
+
+preflight-path-b: ## Check Terraform/libvirt/Ansible prerequisites for Path B
+	@bash scripts/preflight.sh path-b
+
+preflight-k8s: ## Check kubectl/Python/curl prerequisites for Path C
+	@bash scripts/preflight.sh k8s
 
 .PHONY: secrets
 secrets: ## Generate .env + RADIUS hashes (idempotent)
@@ -25,7 +36,7 @@ secrets: ## Generate .env + RADIUS hashes (idempotent)
 
 # ---------------------------------------------------------------- build
 .PHONY: up
-up: preflight secrets images dc-network wazuh-config net security ## FULL STACK: network fabric + security services
+up: preflight-path-a secrets images dc-network wazuh-config net security ## FULL STACK: network fabric + security services
 	@echo "==> Stack is up.  Dashboards:  make urls"
 
 .PHONY: dc-network
@@ -227,7 +238,7 @@ k8s-runtime-policy: ## Render exact Traefik -> kubernetes.default API /32 egress
 	python scripts/render_k8s_runtime_policy.py
 
 .PHONY: k8s-up
-k8s-up: k8s-runtime-secrets k8s-runtime-policy ## Deploy the security plane (Wazuh/Suricata/Traefik/Authentik/WG) to k8s
+k8s-up: preflight-k8s k8s-runtime-secrets k8s-runtime-policy ## Deploy the security plane (Wazuh/Suricata/Traefik/Authentik/WG) to k8s
 	kubectl apply -f k8s/00-namespace.yaml
 	kubectl apply -f k8s/runtime-networkpolicy.yaml
 	kubectl apply -f k8s/runtime-secrets.yaml

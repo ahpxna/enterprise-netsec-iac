@@ -125,6 +125,23 @@ for filename, lines in (("requirements-ci.txt", requirements_ci), ("requirements
 if any(token in WORKFLOW for token in ("pip install ansible-core ansible-lint", "pip install pybatfish pytest")):
     fail("CI must install Python tooling from exact requirements files, not floating command lines")
 
+
+# A scheduled, non-deterministic vulnerability-feed watch complements immutable
+# refs without turning moving CVE databases into PR-source determinism.
+supply_watch = ROOT / ".github/workflows/supply-chain-watch.yml"
+if not supply_watch.exists():
+    fail("scheduled supply-chain vulnerability workflow is missing")
+else:
+    watch = supply_watch.read_text()
+    for label, token in {
+        "pinned checkout": "actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0",
+        "pinned setup-python": "actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97",
+        "pinned Trivy action": "aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1",
+        "locked image scanner": "python scripts/scan_locked_images.py",
+    }.items():
+        if token not in watch:
+            fail(f"supply-chain watch lost {label}: {token}")
+
 if ERRORS:
     print("CI contract check FAILED:", file=sys.stderr)
     for error in ERRORS:

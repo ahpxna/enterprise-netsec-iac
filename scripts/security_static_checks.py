@@ -338,8 +338,13 @@ if "cxyz_dc" not in wireguard_networks or "cxyz_edge" not in wireguard_networks:
 probe = services.get("vpn-probe", {})
 if not probe or probe.get("ports"):
     fail("vpn-probe must exist as an unexposed real peer fixture")
-if "cxyz_edge" not in service_networks("vpn-probe"):
-    fail("vpn-probe must reach the WireGuard endpoint only through the edge network")
+if "cxyz_vpn_test_external" not in service_networks("vpn-probe") or "cxyz_edge" in service_networks("vpn-probe"):
+    fail("vpn-probe must be isolated on the synthetic external network and must not share WireGuard's service network")
+probe_hosts = [str(item) for item in probe.get("extra_hosts", []) or []]
+if not any("host.docker.internal:host-gateway" in item for item in probe_hosts):
+    fail("vpn-probe must reach WireGuard through the host-published UDP entrypoint")
+if "Endpoint = host.docker.internal:51820" not in text("scripts/prepare_vpn_probe.py"):
+    fail("VPN probe config must target the host UDP publish rather than Docker service DNS")
 wg_volumes = [str(v) for v in services.get("wireguard", {}).get("volumes", []) or []]
 if not any("wireguard-dc-route.sh:/custom-cont-init.d/40-cxyz-dc-route.sh:ro" in v for v in wg_volumes):
     fail("WireGuard server must install the reviewed DC forwarding/NAT init hook")
@@ -372,6 +377,10 @@ segmentation_test = text("tests/validation/test_segmentation.py")
 for token in ("pc1_management_interface_down", "dmz_management_interface_down", "10.1.1.50"):
     if token not in segmentation_test:
         fail(f"Path A segmentation test lost alternate-management-path proof: {token}")
+render_fabric = text("scripts/render_fabric.py")
+for token in ("management_forward_guards", "iif eth{index} to {subnet} prohibit"):
+    if token not in render_fabric:
+        fail(f"Path A routers lost data-plane -> OOB forwarding isolation guard: {token}")
 
 # Path B is stricter: Linux endpoints never receive a persistent libvirt OOB
 # NIC. They are administered over their data address through a trusted VyOS
@@ -385,6 +394,8 @@ path_b_tf = text("terraform/vyos-fabric/main.tf")
 for token in ("if try(node.path_b_management, true)", "endpoint_management_isolation", "Path B endpoint VMs must not retain persistent management-network NICs"):
     if token not in path_b_tf:
         fail(f"Path B OOB isolation guard lost token: {token}")
+if "management = try(local.management_plan[node_name], null)" not in path_b_tf:
+    fail("Path B interface-plan output must tolerate endpoint nodes without management NICs")
 path_b_audit = text("scripts/path_b_audit.py")
 for token in ("pc1_management_ssh_reachable", "dmz_management_ssh_reachable", "OOB management SSH address"):
     if token not in path_b_audit:
@@ -426,10 +437,17 @@ for policy_name in ("traefik-ingress-egress", "authentik-server", "authentik-wor
             fail(f"{policy_name} must not have destination-unbounded HTTPS egress")
 
 runtime_policy_renderer = text("scripts/render_k8s_runtime_policy.py")
-for token in ("kubernetes", "jsonpath={.spec.clusterIP}", "ipBlock", "cidr: {api_ip}/32", "port: 443"):
+for token in ("service", "jsonpath={.spec.clusterIP}", "endpoints", "jsonpath={.subsets[*].addresses[*].ip}", "ipBlock", "port: 443"):
     if token not in runtime_policy_renderer:
-        fail(f"Path C runtime API policy renderer lost exact-destination token: {token}")
+        fail(f"Path C runtime API policy renderer lost service/endpoint destination token: {token}")
 makefile_text = text("Makefile")
+for token in ("preflight-path-a", "preflight-audit", "preflight-path-b", "preflight-k8s"):
+    if token not in makefile_text:
+        fail(f"profile-specific preflight target is missing: {token}")
+preflight_script = text("scripts/preflight.sh")
+for token in ("path-a", "audit", "path-b", "k8s", "docker compose version", "pybatfish"):
+    if token not in preflight_script:
+        fail(f"profile-aware preflight lost required token: {token}")
 for token in ("k8s-runtime-policy", "k8s/runtime-networkpolicy.yaml", "k8s-smoke"):
     if token not in makefile_text:
         fail(f"Path C deployment lifecycle lost required target/artifact: {token}")
@@ -467,6 +485,9 @@ if "https://wazuh-indexer:9200" not in text("k8s/generated/ossec.conf"):
 for stale_path in ("/var/log/suricata/eve.json", "/var/log/cxyz/remote.log"):
     if stale_path in text("k8s/generated/ossec.conf"):
         fail(f"generated Kubernetes Wazuh config retains unavailable Path A collector {stale_path}")
+for token in ("<auth>", "<port>1515</port>", "<decoder_dir>ruleset/decoders</decoder_dir>", "<rule_dir>ruleset/rules</rule_dir>"):
+    if token not in text("docker/siem/ossec.conf") or token not in text("k8s/generated/ossec.conf"):
+        fail(f"Wazuh managed config must explicitly preserve enrollment/default ruleset behavior: {token}")
 
 for token in (
     "cxyz-wazuh-tls",
@@ -488,6 +509,19 @@ for component, entry in IMAGE_LOCK.items():
 supply_chain_scan = text("scripts/supply_chain_scan.sh")
 if "python scripts/scan_locked_images.py" not in supply_chain_scan or not (ROOT / "scripts/scan_locked_images.py").exists():
     fail("manual supply-chain scan must vulnerability-scan every immutable locked image")
+supply_watch_path = ROOT / ".github/workflows/supply-chain-watch.yml"
+if not supply_watch_path.exists():
+    fail("scheduled supply-chain vulnerability workflow is missing")
+else:
+    supply_watch = supply_watch_path.read_text()
+    for token in (
+        "schedule:",
+        "ubuntu-24.04",
+        "aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1",
+        "python scripts/scan_locked_images.py",
+    ):
+        if token not in supply_watch:
+            fail(f"scheduled supply-chain vulnerability workflow lost token: {token}")
 authentik_preflight = ROOT / "scripts/check_authentik_migration.py"
 if not authentik_preflight.exists() or "authentik-preflight" not in makefile_text or "security: authentik-preflight" not in makefile_text:
     fail("normal security deployment must fail closed before reusing a legacy Authentik database volume")
@@ -511,6 +545,9 @@ if (
 k8s_smoke = text("scripts/k8s_smoke.sh")
 if "statefulset/authentik-postgres" not in k8s_smoke or "deployment/authentik-postgres" in k8s_smoke:
     fail("Kubernetes smoke gate must wait for the Authentik PostgreSQL StatefulSet")
+for token in ("render_k8s_runtime_policy.py --check", "port-forward service/traefik", "CXYZ-K8S-SURICATA-MARKER", "alerts/alerts.json"):
+    if token not in k8s_smoke:
+        fail(f"Kubernetes smoke gate lost runtime route/detection proof: {token}")
 if "docker/zero-trust-gateway/certs/" not in text(".gitignore"):
     fail("local ZTNA CA/private key directory must be gitignored")
 
@@ -522,8 +559,11 @@ for dockerfile in ("docker/server1/Dockerfile", "docker/syslog-relay/Dockerfile"
         fail(f"{dockerfile} does not pin the Debian package repository snapshot")
 
 libvirt_versions = text("terraform/libvirt/versions.tf")
-if 'version = "0.8.1"' not in libvirt_versions or 'version = "~> 0.8.1"' in libvirt_versions:
-    fail("legacy libvirt provider must remain exact-pinned to 0.8.1 until its verified lockfile is generated")
+if 'version = "0.8.3"' not in libvirt_versions or 'version = "~> 0.8.3"' in libvirt_versions:
+    fail("legacy libvirt provider must remain exact-pinned to the reviewed 0.8.3 release")
+legacy_lock = ROOT / "terraform/libvirt/.terraform.lock.hcl"
+if not legacy_lock.exists() or 'version     = "0.8.3"' not in legacy_lock.read_text():
+    fail("legacy libvirt module must commit a verified provider lockfile")
 if "providers lock -platform=linux_amd64" not in makefile_text or "-platform=darwin_arm64" not in makefile_text:
     fail("Makefile must retain the cross-platform terraform-lock helper")
 

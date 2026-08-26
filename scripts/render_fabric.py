@@ -44,7 +44,29 @@ def shell_commands(node: dict) -> list[str]:
     return commands
 
 
-def node_definition(name: str, node: dict) -> dict:
+def management_forward_guards(node: dict, management_subnet: str) -> list[str]:
+    """Reject routed data-plane traffic into the Docker management subnet.
+
+    Containerlab management interfaces are convenient for trusted network-device
+    administration, but Linux routers also forward packets.  Without an explicit
+    FIB rule, a packet arriving on a data interface could be routed out eth0 into
+    the OOB bridge.  Bind one fail-closed policy rule to every data interface;
+    locally originated management traffic and packets addressed to the router's
+    own eth0 address are unaffected.
+    """
+    commands: list[str] = []
+    for index, _attachment in enumerate(node.get("attachments", []), start=1):
+        priority = 11000 + index
+        commands.append(
+            "sh -c 'ip rule del pref {priority} 2>/dev/null || true; "
+            "ip rule add pref {priority} iif eth{index} to {subnet} prohibit'".format(
+                priority=priority, index=index, subnet=management_subnet
+            )
+        )
+    return commands
+
+
+def node_definition(name: str, node: dict, management_subnet: str) -> dict:
     role = node["role"]
     rendered: dict = {
         "kind": "linux",
@@ -58,6 +80,7 @@ def node_definition(name: str, node: dict) -> dict:
         ]
         rendered["exec"] = [
             "sysctl -w net.ipv4.ip_forward=1",
+            *management_forward_guards(node, management_subnet),
             *shell_commands(node),
         ]
         if name in {"dist1", "dist2"}:
@@ -118,7 +141,7 @@ def render(intent: dict) -> str:
     links = topology["topology"]["links"]
 
     for name, node in intent["nodes"].items():
-        nodes[name] = node_definition(name, node)
+        nodes[name] = node_definition(name, node, intent["management"]["subnet"])
 
     # An isolated namespace hosts both user broadcast domains. The bridge
     # objects are created by containerlab inside this namespace.

@@ -287,11 +287,11 @@ output "node_mgmt_ips" {
 }
 
 output "node_interface_plan" {
-  description = "Stable guest device, MAC, network, and address mapping; management is always last"
+  description = "Stable guest device, MAC, network, and address mapping; trusted network devices append management last while endpoints have none"
   value = {
     for node_name in keys(var.nodes) : node_name => {
       data       = local.interface_plan[node_name]
-      management = local.management_plan[node_name]
+      management = try(local.management_plan[node_name], null)
     }
   }
 }

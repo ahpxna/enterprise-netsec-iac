@@ -41,4 +41,10 @@
     <group>attack,recon,path_b,</group>
   </rule>
 
+  <rule id="100205" level="5">
+    <match>CXYZ-K8S-SURICATA-MARKER-</match>
+    <description>Path C synthetic Suricata EVE pipeline checkpoint</description>
+    <group>suricata,path_c,smoke,</group>
+  </rule>
+
 </group>

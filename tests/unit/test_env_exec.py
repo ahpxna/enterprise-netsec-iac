@@ -38,3 +38,13 @@ def test_authentik_migration_guard_detects_only_the_legacy_project_volume(monkey
     monkeypatch.setattr("check_authentik_migration.subprocess.run", lambda *args, **kwargs: Result())
 
     assert legacy_volume_names("enterprise-netsec-iac") == {"enterprise-netsec-iac_authentik_db"}
+
+
+def test_yaml_duplicate_mapping_keys_are_rejected():
+    import yaml
+    from check_yaml_syntax import duplicate_key_errors
+
+    document = yaml.compose("apiVersion: v1\nkind: Service\napiVersion: apps/v1\n")
+    errors = duplicate_key_errors(document)
+
+    assert any("duplicate mapping key 'apiVersion'" in error for error in errors)

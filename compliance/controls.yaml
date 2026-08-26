@@ -97,8 +97,11 @@ controls:
     framework:
       - NIST-800-53r5-CM-7
       - NIST-800-53r5-SC-8
-    ref: modern protocol only
-    objective: SSHv2 enforced; Telnet disabled everywhere.
+    ref: legacy remote-access protocol eliminated
+    objective: >-
+      Telnet is disabled across all managed nodes; SSH session hardening is
+      validated by HRD-01, and Path B additionally proves key-only OOB-bound
+      VyOS SSH.
     implemented_by: ansible/roles/common_hardening
     verified_by: test_hardening.py::test_telnet_disabled
     severity: moderate

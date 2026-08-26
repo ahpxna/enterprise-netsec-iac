@@ -701,10 +701,12 @@ runtime proof instead of blanket enforcement.
 ### Runtime checkpoint
 
 `scripts/k8s_smoke.sh` waits for all core deployments/statefulsets/daemonsets,
-requires both static and runtime NetworkPolicies, checks Suricata EVE and its
-Wazuh sidecar, and retries until the Wazuh manager sees the Suricata agent.
-This checkpoint is deliberately outside PR CI because a real CNI/cluster is
-required.
+requires both static and runtime NetworkPolicies, verifies the runtime API
+policy against the cluster, and exercises Traefik's real CRD/IngressRoute/TLS
+path through a temporary local port-forward. It also injects a unique synthetic
+Suricata EVE marker and requires the same marker to appear in Wazuh manager
+alerts after traversing the sidecar agent. This checkpoint is deliberately
+outside PR CI because a real CNI/cluster is required.
 
 ---
 
@@ -724,10 +726,10 @@ required.
 - GitHub runner is `ubuntu-24.04`; direct CI Python dependencies are exact in
   `requirements-ci.txt` / `requirements-batfish.txt`; local Debian images use a
   fixed snapshot and CI builds them.
-- Legacy `dmacvicar/libvirt` is exact-pinned at 0.8.1. No lockfile hash was
-  fabricated: `make terraform-lock` is the required networked-host command to
-  generate cross-platform signed provider hashes. The 0.9 provider is a schema
-  rewrite and is a separate migration.
+- Both libvirt Terraform modules use the reviewed `dmacvicar/libvirt` 0.8.3
+  provider and commit verified cross-platform lockfiles. `make terraform-lock`
+  refreshes signed hashes on a networked Terraform host; the 0.9 provider is a
+  schema rewrite and remains a separate migration.
 - Leaf certificates renew inside a 30-day window. CA expiry blocks inside 90
   days and `docs/PKI-ROTATION.md` defines a dual-trust staged rotation instead
   of unsafe silent CA replacement.

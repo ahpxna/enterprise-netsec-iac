@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build an ignored WireGuard client config for the Path A VPN-01 probe."""
+"""Build a VPN-01 client config that traverses the host-published UDP entrypoint."""
 from __future__ import annotations
 
 import pathlib
@@ -24,7 +24,7 @@ def main() -> int:
         print("peer1.conf does not look like a WireGuard client profile", file=sys.stderr)
         return 1
     text, endpoint_count = re.subn(
-        r"(?m)^Endpoint\s*=.*$", "Endpoint = wireguard:51820", text, count=1
+        r"(?m)^Endpoint\s*=.*$", "Endpoint = host.docker.internal:51820", text, count=1
     )
     text, allowed_count = re.subn(
         r"(?m)^AllowedIPs\s*=.*$", f"AllowedIPs = {TARGET}", text, count=1

@@ -17,6 +17,10 @@ networks:
     name: cxyz_dc
   cxyz_edge:    # public-facing edge network for the gateway/VPN only
     driver: bridge
+  # Synthetic external client network used only by VPN-01. The probe has no
+  # service-network path to WireGuard and must traverse the host UDP publish.
+  cxyz_vpn_test_external:
+    driver: bridge
   cxyz_identity_front:
     driver: bridge
   cxyz_identity_backend:
@@ -245,8 +249,10 @@ services:
     environment:
       - PUID=1000
       - PGID=1000
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     volumes: ["./wireguard/probe:/config"]
-    networks: [cxyz_edge]
+    networks: [cxyz_vpn_test_external]
 
   # -------------------- DMZ demo app (behind gateway) --------------
   ztna-demo-app:

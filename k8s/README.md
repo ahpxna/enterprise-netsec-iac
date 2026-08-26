@@ -53,8 +53,10 @@ Budget roughly 4 vCPU / 8 GiB free; Wazuh Indexer is the heaviest pod.
 
 Use the Make target rather than raw `kubectl apply -k`. Traefik needs to watch
 Kubernetes CRDs, but a static `egress: TCP/443 anywhere` exception is forbidden.
-`k8s-runtime-policy` resolves the actual `kubernetes.default` ClusterIP and
-creates an ignored `/32` NetworkPolicy first.
+`k8s-runtime-policy` resolves both the `kubernetes.default` Service ClusterIP
+and its current API endpoint IPs, then creates an ignored set of exact `/32`
+NetworkPolicy destinations. Keeping both forms avoids relying on whether a CNI
+observes Service traffic before or after DNAT.
 
 ```bash
 make k8s-up
@@ -68,9 +70,11 @@ make k8s-smoke
 ```
 
 The smoke gate waits for every core rollout, verifies the required static and
-runtime NetworkPolicies, checks Suricata EVE creation and the Wazuh sidecar, and
-requires the manager to see the Suricata agent. It is intentionally not part of
-PR CI because it needs a real cluster.
+runtime NetworkPolicies, exercises Traefik's namespace-scoped CRD/IngressRoute
+through CA-verified HTTPS, and checks Suricata plus its Wazuh sidecar. It then
+injects a unique synthetic EVE marker and requires the marker to reach Wazuh
+manager alerts. It is intentionally not part of PR CI because it needs a real
+cluster.
 
 ## Access
 
@@ -85,8 +89,8 @@ kubectl -n cxyz-security port-forward svc/wazuh-dashboard 5601:5601
 
 - Namespace ingress/egress defaults to deny. Application flows are explicit.
 - Traefik uses namespace Role/RoleBinding and a namespace-scoped CRD provider;
-  its Kubernetes API egress is a runtime-rendered exact `/32`, not arbitrary
-  HTTPS egress.
+  its Kubernetes API egress is runtime-rendered to exact Service/endpoint `/32`
+  destinations, not arbitrary HTTPS egress.
 - Wazuh manager/indexer/dashboard are wired to the same local CA/certificate
   trust material used by Compose. The generated manager/dashboard config uses
   Kubernetes Service DNS.
