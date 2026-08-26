@@ -50,12 +50,12 @@ def service_networks(name: str) -> set[str]:
         return set(value)
     return set(value or [])
 
-if service_networks("dmz-web") & service_networks("authentik-postgres"):
-    fail("protected DMZ application must not share a Docker network with the identity database")
-if service_networks("dmz-web") & service_networks("authentik-redis"):
-    fail("protected DMZ application must not share a Docker network with the identity cache")
-if service_networks("traefik").isdisjoint(service_networks("dmz-web")):
-    fail("Traefik must retain a private network path to the protected DMZ application")
+if service_networks("ztna-demo-app") & service_networks("authentik-postgres"):
+    fail("protected ZTNA demo application must not share a Docker network with the identity database")
+if service_networks("ztna-demo-app") & service_networks("authentik-redis"):
+    fail("protected ZTNA demo application must not share a Docker network with the identity cache")
+if service_networks("traefik").isdisjoint(service_networks("ztna-demo-app")):
+    fail("Traefik must retain a private network path to the protected ZTNA demo application")
 if service_networks("traefik").isdisjoint(service_networks("authentik-server")):
     fail("Traefik must retain a private network path to Authentik forward-auth")
 identity_env = services.get("authentik-server", {}).get("environment", {})
@@ -176,7 +176,7 @@ required_policies = {
     "default-deny", "allow-cluster-dns", "traefik-ingress-egress",
     "authentik-server", "authentik-worker", "authentik-postgres",
     "authentik-redis", "wazuh-indexer", "wazuh-manager",
-    "wazuh-dashboard", "suricata-wazuh-agent", "wireguard-vpn",
+    "wazuh-dashboard", "suricata-wazuh-agent", "wireguard-vpn", "ztna-demo-app",
 }
 missing_policies = required_policies - policy_names
 if missing_policies:
@@ -266,7 +266,225 @@ wazuh_k8s = text("k8s/10-wazuh.yaml")
 for component in ("indexer", "manager", "dashboard"):
     expected = IMAGE_LOCK[f"wazuh-{component}"]["pinned_ref"]
     if expected not in wazuh_k8s:
-        fail(f"Kubernetes Wazuh {component} is not aligned to the audited 4.14.6 image-index pin")
+        fail(f"Kubernetes Wazuh {component} is not aligned to the audited image-index pin")
+
+
+# ---------------------------------------------------------------------------
+# Assurance/lifecycle invariants added after the v11 audit.
+# ---------------------------------------------------------------------------
+if "dmz-web" in services:
+    fail("Docker ZTNA demo must not reuse the canonical fabric asset name dmz-web")
+if "ztna-demo-app" not in services:
+    fail("Docker ZTNA demo application is missing")
+if service_networks("ztna-demo-app") & service_networks("authentik-postgres"):
+    fail("ZTNA demo application must not share a network with Authentik PostgreSQL")
+if service_networks("ztna-demo-app") & service_networks("authentik-redis"):
+    fail("ZTNA demo application must not share a network with Authentik Redis")
+
+blueprint_path = ROOT / "docker/authentik/blueprints/cxyz-ztna.yaml"
+if not blueprint_path.exists():
+    fail("Authentik ZTNA bootstrap blueprint is missing")
+else:
+    blueprint = blueprint_path.read_text()
+    for token in (
+        "authentik_providers_proxy.proxyprovider",
+        "authentik_core.application",
+        "authentik_outposts.outpost",
+        "forward_single",
+        "CXYZ_AUTHENTIK_APP_URL",
+        "CXYZ_AUTHENTIK_SSO_URL",
+        "authentik Embedded Outpost",
+    ):
+        if token not in blueprint:
+            fail(f"Authentik ZTNA blueprint lost declarative bootstrap token: {token}")
+for service_name in ("authentik-server", "authentik-worker"):
+    volumes = services.get(service_name, {}).get("volumes", []) or []
+    if not any("cxyz-ztna.yaml:/blueprints/cxyz-ztna.yaml:ro" in str(v) for v in volumes):
+        fail(f"{service_name} must mount the declarative Authentik ZTNA blueprint")
+
+dynamic_ztna = text("docker/zero-trust-gateway/dynamic.yml")
+for token in (
+    "/outpost.goauthentik.io/",
+    "ztna-demo-app:8080",
+    "/run/ztna/tls.crt",
+    "/run/ztna/tls.key",
+):
+    if token not in dynamic_ztna:
+        fail(f"Traefik ZTNA config lost required declarative/TLS token: {token}")
+hardening_test = text("tests/validation/test_hardening.py")
+if "--insecure" in hardening_test:
+    fail("ZTNA live validation must verify the lab CA instead of using curl --insecure")
+for token in ("--cacert", "vpn_probe_admin_ssh_reachable", "vpn_probe_route_uses_wg0"):
+    if token not in hardening_test:
+        fail(f"live hardening assurance lost required proof: {token}")
+
+wireguard_networks = service_networks("wireguard")
+if "cxyz_dc" not in wireguard_networks or "cxyz_edge" not in wireguard_networks:
+    fail("WireGuard must bridge the VPN ingress plane to the approved DC management target network")
+probe = services.get("vpn-probe", {})
+if not probe or probe.get("ports"):
+    fail("vpn-probe must exist as an unexposed real peer fixture")
+if "cxyz_edge" not in service_networks("vpn-probe"):
+    fail("vpn-probe must reach the WireGuard endpoint only through the edge network")
+wg_volumes = [str(v) for v in services.get("wireguard", {}).get("volumes", []) or []]
+if not any("wireguard-dc-route.sh:/custom-cont-init.d/40-cxyz-dc-route.sh:ro" in v for v in wg_volumes):
+    fail("WireGuard server must install the reviewed DC forwarding/NAT init hook")
+wg_route_script = text("docker/zero-trust-gateway/wireguard-dc-route.sh")
+for token in ("VPN_PEER_SUBNET", "VPN_ADMIN_SUBNET", "-i wg0", "MASQUERADE", "ESTABLISHED,RELATED"):
+    if token not in wg_route_script:
+        fail(f"WireGuard DC routing hook lost required routing/firewall token: {token}")
+
+# TIME-01 must measure the host kernel clock that Docker workloads actually use.
+if "chronyd" in text("docker/server1/supervisord.conf") or "chrony" in text("docker/server1/Dockerfile"):
+    fail("Path A server1 container must not run an independent chronyd instance")
+if "scripts/host_time_status.py" not in hardening_test:
+    fail("TIME-01 Path A must verify host NTS/clock state via host_time_status.py")
+if "-x" in text("docker/server1/supervisord.conf"):
+    fail("chronyd -x tracking-only mode is forbidden as TIME-01 enforcement")
+
+# Untrusted Path A endpoints retain Docker management only for bootstrap, then
+# drop eth0 after their data-plane route exists. This avoids the previous
+# network-mode:none provisioning regression while closing the alternate path.
+intent = yaml.safe_load(text("intent/fabric.yaml"))
+for endpoint in ("pc1", "dmz-web"):
+    if intent.get("nodes", {}).get(endpoint, {}).get("disable_management_after_boot") is not True:
+        fail(f"{endpoint} must disable its Docker management interface after bootstrap")
+clab_model = yaml.safe_load(text("clab/companyxyz.clab.yml"))
+for endpoint in ("pc1", "dmz-web"):
+    commands = clab_model.get("topology", {}).get("nodes", {}).get(endpoint, {}).get("exec", []) or []
+    if "sh -c 'ip link set eth0 down'" not in commands:
+        fail(f"rendered Path A endpoint {endpoint} does not drop its bootstrap management interface")
+segmentation_test = text("tests/validation/test_segmentation.py")
+for token in ("pc1_management_interface_down", "dmz_management_interface_down", "10.1.1.50"):
+    if token not in segmentation_test:
+        fail(f"Path A segmentation test lost alternate-management-path proof: {token}")
+
+# HRD controls use one canonical managed-node set and effective sshd settings.
+node_sets = text("tests/validation/node_sets.py")
+for endpoint in ("pc1", "pc4", "dmz-web"):
+    if endpoint not in node_sets:
+        fail(f"HRD managed-node set is missing {endpoint}")
+if '"sshd", "-T"' not in hardening_test:
+    fail("HRD-01 must validate effective sshd configuration with sshd -T")
+if "clab-companyxyz-dmz-web" not in text("ansible/inventory/hosts.yml"):
+    fail("canonical dmz-web endpoint is missing from Path A Ansible inventory")
+
+# Path C: namespace-scoped Traefik RBAC and explicit micro-segmentation.
+traefik_k8s = text("k8s/30-traefik.yaml")
+for forbidden in ("kind: ClusterRole\n", "kind: ClusterRoleBinding\n", "--providers.kubernetesingress=true"):
+    if forbidden in traefik_k8s:
+        fail(f"Traefik Kubernetes scope widened unexpectedly: {forbidden.strip()}")
+for required in (
+    "kind: Role\n",
+    "kind: RoleBinding\n",
+    "--providers.kubernetescrd.namespaces=cxyz-security",
+    "--providers.kubernetescrd.allowCrossNamespace=false",
+    "--providers.kubernetescrd.disableClusterScopeResources=true",
+):
+    if required not in traefik_k8s:
+        fail(f"Traefik Kubernetes namespace-scope invariant missing: {required.strip()}")
+
+policy_by_name = {doc.get("metadata", {}).get("name"): doc for doc in network_policies}
+dashboard_policy = policy_by_name.get("wazuh-dashboard", {})
+if dashboard_policy.get("spec", {}).get("ingress") != []:
+    fail("Wazuh dashboard NetworkPolicy must deny ordinary pod-network ingress")
+for policy_name in ("traefik-ingress-egress", "authentik-server", "authentik-worker", "wazuh-manager"):
+    policy = policy_by_name.get(policy_name, {})
+    for rule in policy.get("spec", {}).get("egress", []) or []:
+        if "to" not in rule and any(port.get("port") == 443 for port in rule.get("ports", []) or []):
+            fail(f"{policy_name} must not have destination-unbounded HTTPS egress")
+
+runtime_policy_renderer = text("scripts/render_k8s_runtime_policy.py")
+for token in ("kubernetes", "jsonpath={.spec.clusterIP}", "ipBlock", "cidr: {api_ip}/32", "port: 443"):
+    if token not in runtime_policy_renderer:
+        fail(f"Path C runtime API policy renderer lost exact-destination token: {token}")
+makefile_text = text("Makefile")
+for token in ("k8s-runtime-policy", "k8s/runtime-networkpolicy.yaml", "k8s-smoke"):
+    if token not in makefile_text:
+        fail(f"Path C deployment lifecycle lost required target/artifact: {token}")
+if "k8s/runtime-networkpolicy.yaml" not in text(".gitignore").splitlines():
+    fail("cluster-specific Kubernetes API NetworkPolicy must remain ignored")
+
+# Privileged networking workloads must start from an empty capability set and
+# use the default seccomp profile; other reviewed workloads must at least
+# refuse privilege escalation.
+for document in k8s_documents:
+    kind = document.get("kind")
+    name = document.get("metadata", {}).get("name", "")
+    if kind not in {"Deployment", "StatefulSet", "DaemonSet"}:
+        continue
+    pod_spec = document.get("spec", {}).get("template", {}).get("spec", {}) or {}
+    for container in pod_spec.get("containers", []) or []:
+        c_name = container.get("name", "")
+        sc = container.get("securityContext", {}) or {}
+        if sc.get("allowPrivilegeEscalation") is not False:
+            fail(f"Kubernetes container {name}/{c_name} must explicitly disable privilege escalation")
+        if (kind, name, c_name) in capability_allowlist:
+            caps = sc.get("capabilities", {}) or {}
+            if set(caps.get("drop", []) or []) != {"ALL"}:
+                fail(f"privileged networking container {name}/{c_name} must drop ALL before adding reviewed capabilities")
+        if (sc.get("seccompProfile", {}) or {}).get("type") != "RuntimeDefault":
+            fail(f"Kubernetes container {name}/{c_name} must use seccompProfile RuntimeDefault")
+
+# Path C Wazuh trust graph is source-defined even though live cluster parity
+# remains a separate runtime checkpoint.
+wazuh_k8s = text("k8s/10-wazuh.yaml")
+if "https://wazuh.indexer:9200" in text("k8s/generated/ossec.conf"):
+    fail("generated Kubernetes Wazuh manager config still uses Compose DNS wazuh.indexer")
+if "https://wazuh-indexer:9200" not in text("k8s/generated/ossec.conf"):
+    fail("generated Kubernetes Wazuh manager config must target Service DNS wazuh-indexer")
+
+for token in (
+    "cxyz-wazuh-tls",
+    "root-ca.pem",
+    "admin.pem",
+    "admin-key.pem",
+    "FILEBEAT_SSL_VERIFICATION_MODE",
+    "SSL_CERTIFICATE_AUTHORITIES",
+    "WAZUH_API_URL",
+    "cxyz-wazuh-security-config",
+):
+    if token not in wazuh_k8s:
+        fail(f"Kubernetes Wazuh trust/config parity lost token: {token}")
+
+# Image inventory must be completely immutable at merge time.
+for component, entry in IMAGE_LOCK.items():
+    if entry.get("status") == "deferred" or not entry.get("pinned_ref"):
+        fail(f"image-lock component {component} remains mutable/deferred")
+
+# Certificate lifecycle: leaves renew before expiry; CA requires an explicit
+# overlap/rotation operation instead of silently expiring in place.
+secret_script = text("scripts/gen-secrets.sh")
+for token in ("openssl x509 -checkend", 'cert_has_days "$relay_certs/relay.crt" 30', 'cert_has_days "$relay_certs/ca.crt" 90', "zero-trust-gateway/certs"):
+    if token not in secret_script:
+        fail(f"certificate lifecycle guard missing token: {token}")
+if "docker/zero-trust-gateway/certs/" not in text(".gitignore"):
+    fail("local ZTNA CA/private key directory must be gitignored")
+
+# Deterministic local image builds use an immutable base plus a fixed Debian
+# archive snapshot; CI must actually build both images.
+for dockerfile in ("docker/server1/Dockerfile", "docker/syslog-relay/Dockerfile"):
+    body = text(dockerfile)
+    if "snapshot.debian.org/archive/debian/" not in body or "DEBIAN_SNAPSHOT=" not in body:
+        fail(f"{dockerfile} does not pin the Debian package repository snapshot")
+
+libvirt_versions = text("terraform/libvirt/versions.tf")
+if 'version = "0.8.1"' not in libvirt_versions or 'version = "~> 0.8.1"' in libvirt_versions:
+    fail("legacy libvirt provider must remain exact-pinned to 0.8.1 until its verified lockfile is generated")
+if "providers lock -platform=linux_amd64" not in makefile_text or "-platform=darwin_arm64" not in makefile_text:
+    fail("Makefile must retain the cross-platform terraform-lock helper")
+
+for required_path in ("scripts/check_yaml_syntax.py", "scripts/k8s_smoke.sh", "docs/AUTHENTIK-UPGRADE.md", "docs/PKI-ROTATION.md", "supply-chain/lifecycle.yml"):
+    if not (ROOT / required_path).exists():
+        fail(f"required assurance/lifecycle artifact is missing: {required_path}")
+lifecycle_path = ROOT / "supply-chain/lifecycle.yml"
+if lifecycle_path.exists():
+    lifecycle = yaml.safe_load(lifecycle_path.read_text()) or {}
+    authentik_lifecycle = (lifecycle.get("components") or {}).get("authentik", {})
+    if authentik_lifecycle.get("state") != "migration-required":
+        fail("unsupported Authentik 2024.8 debt must remain explicitly marked migration-required until the runbook is completed")
+    if authentik_lifecycle.get("runbook") != "docs/AUTHENTIK-UPGRADE.md":
+        fail("Authentik lifecycle debt must reference the controlled sequential-upgrade runbook")
 
 root_report = ROOT / "COMPLIANCE-REPORT.md"
 if root_report.exists():

@@ -40,6 +40,11 @@ def _tcp_listener(node: str, port: int) -> bool:
     return result.returncode == 0
 
 
+def _management_interface_down(node: str) -> bool:
+    result = in_node(node, "sh", "-c", "ip -o link show dev eth0 2>/dev/null")
+    return result.returncode == 0 and "state DOWN" in result.stdout
+
+
 def _counter(node: str, table: str, name: str) -> int:
     result = in_node(node, "nft", "list", "counter", "inet", table, name)
     if result.returncode != 0:
@@ -75,6 +80,8 @@ def test_user_vlan_blocked_from_radius(evidence):
     ssh_before = _counter("fw-core", "cxyz", "seg01_ssh_drop")
     _udp_probe("pc1", "172.16.50.1", 1812)
     user_ssh = _tcp_reachable("pc1", "172.16.50.1", 22)
+    user_mgmt_bypass = _tcp_reachable("pc1", "10.1.1.50", 22)
+    pc1_mgmt_down = _management_interface_down("pc1")
     time.sleep(0.25)
     radius_after = _counter("fw-core", "cxyz", "seg01_radius_drop")
     ssh_after = _counter("fw-core", "cxyz", "seg01_ssh_drop")
@@ -90,6 +97,8 @@ def test_user_vlan_blocked_from_radius(evidence):
         "positive_mgmt_radius_response": radius_positive,
         "positive_user_dns": dns_allowed,
         "user_ssh_reachable": user_ssh,
+        "user_management_bypass_reachable": user_mgmt_bypass,
+        "pc1_management_interface_down": pc1_mgmt_down,
         "radius_counter_delta": radius_after - radius_before,
         "ssh_counter_delta": ssh_after - ssh_before,
     }
@@ -106,6 +115,7 @@ def test_user_vlan_blocked_from_radius(evidence):
     assert mgmt_ssh and radius_positive, "management positive-control flow failed"
     assert dns_allowed, "allowed user-to-DC DNS flow failed"
     assert not user_ssh, "user VLAN reached DC SSH"
+    assert pc1_mgmt_down and not user_mgmt_bypass, "pc1 retained an alternate Docker-management path"
     assert radius_after > radius_before, "RADIUS deny not attributed to fw-core"
     assert ssh_after > ssh_before, "SSH deny not attributed to fw-core"
 
@@ -116,6 +126,8 @@ def test_dmz_cannot_pivot_internal(evidence):
     positive_control = _tcp_reachable("pc4", "172.16.50.1", 22)
     before = _counter("fw-dmz", "dmz", "dmz_pivot_drop")
     dmz_to_dc = _tcp_reachable("dmz-web", "172.16.50.1", 22)
+    dmz_mgmt_bypass = _tcp_reachable("dmz-web", "10.1.1.50", 22)
+    dmz_mgmt_down = _management_interface_down("dmz-web")
     time.sleep(0.25)
     after = _counter("fw-dmz", "dmz", "dmz_pivot_drop")
 
@@ -123,6 +135,8 @@ def test_dmz_cannot_pivot_internal(evidence):
         "precondition_ssh_listener": target_healthy,
         "positive_mgmt_ssh": positive_control,
         "dmz_to_dc_reachable": dmz_to_dc,
+        "dmz_management_bypass_reachable": dmz_mgmt_bypass,
+        "dmz_management_interface_down": dmz_mgmt_down,
         "pivot_counter_delta": after - before,
     }
     evidence(
@@ -135,4 +149,5 @@ def test_dmz_cannot_pivot_internal(evidence):
     )
     assert target_healthy and positive_control, "internal service precondition failed"
     assert not dmz_to_dc, "DMZ reached the DC SSH service"
+    assert dmz_mgmt_down and not dmz_mgmt_bypass, "DMZ host retained an alternate Docker-management path"
     assert after > before, "DMZ deny not attributed to fw-dmz"

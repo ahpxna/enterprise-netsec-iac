@@ -10,7 +10,7 @@ permissions:
 jobs:
   # --- Fast static gate: runs on every PR, no infra needed ---
   static-checks:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
@@ -19,7 +19,7 @@ jobs:
         with: { python-version: "3.12" }
 
       - name: Install linters
-        run: pip install ansible-core ansible-lint pytest pyyaml yamllint
+        run: python -m pip install -r requirements-ci.txt
 
       - name: Install Ansible collections
         run: ansible-galaxy collection install -r ansible/requirements.yml
@@ -35,6 +35,7 @@ jobs:
           python scripts/security_static_checks.py
           python scripts/check_image_lock.py
           python scripts/check_ci_contract.py
+          python scripts/check_yaml_syntax.py
 
       - name: Check Python and Bash syntax
         run: |
@@ -52,7 +53,13 @@ jobs:
           --profile ids
           --profile ztna
           --profile dmz
+          --profile vpn-test
           config --quiet
+
+      - name: Build deterministic local service images
+        run: |
+          docker build --pull=false -t cxyz/server1:ci docker/server1
+          docker build --pull=false -t cxyz/syslog-relay:ci docker/syslog-relay
 
       - name: Render Kubernetes manifests with default Kustomize restrictions
         run: kubectl kustomize k8s/ >/tmp/cxyz-k8s-rendered.yaml
@@ -67,7 +74,7 @@ jobs:
         run: python compliance/check_wiring.py
 
   secret-scan:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with: { fetch-depth: 0 }
@@ -79,7 +86,7 @@ jobs:
 
   # --- Batfish offline policy tests: catches firewall regressions pre-merge ---
   batfish-policy:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     services:
       batfish:
         image: batfish/allinone@sha256:445818fc17c0e24eb097387c84184334ad3fc42807de1ed9fef773762a0be515
@@ -88,7 +95,7 @@ jobs:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with: { python-version: "3.12" }
-      - run: pip install pybatfish pytest
+      - run: python -m pip install -r requirements-batfish.txt
       - name: Verify generated snapshot is current
         run: python scripts/render_batfish_snapshot.py --check
       - name: Run Batfish policy tests
@@ -97,7 +104,7 @@ jobs:
 
   # --- Terraform validate (no apply in CI) ---
   terraform:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
       - uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1

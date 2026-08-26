@@ -34,10 +34,12 @@ verified local `ansible/inventory/known_hosts` file before it will connect.
 `make vm-health` is the current Path-B bootstrap gate; it is deliberately not
 an alias for the Containerlab `make audit` suite.
 
-Path C has schema-valid manifests but has not completed live-cluster
-validation. NetworkPolicy, service health probes, and Suricata-to-Wazuh agent
-forwarding are now declared in source; their CNI/runtime behavior and resource
-sizing still require validation on the target cluster.
+Path C has source-validated manifests but has not completed live-cluster
+validation. NetworkPolicy, exact runtime Kubernetes-API egress for Traefik,
+service health probes, Wazuh trust wiring, declarative Authentik bootstrap, and
+Suricata-to-Wazuh agent forwarding are declared in source; their CNI/runtime
+behavior and resource sizing still require `make k8s-smoke` on the target
+cluster.
 
 ## Quick start
 
@@ -65,10 +67,16 @@ The lifecycle is:
 4. `make configure` applies CIS-aligned Ansible roles.
 5. `make audit` runs policy tests, live validation, attack replay, and report generation.
 
-`VPN-01` is intentionally a live assurance check: before `make validate`/`make audit`,
-connect at least one configured WireGuard peer so the test can prove a real
-handshake occurred within the previous 10 minutes. An idle interface alone no
-longer satisfies the control.
+`TIME-01` is intentionally host-scoped: configure the Linux host chrony service
+from `host/chrony-cxyz.sources.example` (or an equivalent NTS policy) so the
+kernel clock inherited by Docker workloads is authenticated, then verify it
+with `make host-time-check`. A tracking-only chronyd inside a container is not
+accepted as clock enforcement.
+
+`VPN-01` is an end-to-end live assurance check. `make validate` prepares and
+starts the ignored `vpn-probe` peer, requires a recent WireGuard handshake,
+proves the client route uses `wg0`, reaches the approved DC SSH target, and in
+the same run proves direct WAN SSH is denied.
 
 The generated compliance report is written to
 `evidence/COMPLIANCE-REPORT.md`. The Wazuh dashboard is served at
@@ -105,8 +113,9 @@ The logical design contains:
 - an isolated DMZ firewall and web segment;
 - centralized Wazuh logging and alerting;
 - Suricata network detection;
-- Traefik and Authentik application access control;
-- WireGuard remote-access transport.
+- Traefik and declaratively bootstrapped Authentik application access control
+  for a distinct `ztna-demo-app` (not the canonical routed `dmz-web` asset);
+- WireGuard remote-access transport with an end-to-end peer-to-DC fixture.
 
 The full topology and data flows are documented in
 [ARCHITECTURE.md](ARCHITECTURE.md).
@@ -169,6 +178,9 @@ failover while collecting SIEM-visible evidence.
 - [Architecture](ARCHITECTURE.md)
 - [VyOS VM fabric](terraform/vyos-fabric/README.md)
 - [Kubernetes security plane](k8s/README.md)
+- [Authentik lifecycle migration](docs/AUTHENTIK-UPGRADE.md)
+- [PKI rotation](docs/PKI-ROTATION.md)
+- [Security implementation ledger](docs/SECURITY-IMPLEMENTATION-LEDGER.md)
 - [Control-to-test mapping](compliance/mappings/cyb-to-repo.md)
 - [Security implementation ledger](docs/SECURITY-IMPLEMENTATION-LEDGER.md)
 - [Container image supply-chain policy](docs/IMAGE-SUPPLY-CHAIN.md)

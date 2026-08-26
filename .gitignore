@@ -40,6 +40,8 @@ tests/batfish/snapshots/*/batfish_state/
 
 # ---- Local reference documents ----
 docs/*
+!docs/AUTHENTIK-UPGRADE.md
+!docs/PKI-ROTATION.md
 !docs/IMAGE-SUPPLY-CHAIN.md
 !docs/SECURITY-IMPLEMENTATION-LEDGER.md
 
@@ -55,3 +57,7 @@ terraform/vyos-fabric/bootstrap.auto.tfvars.json
 terraform/vyos-fabric/routing.auto.tfvars.json
 terraform/vyos-fabric/runtime-configs/
 .cxyz-state/
+wireguard/probe/
+docker/zero-trust-gateway/certs/
+k8s/runtime-secrets.yaml
+k8s/runtime-networkpolicy.yaml

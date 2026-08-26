@@ -127,6 +127,7 @@ nodes:
       - {link: vlan40, address: 192.168.40.253/24}
   pc1:
     role: endpoint
+    disable_management_after_boot: true
     mgmt_ip: 10.1.1.111
     attachments:
       - {link: vlan10, address: 192.168.10.1/24}
@@ -158,6 +159,7 @@ nodes:
       - {to: 192.168.0.0/16, via: 10.255.0.9}
   dmz-web:
     role: endpoint
+    disable_management_after_boot: true
     mgmt_ip: 10.1.1.61
     attachments:
       - {link: dmz, address: 195.1.1.161/29}

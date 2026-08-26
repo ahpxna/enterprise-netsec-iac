@@ -27,6 +27,7 @@ python scripts/check_path_b_intent.py
 python scripts/security_static_checks.py
 python scripts/check_image_lock.py
 python scripts/check_ci_contract.py
+python scripts/check_yaml_syntax.py
 python -m compileall -q scripts compliance tests
 find scripts clab/configs -type f -name '*.sh' -print0 | xargs -0 -n1 bash -n
 python compliance/check_wiring.py

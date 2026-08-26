@@ -21,11 +21,14 @@ spec:
       dnsPolicy: ClusterFirstWithHostNet
       containers:
         - name: suricata
-          image: jasonish/suricata:8.0.1
+          image: jasonish/suricata@sha256:ca6a3fad1e7765a8cf9f20a1f5e2cc3698dcda3ac10901a979b296e50601f99e
           args: ["-i", "any", "-v"]
           securityContext:
+            allowPrivilegeEscalation: false
             capabilities:
+              drop: ["ALL"]
               add: ["NET_ADMIN", "NET_RAW", "SYS_NICE"]
+            seccompProfile: { type: RuntimeDefault }
           volumeMounts:
             - { name: config, mountPath: /etc/suricata/suricata.yaml, subPath: suricata.yaml, readOnly: true }
             - { name: rules, mountPath: /var/lib/suricata/rules, readOnly: true }
@@ -34,7 +37,10 @@ spec:
             requests: { cpu: "250m", memory: "512Mi" }
             limits: { cpu: "1", memory: "1Gi" }
         - name: wazuh-agent
-          image: wazuh/wazuh-agent@sha256:4acdfb11b124a7b00420ce335382d5276150f62f410b5958c290019eea13e90e
+          image: wazuh/wazuh-agent@sha256:150e7af098fbe34ec7d4825a0943ec2ab87525bff3d62488f104094c3354032e
+          securityContext:
+            allowPrivilegeEscalation: false
+            seccompProfile: { type: RuntimeDefault }
           env:
             - { name: WAZUH_MANAGER_SERVER, value: "wazuh-manager.cxyz-security.svc" }
             - { name: WAZUH_REGISTRATION_SERVER, value: "wazuh-manager.cxyz-security.svc" }

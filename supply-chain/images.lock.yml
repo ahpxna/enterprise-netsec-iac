@@ -1,243 +1,283 @@
 ---
 schema_version: 1
-resolved_at: "2026-08-25"
+resolved_at: '2026-08-25'
 policy:
   portable_runtime_required_platforms:
-    - linux/amd64
-    - linux/arm64
+  - linux/amd64
+  - linux/arm64
   path_a_required_platforms:
-    - linux/amd64
+  - linux/amd64
   ci_required_platforms:
-    - linux/amd64
+  - linux/amd64
   local_image_prefixes:
-    - cxyz/
-  rule: >-
-    Multi-architecture images are pinned to the OCI image-index / Docker
-    manifest-list digest, never to one architecture-specific child manifest.
-
+  - cxyz/
+  rule: Multi-architecture images are pinned to the OCI image-index / Docker manifest-list digest, never
+    to one architecture-specific child manifest.
 images:
   debian-12-slim:
     intent_ref: debian:12-slim
     pinned_ref: debian@sha256:abd67ffcfa541b485a3dff59865ab629aa048a6c613e639d36e7456b0b229241
     status: verified
-    scopes: [dockerfile]
-    required_platforms: [linux/amd64, linux/arm64]
+    scopes:
+    - dockerfile
+    required_platforms:
+    - linux/amd64
+    - linux/arm64
     verification:
       level: registry-metadata
       kind: multi-platform-index
       source: https://hub.docker.com/layers/library/debian/12-slim
       note: Docker Hub reports this index digest for the multi-platform 12-slim tag.
-
   alpine-3.20:
     intent_ref: alpine:3.20
     pinned_ref: alpine@sha256:d9e853e87e55526f6b2917df91a2115c36dd7c696a35be12163d44e6e2a4b6bc
     status: verified
-    scopes: [containerlab]
-    required_platforms: [linux/amd64, linux/arm64]
+    scopes:
+    - containerlab
+    required_platforms:
+    - linux/amd64
+    - linux/arm64
     verification:
       level: registry-metadata
       kind: multi-platform-index
       source: https://hub.docker.com/layers/library/alpine/3.20
-
   wazuh-manager:
-    intent_ref: wazuh/wazuh-manager:4.14.6
-    pinned_ref: wazuh/wazuh-manager@sha256:f72a63b5a93c54b3b99bacc463de9217b19de674aa7413016ec4f3d0ff975dda
+    intent_ref: wazuh/wazuh-manager:4.14.7
+    pinned_ref: wazuh/wazuh-manager@sha256:8665c9807a5765253c79e4b072a1b7462c997bd69be949118a8d82ce44dd33e9
     status: verified
-    scopes: [compose, kubernetes]
-    required_platforms: [linux/amd64, linux/arm64]
+    scopes:
+    - compose
+    - kubernetes
+    required_platforms:
+    - linux/amd64
+    - linux/arm64
     verification:
       level: registry-metadata
       kind: multi-platform-index
-      source: https://hub.docker.com/layers/wazuh/wazuh-manager/4.14.6
-
+      source: https://hub.docker.com/r/wazuh/wazuh-manager/tags
   wazuh-indexer:
-    intent_ref: wazuh/wazuh-indexer:4.14.6
-    pinned_ref: wazuh/wazuh-indexer@sha256:afc3feafe16fa863abb7686369f4f17397297d10c8bac10320f22cc3e2a27363
+    intent_ref: wazuh/wazuh-indexer:4.14.7
+    pinned_ref: wazuh/wazuh-indexer@sha256:66b7640cce54f5f20a65e8320601b4570a1306d9f9b334d30bcaa324720a517c
     status: verified
-    scopes: [compose, kubernetes, helper]
-    required_platforms: [linux/amd64, linux/arm64]
+    scopes:
+    - compose
+    - kubernetes
+    - helper
+    required_platforms:
+    - linux/amd64
+    - linux/arm64
     verification:
       level: registry-metadata
       kind: multi-platform-index
       source: https://hub.docker.com/r/wazuh/wazuh-indexer/tags
-
   wazuh-dashboard:
-    intent_ref: wazuh/wazuh-dashboard:4.14.6
-    pinned_ref: wazuh/wazuh-dashboard@sha256:261d270587933778f9ca61ec0334adf3b9a25e30d41d71c937890a60dab6eb04
+    intent_ref: wazuh/wazuh-dashboard:4.14.7
+    pinned_ref: wazuh/wazuh-dashboard@sha256:eeff857a664b3c09d3df4407b8749a351f321e4f366ca60ea1dffaa76f2146a7
     status: verified
-    scopes: [compose, kubernetes]
-    required_platforms: [linux/amd64, linux/arm64]
+    scopes:
+    - compose
+    - kubernetes
+    required_platforms:
+    - linux/amd64
+    - linux/arm64
     verification:
       level: registry-metadata
       kind: multi-platform-index
       source: https://hub.docker.com/r/wazuh/wazuh-dashboard/tags
-
   wazuh-agent:
-    intent_ref: wazuh/wazuh-agent:4.14.6
-    pinned_ref: wazuh/wazuh-agent@sha256:4acdfb11b124a7b00420ce335382d5276150f62f410b5958c290019eea13e90e
+    intent_ref: wazuh/wazuh-agent:4.14.7
+    pinned_ref: wazuh/wazuh-agent@sha256:150e7af098fbe34ec7d4825a0943ec2ab87525bff3d62488f104094c3354032e
     status: verified
-    scopes: [kubernetes]
-    required_platforms: [linux/amd64, linux/arm64]
+    scopes:
+    - kubernetes
+    required_platforms:
+    - linux/amd64
+    - linux/arm64
     verification:
       level: registry-metadata
       kind: multi-platform-index
       source: https://hub.docker.com/r/wazuh/wazuh-agent/tags
-
   wazuh-certs-generator:
     intent_ref: wazuh/wazuh-certs-generator:0.0.4
     pinned_ref: wazuh/wazuh-certs-generator@sha256:369b4d58509aab074b188596870c81584f7120e653d9ef83c591f0f785dcf325
     status: verified
-    scopes: [compose-helper]
-    required_platforms: [linux/amd64, linux/arm64]
+    scopes:
+    - compose-helper
+    required_platforms:
+    - linux/amd64
+    - linux/arm64
     verification:
       level: registry-metadata
       kind: multi-platform-index
       source: https://hub.docker.com/layers/wazuh/wazuh-certs-generator/0.0.4
-
   traefik:
-    intent_ref: traefik:v3.1
-    pinned_ref: traefik@sha256:74d72c7a1345984f186bddbabcc462b2128d0d8054177dc84afaeac4db1f0f56
+    intent_ref: traefik:v3.7.11
+    pinned_ref: traefik@sha256:5203c3f39ca70de6790d964624e042463ffbd57715bc82be155cf224c0dd5144
     status: verified
-    scopes: [compose, kubernetes]
-    required_platforms: [linux/amd64, linux/arm64]
+    scopes:
+    - compose
+    - kubernetes
+    required_platforms:
+    - linux/amd64
+    - linux/arm64
     verification:
       level: registry-metadata
       kind: multi-platform-index
-      source: https://hub.docker.com/layers/library/traefik/v3.1
-      note: Reproducibility pin only; v3.1 lifecycle upgrade remains separate debt.
-
+      source: https://hub.docker.com/layers/library/traefik/v3.7.11
+      note: v3.7.11 is a supported-line security update; image risk remains subject to Trivy/SBOM gates.
   postgres:
     intent_ref: postgres:16-alpine
     pinned_ref: postgres@sha256:cf78e76683b9ca8c5733cbbdce6c9262b45b6767934dd0a95e671f9a0fc20685
     status: verified
-    scopes: [compose, kubernetes]
-    required_platforms: [linux/amd64, linux/arm64]
+    scopes:
+    - compose
+    - kubernetes
+    required_platforms:
+    - linux/amd64
+    - linux/arm64
     verification:
       level: registry-metadata
       kind: multi-platform-index
       source: https://hub.docker.com/layers/library/postgres/16-alpine
-
   redis:
     intent_ref: redis:7-alpine
     pinned_ref: redis@sha256:ff02b58f971e7d7d156a1267e283fcbbeee91773b6aa36c49dac28ecfe28eadf
     status: verified
-    scopes: [compose, kubernetes]
-    required_platforms: [linux/amd64, linux/arm64]
+    scopes:
+    - compose
+    - kubernetes
+    required_platforms:
+    - linux/amd64
+    - linux/arm64
     verification:
       level: registry-metadata
       kind: multi-platform-index
       source: https://hub.docker.com/layers/library/redis/7-alpine
-
   nginx-unprivileged:
     intent_ref: nginxinc/nginx-unprivileged:stable-alpine
     pinned_ref: nginxinc/nginx-unprivileged@sha256:93722936b82ec8a1178d48448e619226680d2de3706a1640800e186cd5fa7fd3
     status: verified
-    scopes: [compose]
-    required_platforms: [linux/amd64, linux/arm64]
+    scopes:
+    - compose
+    - kubernetes
+    required_platforms:
+    - linux/amd64
+    - linux/arm64
     verification:
       level: registry-metadata
       kind: multi-platform-index
       source: https://hub.docker.com/r/nginxinc/nginx-unprivileged/tags?name=alpine&page=1
       note: stable-alpine resolved with the current 1.30.4-alpine multi-platform index on 2026-08-25.
-
   wireguard:
     intent_ref: linuxserver/wireguard:1.0.20210914
     pinned_ref: linuxserver/wireguard@sha256:ee2db24277b43ec4e7529e93967dc3cea00a02bf81b749c680b2b102a6e4aa5b
     status: inherited-pinned
-    scopes: [compose, kubernetes]
-    required_platforms: [linux/amd64, linux/arm64]
+    scopes:
+    - compose
+    - kubernetes
+    required_platforms:
+    - linux/amd64
+    - linux/arm64
     verification:
       level: registry-metadata
       kind: image-index
       source: https://hub.docker.com/layers/linuxserver/wireguard/1.0.20210914
-      note: Existing project digest is confirmed as the tag's index digest; runtime verifier still checks required child platforms.
-
+      note: Existing project digest is confirmed as the tag's index digest; runtime verifier still checks
+        required child platforms.
   batfish:
     intent_ref: batfish/allinone:latest
     pinned_ref: batfish/allinone@sha256:445818fc17c0e24eb097387c84184334ad3fc42807de1ed9fef773762a0be515
     status: inherited-pinned
-    scopes: [ci]
-    required_platforms: [linux/amd64]
+    scopes:
+    - ci
+    required_platforms:
+    - linux/amd64
     verification:
       level: inherited
       kind: pinned-ci-image
       note: Existing immutable CI service ref; GitHub ubuntu runner only requires amd64.
-
   gitleaks:
     intent_ref: ghcr.io/gitleaks/gitleaks:v8.24.3
     pinned_ref: ghcr.io/gitleaks/gitleaks@sha256:e1b35e12a8c6fa8901f060459cfb6b2fc4c484d3afbe3b029733a3bbfab07055
     status: verified
-    scopes: [ci]
-    required_platforms: [linux/amd64]
+    scopes:
+    - ci
+    required_platforms:
+    - linux/amd64
     verification:
       level: registry-metadata
       kind: package-digest
       source: https://github.com/gitleaks/gitleaks/pkgs/container/gitleaks/versions?filters%5Bversion_type%5D=tagged
-
   suricata:
-    intent_ref: jasonish/suricata:8.0.1
-    pinned_ref: null
-    status: deferred
-    scopes: [compose, kubernetes]
-    required_platforms: [linux/amd64, linux/arm64]
-    reason: >-
-      Upstream metadata confirms non-architecture tags are multi-platform and
-      historical 8.0.1 amd64/arm64 variants exist, but the exact historical
-      8.0.1 index digest was not independently resolved in this environment.
+    intent_ref: jasonish/suricata:8.0.6
+    pinned_ref: jasonish/suricata@sha256:ca6a3fad1e7765a8cf9f20a1f5e2cc3698dcda3ac10901a979b296e50601f99e
+    status: verified
+    scopes:
+    - compose
+    - kubernetes
+    required_platforms:
+    - linux/amd64
+    - linux/arm64
     verification:
-      level: platform-metadata-only
+      level: registry-metadata
       source: https://hub.docker.com/r/jasonish/suricata/tags
-      note: Upgrade debt also exists; current 8.0.x releases are newer than 8.0.1.
-
+      note: Resolved multi-platform 8.0.6 index; closes the only deferred runtime image.
+      kind: multi-platform-index
   authentik:
     intent_ref: ghcr.io/goauthentik/server:2024.8
     pinned_ref: ghcr.io/goauthentik/server@sha256:f2e5c18e922b40bd0cc3b5a2e9ac96ffb9f4109282bbc92f43c9d4e8f232c381
     status: verified
-    scopes: [compose, kubernetes]
-    required_platforms: [linux/amd64, linux/arm64]
+    scopes:
+    - compose
+    - kubernetes
+    required_platforms:
+    - linux/amd64
+    - linux/arm64
     verification:
       level: first-party-package-metadata
       kind: multi-platform-index
       source: https://github.com/goauthentik/authentik/pkgs/container/server/310014232?tag=2024.8.6
-      note: >-
-        GitHub Packages maps both 2024.8.6 and 2024.8 to this top-level digest
-        and lists linux/amd64 and linux/arm64 children. This makes the legacy
-        branch selection immutable; it does not make the unsupported branch
-        current or remove the separate lifecycle-upgrade debt.
-
+      note: GitHub Packages maps both 2024.8.6 and 2024.8 to this top-level digest and lists linux/amd64
+        and linux/arm64 children. This makes the legacy branch selection immutable; it does not make the
+        unsupported branch current or remove the separate lifecycle-upgrade debt.
   frr:
     intent_ref: quay.io/frrouting/frr:9.1.0
     pinned_ref: quay.io/frrouting/frr@sha256:f310c2ebb3827fa03b9674ee05e70a7d5eef2123bcc3b475eb2ef14dafcb52b4
     status: verified
-    scopes: [containerlab]
-    required_platforms: [linux/amd64]
+    scopes:
+    - containerlab
+    required_platforms:
+    - linux/amd64
     verification:
       level: registry-link-plus-platform-metadata
       kind: single-platform-manifest
       source: https://frrouting.org/release/9.1/
-      note: >-
-        FRR's official 9.1 release link resolves to this Quay manifest digest;
-        corroborating image metadata reports linux/amd64. Path A live execution
-        therefore remains an amd64 Linux path for this historical FRR release.
-
+      note: FRR's official 9.1 release link resolves to this Quay manifest digest; corroborating image
+        metadata reports linux/amd64. Path A live execution therefore remains an amd64 Linux path for
+        this historical FRR release.
   network-multitool:
     intent_ref: wbitt/network-multitool:sha-2e883bc
     pinned_ref: wbitt/network-multitool@sha256:db2810fe2c8d36db074eab5d98fbf861c8ed55e0786d648d3477b3de9135632e
     status: verified
-    scopes: [containerlab]
-    required_platforms: [linux/amd64, linux/arm64]
+    scopes:
+    - containerlab
+    required_platforms:
+    - linux/amd64
+    - linux/arm64
     verification:
       level: registry-metadata
       kind: multi-platform-index
       source: https://hub.docker.com/layers/wbitt/network-multitool/sha-2e883bc
       note: Docker Hub reports this top-level index digest for the multi-platform tag.
-
   terraform-dev-image:
     intent_ref: hashicorp/terraform:1.15.9
     pinned_ref: hashicorp/terraform@sha256:fd5debae63188975d6febc6aa5bd1a982a588f55e4a4ddb7de28be923f250456
     status: verified
-    scopes: [developer-tool]
-    required_platforms: [linux/amd64, linux/arm64]
+    scopes:
+    - developer-tool
+    required_platforms:
+    - linux/amd64
+    - linux/arm64
     verification:
       level: registry-metadata
       kind: multi-platform-index

@@ -113,8 +113,8 @@ controls:
       - NIST-800-53r5-SC-45
       - ISO-27002-8.17
     ref: authenticated time
-    objective: NTP uses NTS/authenticated upstreams so log timestamps can't be spoofed.
-    implemented_by: ansible/roles/ntp_secure
+    objective: The clock used by Path A security logs is the Linux host kernel clock disciplined by authenticated NTS upstreams.
+    implemented_by: host/chrony-cxyz.sources.example,scripts/host_time_status.py
     verified_by: test_hardening.py::test_ntp_authenticated
     severity: moderate
     verified_by_path_b: path_b_audit.py::test_time01
@@ -148,7 +148,7 @@ controls:
       - ISO-27002-6.7
     ref: secure remote access
     objective: Remote admin path is WireGuard only; no management port on the Internet.
-    implemented_by: docker-compose.yml#wireguard,clab/configs/fw-core.nft
+    implemented_by: docker-compose.yml#wireguard,docker/zero-trust-gateway/wireguard-dc-route.sh,clab/configs/fw-core.nft
     verified_by: test_hardening.py::test_no_mgmt_exposed_to_internet
     severity: high
     verified_by_path_b: path_b_audit.py::test_vpn01
@@ -159,8 +159,8 @@ controls:
     framework:
       - NIST-800-53r5-AC-3
     ref: application access enforcement
-    objective: Unauthenticated requests to the protected web application redirect to Authentik.
-    implemented_by: docker-compose.yml#traefik,docker/zero-trust-gateway/dynamic.yml
+    objective: Unauthenticated requests to the distinct ZTNA demo application redirect to declaratively bootstrapped Authentik over trusted TLS.
+    implemented_by: docker-compose.yml#traefik,docker/zero-trust-gateway/dynamic.yml,docker/authentik/blueprints/cxyz-ztna.yaml
     verified_by: test_hardening.py::test_ztna_redirects_unauthenticated_request
     severity: high
     verified_by_path_b: path_b_audit.py::test_ztna01

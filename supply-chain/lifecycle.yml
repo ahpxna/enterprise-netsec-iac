@@ -1,0 +1,21 @@
+---
+reviewed_on: 2026-08-25
+components:
+  authentik:
+    current_intent: "2024.8.6"
+    state: migration-required
+    reason: >-
+      Immutable pin retained for the existing database, but the release train
+      is outside the currently supported Authentik trains. Existing databases
+      require sequential major-release upgrades.
+    runbook: docs/AUTHENTIK-UPGRADE.md
+  traefik:
+    current_intent: "3.7.11"
+    state: security-patch-reviewed
+    note: namespace-scoped CRD provider and immutable image pin are enforced.
+  wazuh:
+    current_intent: "4.14.7"
+    state: patch-reviewed
+  suricata:
+    current_intent: "8.0.6"
+    state: immutable-reviewed

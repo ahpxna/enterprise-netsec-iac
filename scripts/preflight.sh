@@ -15,6 +15,7 @@ check containerlab  "bash -c \"\$(curl -sL https://get.containerlab.dev)\""
 check ansible       "pipx install ansible-core"
 check terraform     "https://developer.hashicorp.com/terraform/install"
 check python3       "apt install python3"
+check chronyc       "apt install chrony; configure host NTS from host/chrony-cxyz.sources.example"
 check nft           "apt install nftables (needed inside fw nodes only)"
 [ $ok -eq 0 ] && echo -e "\n\033[32mAll good.\033[0m" || echo -e "\n\033[31mInstall the missing tools above.\033[0m"
 exit $ok

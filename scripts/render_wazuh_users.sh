@@ -9,7 +9,7 @@ source .env
 set +a
 
 hash_password() {
-  printf '%s\n' "$1" | docker run --rm -i wazuh/wazuh-indexer@sha256:afc3feafe16fa863abb7686369f4f17397297d10c8bac10320f22cc3e2a27363 \
+  printf '%s\n' "$1" | docker run --rm -i wazuh/wazuh-indexer@sha256:66b7640cce54f5f20a65e8320601b4570a1306d9f9b334d30bcaa324720a517c \
     bash -c 'read -r password; /usr/share/wazuh-indexer/plugins/opensearch-security/tools/hash.sh -p "$password"' \
     | tail -n 1 | tr -d '\r'
 }

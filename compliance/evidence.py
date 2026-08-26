@@ -47,3 +47,28 @@ def classify_result(*, passed: bool, assertion_failure: bool, evidence_recorded:
     if assertion_failure:
         return "FAIL"
     return "ERROR"
+
+
+def classify_phase_result(
+    *,
+    phase: str,
+    passed: bool,
+    assertion_failure: bool,
+    evidence_recorded: bool,
+) -> str | None:
+    """Classify setup/call/teardown without letting non-call failures disappear.
+
+    A mapped control only earns PASS from its call phase after explicit
+    evidence. Setup/teardown failures are infrastructure/test errors and are
+    always ERROR. A successful setup/teardown phase emits no artifact by
+    itself.
+    """
+    if phase in {"setup", "teardown"}:
+        return None if passed else "ERROR"
+    if phase == "call":
+        return classify_result(
+            passed=passed,
+            assertion_failure=assertion_failure,
+            evidence_recorded=evidence_recorded,
+        )
+    raise ValueError(f"unsupported pytest phase: {phase}")

@@ -92,6 +92,12 @@ def node_definition(name: str, node: dict) -> dict:
             "mkdir -p /etc/rsyslog.d /etc/ssh/sshd_config.d",
             *shell_commands(node),
         ]
+        # Untrusted endpoints need Docker management reachability only while
+        # containerlab is executing bootstrap commands (notably apk installs).
+        # Drop eth0 only after the intended data-plane address/default route
+        # exist so ordinary workload traffic cannot bypass the routed firewalls.
+        if node.get("disable_management_after_boot"):
+            rendered["exec"].append("sh -c 'ip link set eth0 down'")
     return rendered
 
 

@@ -1,13 +1,6 @@
-# =====================================================================
-# Traefik as the Kubernetes ingress controller, using its native
-# Kubernetes CRD provider (IngressRoute/Middleware) instead of the
-# Docker provider used in docker-compose. This is the standard, more
-# idiomatic way to run Traefik on k8s.
-#
-# PREREQUISITE — apply the Traefik CRDs once per cluster before this
-# file (see k8s/README.md for the exact command):
-#   kubectl apply -f https://raw.githubusercontent.com/traefik/traefik/v3.1/docs/content/reference/dynamic-configuration/kubernetes-crd-definition-v1.yml
-# =====================================================================
+# Traefik ingress for the cxyz-security namespace only.
+# Apply the matching v3.7.11 CRDs once per cluster before this file:
+# kubectl apply -f https://raw.githubusercontent.com/traefik/traefik/v3.7.11/docs/content/reference/dynamic-configuration/kubernetes-crd-definition-v1.yml
 ---
 apiVersion: v1
 kind: ServiceAccount
@@ -16,27 +9,39 @@ metadata:
   namespace: cxyz-security
 ---
 apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRole
+kind: Role
 metadata:
   name: traefik-cxyz
+  namespace: cxyz-security
 rules:
   - apiGroups: [""]
-    resources: [services, endpoints, secrets]
+    resources: [services, configmaps, secrets]
     verbs: [get, list, watch]
-  - apiGroups: ["extensions", "networking.k8s.io"]
-    resources: [ingresses, ingressclasses]
-    verbs: [get, list, watch]
+  - apiGroups: ["discovery.k8s.io"]
+    resources: [endpointslices]
+    verbs: [list, watch]
   - apiGroups: ["traefik.io"]
-    resources: [middlewares, ingressroutes, ingressroutetcps, tlsoptions, tlsstores, traefikservices]
+    resources:
+      - middlewares
+      - middlewaretcps
+      - ingressroutes
+      - ingressroutetcps
+      - ingressrouteudps
+      - traefikservices
+      - tlsoptions
+      - tlsstores
+      - serverstransports
+      - serverstransporttcps
     verbs: [get, list, watch]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRoleBinding
+kind: RoleBinding
 metadata:
   name: traefik-cxyz
+  namespace: cxyz-security
 roleRef:
   apiGroup: rbac.authorization.k8s.io
-  kind: ClusterRole
+  kind: Role
   name: traefik-cxyz
 subjects:
   - kind: ServiceAccount
@@ -59,16 +64,21 @@ spec:
       serviceAccountName: traefik
       containers:
         - name: traefik
-          image: traefik@sha256:74d72c7a1345984f186bddbabcc462b2128d0d8054177dc84afaeac4db1f0f56
+          image: traefik@sha256:5203c3f39ca70de6790d964624e042463ffbd57715bc82be155cf224c0dd5144
           args:
-            - --providers.kubernetescrd
-            - --providers.kubernetesingress
+            - --providers.kubernetescrd=true
+            - --providers.kubernetescrd.namespaces=cxyz-security
+            - --providers.kubernetescrd.allowCrossNamespace=false
+            - --providers.kubernetescrd.disableClusterScopeResources=true
             - --entrypoints.web.address=:80
             - --entrypoints.websecure.address=:443
             - --entrypoints.health.address=:8082
             - --ping=true
             - --ping.entrypoint=health
             - --api.dashboard=true
+          securityContext:
+            allowPrivilegeEscalation: false
+            seccompProfile: { type: RuntimeDefault }
           ports:
             - { name: web, containerPort: 80 }
             - { name: websecure, containerPort: 443 }

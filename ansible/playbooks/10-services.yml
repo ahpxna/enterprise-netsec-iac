@@ -5,7 +5,8 @@
   roles:
     - role: radius_secure      # IDM-01, IDM-02 (SHA-512-crypt, unique secrets)
       tags: [identity]
-    - role: ntp_secure         # TIME-01         (NTS/authenticated)
+    - role: ntp_secure         # TIME-01 on real Linux/VM hosts only
       tags: [time]
+      when: ansible_connection | default("") != "community.docker.docker"
     - role: syslog_tls         # DET-02          (TLS log transport)
       tags: [logging]

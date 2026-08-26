@@ -22,8 +22,9 @@ spec:
         - name: wireguard
           image: linuxserver/wireguard@sha256:ee2db24277b43ec4e7529e93967dc3cea00a02bf81b749c680b2b102a6e4aa5b
           securityContext:
-            capabilities: { add: ["NET_ADMIN"] }
+            capabilities: { drop: ["ALL"], add: ["NET_ADMIN"] }
             allowPrivilegeEscalation: false
+            seccompProfile: { type: RuntimeDefault }
           env:
             - { name: PUID, value: "1000" }
             - { name: PGID, value: "1000" }

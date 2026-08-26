@@ -38,9 +38,9 @@
 
                     DATA CENTER  172.16.50.0/24
                     +------------------------------+
-                    | [ SERVER1 ]  DNS DHCP NTP    |
+                    | [ SERVER1 ]  DNS DHCP        |
                     |  - RADIUS (SHA-512-crypt)    |
-                    |  - NTP via NTS (authenticated)|
+                    |  - inherits host kernel time |
                     |  - rsyslog -> TLS 6514       |
                     +---------------+--------------+
                                     |
@@ -52,6 +52,24 @@
                     | WireGuard (remote admin)     |
                     +------------------------------+
 ```
+
+### Time and remote-access trust boundaries
+
+Path A containers share the Linux host kernel clock. The host, not `server1`,
+is therefore the enforcement point for TIME-01 and must discipline that clock
+against authenticated NTS sources. Path B uses a real VM clock and retains its
+normal guest chrony/systemd enforcement.
+
+The application ZTNA demo and the routed DMZ host are intentionally separate
+assets. `DMZ-WEB` at `195.1.1.161` is the SEG-02 firewall/isolation endpoint;
+`ztna-demo-app` is the private Docker/Kubernetes backend used to prove
+Traefik+Authentik application access enforcement. The names are deliberately
+different so the controls cannot imply one end-to-end path that does not exist.
+
+WireGuard is multi-homed only between the edge VPN network and the approved DC
+segment. A custom init hook installs forwarding/NAT limited to the peer and DC
+CIDRs, and the live VPN fixture must both route through `wg0` and open SSH to
+the approved DC target while the equivalent WAN path remains denied.
 
 ## Data flow (three journeys)
 

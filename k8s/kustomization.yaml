@@ -4,7 +4,7 @@ kind: Kustomization
 namespace: cxyz-security
 resources:
   - 00-namespace.yaml
-  # 01-secrets.yaml   <- copy from 01-secrets.yaml.example first, then uncomment
+  # runtime-secrets.yaml is generated/applied separately by `make k8s-up`.
   - 10-wazuh.yaml
   - 20-suricata.yaml
   - 30-traefik.yaml
@@ -24,3 +24,12 @@ configMapGenerator:
   - name: cxyz-suricata-rules
     files:
       - generated/cxyz.rules
+
+  - name: cxyz-authentik-blueprints
+    files:
+      - cxyz-ztna.yaml=generated/cxyz-ztna.yaml
+  - name: cxyz-wazuh-runtime-config
+    files:
+      - ossec.conf=generated/ossec.conf
+      - opensearch.yml=generated/wazuh-indexer.yml
+      - opensearch_dashboards.yml=generated/opensearch_dashboards.yml

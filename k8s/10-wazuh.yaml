@@ -1,29 +1,22 @@
-# =====================================================================
-# Wazuh SIEM on Kubernetes — same images/rules/decoders as docker-compose,
-# reorganized as: indexer (StatefulSet, needs storage) -> manager
-# (Deployment, mounts the CXYZ decoders/rules ConfigMaps) -> dashboard.
-# ConfigMaps here are generated from the existing docker/siem/ files via
-# `kubectl create configmap ... --from-file` (see k8s/README.md) so the
-# detection rules stay a single source of truth, not duplicated by hand.
-# =====================================================================
+# Wazuh Path C with the same PKI/trust material and canonical SIEM config used
+# by Compose. runtime-secrets.yaml is generated locally and never committed.
 ---
 apiVersion: apps/v1
 kind: StatefulSet
-metadata:
-  name: wazuh-indexer
-  namespace: cxyz-security
+metadata: { name: wazuh-indexer, namespace: cxyz-security }
 spec:
   serviceName: wazuh-indexer
   replicas: 1
-  selector:
-    matchLabels: { app: wazuh-indexer }
+  selector: { matchLabels: { app: wazuh-indexer } }
   template:
-    metadata:
-      labels: { app: wazuh-indexer }
+    metadata: { labels: { app: wazuh-indexer } }
     spec:
       containers:
         - name: wazuh-indexer
-          image: wazuh/wazuh-indexer@sha256:afc3feafe16fa863abb7686369f4f17397297d10c8bac10320f22cc3e2a27363
+          image: wazuh/wazuh-indexer@sha256:66b7640cce54f5f20a65e8320601b4570a1306d9f9b334d30bcaa324720a517c
+          securityContext:
+            allowPrivilegeEscalation: false
+            seccompProfile: { type: RuntimeDefault }
           env:
             - { name: OPENSEARCH_JAVA_OPTS, value: "-Xms1g -Xmx1g" }
           ports: [{ containerPort: 9200 }]
@@ -41,9 +34,24 @@ spec:
             failureThreshold: 6
           volumeMounts:
             - { name: data, mountPath: /var/lib/wazuh-indexer }
+            - { name: tls, mountPath: /usr/share/wazuh-indexer/config/certs, readOnly: true }
+            - { name: runtime-config, mountPath: /usr/share/wazuh-indexer/config/opensearch.yml, subPath: opensearch.yml, readOnly: true }
+            - { name: security-config, mountPath: /usr/share/wazuh-indexer/config/opensearch-security/internal_users.yml, subPath: internal_users.yml, readOnly: true }
           resources:
             requests: { cpu: "500m", memory: "1.5Gi" }
             limits: { cpu: "2", memory: "2Gi" }
+      volumes:
+        - name: tls
+          secret:
+            secretName: cxyz-wazuh-tls
+            items:
+              - { key: root-ca.pem, path: root-ca.pem }
+              - { key: wazuh.indexer.pem, path: wazuh.indexer.pem }
+              - { key: wazuh.indexer-key.pem, path: wazuh.indexer.key }
+              - { key: admin.pem, path: admin.pem }
+              - { key: admin-key.pem, path: admin-key.pem }
+        - { name: runtime-config, configMap: { name: cxyz-wazuh-runtime-config } }
+        - { name: security-config, secret: { secretName: cxyz-wazuh-security-config } }
   volumeClaimTemplates:
     - metadata: { name: data }
       spec:
@@ -52,39 +60,43 @@ spec:
 ---
 apiVersion: v1
 kind: Service
-metadata:
-  name: wazuh-indexer
-  namespace: cxyz-security
+metadata: { name: wazuh-indexer, namespace: cxyz-security }
 spec:
   selector: { app: wazuh-indexer }
   ports: [{ port: 9200, targetPort: 9200 }]
 ---
 apiVersion: apps/v1
 kind: Deployment
-metadata:
-  name: wazuh-manager
-  namespace: cxyz-security
+metadata: { name: wazuh-manager, namespace: cxyz-security }
 spec:
   replicas: 1
-  selector:
-    matchLabels: { app: wazuh-manager }
+  selector: { matchLabels: { app: wazuh-manager } }
   template:
-    metadata:
-      labels: { app: wazuh-manager }
+    metadata: { labels: { app: wazuh-manager } }
     spec:
       containers:
         - name: wazuh-manager
-          image: wazuh/wazuh-manager@sha256:f72a63b5a93c54b3b99bacc463de9217b19de674aa7413016ec4f3d0ff975dda
+          image: wazuh/wazuh-manager@sha256:8665c9807a5765253c79e4b072a1b7462c997bd69be949118a8d82ce44dd33e9
+          securityContext:
+            allowPrivilegeEscalation: false
+            seccompProfile: { type: RuntimeDefault }
           env:
             - { name: INDEXER_URL, value: "https://wazuh-indexer:9200" }
             - { name: INDEXER_USERNAME, value: "admin" }
             - name: INDEXER_PASSWORD
               valueFrom: { secretKeyRef: { name: cxyz-security-secrets, key: WAZUH_INDEXER_PASSWORD } }
+            - { name: FILEBEAT_SSL_VERIFICATION_MODE, value: "full" }
+            - { name: SSL_CERTIFICATE_AUTHORITIES, value: "/etc/ssl/root-ca.pem" }
+            - { name: SSL_CERTIFICATE, value: "/etc/ssl/filebeat.pem" }
+            - { name: SSL_KEY, value: "/etc/ssl/filebeat.key" }
+            - { name: API_USERNAME, value: "wazuh-wui" }
+            - name: API_PASSWORD
+              valueFrom: { secretKeyRef: { name: cxyz-security-secrets, key: WAZUH_API_PASSWORD } }
           ports:
             - { containerPort: 1514, protocol: TCP }
-            - { containerPort: 1515 }
-            - { containerPort: 514, protocol: UDP }  # Wazuh local syslog input only; not DET-02 TLS transport
-            - { containerPort: 55000 }
+            - { containerPort: 1515, protocol: TCP }
+            - { containerPort: 514, protocol: UDP }
+            - { containerPort: 55000, protocol: TCP }
           startupProbe:
             tcpSocket: { port: 55000 }
             periodSeconds: 10
@@ -98,50 +110,61 @@ spec:
             periodSeconds: 20
             failureThreshold: 6
           volumeMounts:
+            - { name: manager-tls, mountPath: /etc/ssl, readOnly: true }
+            - { name: runtime-config, mountPath: /wazuh-config-mount/etc/ossec.conf, subPath: ossec.conf, readOnly: true }
             - { name: decoders, mountPath: /var/ossec/etc/decoders/local, readOnly: true }
             - { name: rules, mountPath: /var/ossec/etc/rules/local, readOnly: true }
           resources:
             requests: { cpu: "250m", memory: "1Gi" }
             limits: { cpu: "1", memory: "2Gi" }
       volumes:
+        - name: manager-tls
+          secret:
+            secretName: cxyz-wazuh-tls
+            items:
+              - { key: root-ca-manager.pem, path: root-ca.pem }
+              - { key: wazuh.manager.pem, path: filebeat.pem }
+              - { key: wazuh.manager-key.pem, path: filebeat.key }
+        - { name: runtime-config, configMap: { name: cxyz-wazuh-runtime-config } }
         - { name: decoders, configMap: { name: cxyz-wazuh-decoders } }
         - { name: rules, configMap: { name: cxyz-wazuh-rules } }
 ---
 apiVersion: v1
 kind: Service
-metadata:
-  name: wazuh-manager
-  namespace: cxyz-security
+metadata: { name: wazuh-manager, namespace: cxyz-security }
 spec:
   selector: { app: wazuh-manager }
   ports:
     - { name: syslog-udp, port: 514, protocol: UDP }
     - { name: agent-events, port: 1514, protocol: TCP }
-    - { name: agent-enroll, port: 1515 }
-    - { name: api, port: 55000 }
+    - { name: agent-enroll, port: 1515, protocol: TCP }
+    - { name: api, port: 55000, protocol: TCP }
 ---
 apiVersion: apps/v1
 kind: Deployment
-metadata:
-  name: wazuh-dashboard
-  namespace: cxyz-security
+metadata: { name: wazuh-dashboard, namespace: cxyz-security }
 spec:
   replicas: 1
-  selector:
-    matchLabels: { app: wazuh-dashboard }
+  selector: { matchLabels: { app: wazuh-dashboard } }
   template:
-    metadata:
-      labels: { app: wazuh-dashboard }
+    metadata: { labels: { app: wazuh-dashboard } }
     spec:
       containers:
         - name: wazuh-dashboard
-          image: wazuh/wazuh-dashboard@sha256:261d270587933778f9ca61ec0334adf3b9a25e30d41d71c937890a60dab6eb04
+          image: wazuh/wazuh-dashboard@sha256:eeff857a664b3c09d3df4407b8749a351f321e4f366ca60ea1dffaa76f2146a7
+          securityContext:
+            allowPrivilegeEscalation: false
+            seccompProfile: { type: RuntimeDefault }
           env:
             - { name: INDEXER_USERNAME, value: "admin" }
             - name: INDEXER_PASSWORD
               valueFrom: { secretKeyRef: { name: cxyz-security-secrets, key: WAZUH_INDEXER_PASSWORD } }
             - name: DASHBOARD_PASSWORD
               valueFrom: { secretKeyRef: { name: cxyz-security-secrets, key: WAZUH_DASHBOARD_PASSWORD } }
+            - { name: WAZUH_API_URL, value: "https://wazuh-manager" }
+            - { name: API_USERNAME, value: "wazuh-wui" }
+            - name: API_PASSWORD
+              valueFrom: { secretKeyRef: { name: cxyz-security-secrets, key: WAZUH_API_PASSWORD } }
           ports: [{ containerPort: 5601 }]
           startupProbe:
             tcpSocket: { port: 5601 }
@@ -155,12 +178,22 @@ spec:
             tcpSocket: { port: 5601 }
             periodSeconds: 20
             failureThreshold: 6
+          volumeMounts:
+            - { name: dashboard-tls, mountPath: /usr/share/wazuh-dashboard/certs, readOnly: true }
+            - { name: runtime-config, mountPath: /usr/share/wazuh-dashboard/config/opensearch_dashboards.yml, subPath: opensearch_dashboards.yml, readOnly: true }
+      volumes:
+        - name: dashboard-tls
+          secret:
+            secretName: cxyz-wazuh-tls
+            items:
+              - { key: wazuh.dashboard.pem, path: wazuh-dashboard.pem }
+              - { key: wazuh.dashboard-key.pem, path: wazuh-dashboard-key.pem }
+              - { key: root-ca.pem, path: root-ca.pem }
+        - { name: runtime-config, configMap: { name: cxyz-wazuh-runtime-config } }
 ---
 apiVersion: v1
 kind: Service
-metadata:
-  name: wazuh-dashboard
-  namespace: cxyz-security
+metadata: { name: wazuh-dashboard, namespace: cxyz-security }
 spec:
   type: ClusterIP
   selector: { app: wazuh-dashboard }

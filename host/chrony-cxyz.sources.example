@@ -1,0 +1,6 @@
+# Example Path A host NTS sources. Install these into the Linux host's chrony
+# configuration using the distro-appropriate include directory, then restart
+# chrony. Containers inherit this host kernel clock; they must not receive
+# CAP_SYS_TIME.
+server time.cloudflare.com iburst nts
+server nts.netnod.se iburst nts

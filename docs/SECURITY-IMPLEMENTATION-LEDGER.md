@@ -560,7 +560,7 @@ visible as debt rather than inventing a digest.
 
 ---
 
-## Follow-up backlog
+## Historical follow-up backlog (superseded where closed below)
 
 ### INC-043 — Close Suricata historical index pin
 
@@ -583,3 +583,198 @@ The earlier shared-management-plane finding remains an architecture concern.
 Do not repeat REG-010-A. Introduce a provisioning/console strategy first, then
 remove untrusted endpoint adjacency only after Path A/Path B bootstrap and live
 negative-connectivity tests pass.
+
+---
+
+## INC-050 — Path A control semantics and declarative ZTNA
+
+**Status:** source/static verified; live Path A revalidation required.
+
+### BUG-050-A — TIME-01 observed a tracking-only container clock
+
+`server1` previously ran `chronyd -x`. Chrony could authenticate and track an
+NTS source, but `-x` deliberately does not discipline the system clock. Docker
+containers consume the Linux host kernel clock, so the old implementation did
+not prove the clock used for security-log timestamps was NTS-disciplined.
+
+**Implementation:** removed container chronyd, added
+`host/chrony-cxyz.sources.example` and `scripts/host_time_status.py`, and moved
+TIME-01 evidence to the host trust boundary. The verifier requires an active
+NTS-authenticated source, `Leap status: Normal`, valid stratum and <1 second
+system offset. No `CAP_SYS_TIME` is granted to a container.
+
+### BUG-050-B — VPN-01 proved a handshake but not usable secure administration
+
+A recent WireGuard handshake alone does not prove AllowedIPs, forwarding,
+return routing, firewall policy and management reachability.
+
+**Implementation:** `vpn-probe` is a real ignored peer fixture. The WireGuard
+server is multi-homed only to edge + DC and mounts
+`wireguard-dc-route.sh`, which installs explicit peer-CIDR -> DC-CIDR forwarding
+and return-state/NAT rules. The live test requires a recent handshake, a `wg0`
+route and TCP/22 success to the approved DC target while the WAN path is denied.
+
+### BUG-050-C — ZTNA had manual identity state and ambiguous DMZ naming
+
+The gateway depended on Authentik provider/application/outpost state that was
+not source-controlled, and the Compose demo backend reused the `dmz-web` name
+of the canonical routed DMZ asset even though they were separate paths.
+
+**Implementation:** added an Authentik Blueprint for Proxy Provider,
+Application and Embedded Outpost mapping; renamed the private backend to
+`ztna-demo-app`; generated a lab CA/leaf pair; and changed ZTNA-01 to verify
+trusted TLS with `--cacert` instead of bypassing certificate validation. The
+architecture now states explicitly that SEG-02 and ZTNA-01 exercise different
+assets.
+
+### Validation boundary
+
+All source/render/security/evidence checks can validate the contract, but this
+increment is not recorded as runtime PASS until `make audit` succeeds on the
+Linux Path A host. TIME-01 specifically requires the host chrony configuration;
+VPN-01 specifically requires the generated peer fixture.
+
+---
+
+## INC-051 — Path A endpoint/OOB and hardening-coverage closure
+
+**Status:** source/static verified; live connectivity revalidation required.
+
+### BUG-051-A — untrusted endpoint bootstrap management could bypass routed controls
+
+The first attempted fix (`network-mode:none`) broke package provisioning. The
+redesign keeps Docker management only during bootstrap. `pc1` and the canonical
+`dmz-web` receive their data-plane address/default route first and then bring
+`eth0` down. `pc4` remains the reviewed administration endpoint. SEG-01/02 now
+assert both routed firewall behavior and absence of the alternate management
+path.
+
+### BUG-051-B — HRD wording exceeded node coverage
+
+HRD-02 said Telnet was disabled "everywhere" but the live test omitted endpoint
+nodes; HRD-01 also inspected file content rather than effective sshd state.
+
+**Implementation:** introduced one `MANAGED_NODES` set including `pc1`, `pc4`
+and `dmz-web`, added the canonical DMZ endpoint to the Ansible inventory, made
+hardening tolerate endpoints without sshd, and use `sshd -T` for effective SSH
+configuration where applicable.
+
+**Regression rule:** do not remove bootstrap networking before package/data-
+plane configuration. Any future OOB redesign must preserve the explicit live
+negative connectivity proof.
+
+---
+
+## INC-052 — Path C trust, microsegmentation and live checkpoint
+
+**Status:** source/static verified; runtime UNVERIFIED until `make k8s-smoke`.
+
+### BUG-052-A — NetworkPolicy still allowed arbitrary TCP/443 from Traefik
+
+Traefik needs the Kubernetes API but a static egress rule with only port 443
+allowed arbitrary HTTPS destinations. The API Service ClusterIP is not portable
+between clusters.
+
+**Implementation:** removed destination-unbounded 443 from the checked-in
+policy. `scripts/render_k8s_runtime_policy.py` queries
+`kubernetes.default`, validates the IPv4 address and writes an ignored `/32`
+NetworkPolicy. `make k8s-up` creates the namespace, applies that exact policy,
+then applies runtime secrets and Kustomize resources.
+
+### BUG-052-B — Wazuh Compose DNS leaked into Kubernetes derivatives
+
+The canonical Docker config uses `wazuh.indexer`; Kubernetes Service DNS uses
+`wazuh-indexer`. Both Dashboard and Manager derivatives are now transformed by
+`render_k8s_assets.py`, and static guards reject Compose DNS in the generated
+manager configuration.
+
+### BUG-052-C — Path C trust/RBAC/hardening was incomplete
+
+Wazuh certificate/API/Filebeat trust is source-wired from the local PKI,
+Traefik uses namespace Role/RoleBinding and a namespace-scoped CRD provider,
+the Dashboard accepts no ordinary pod-network ingress, and privileged network
+workloads drop all capabilities before adding only reviewed capabilities. All
+containers explicitly disable privilege escalation and use RuntimeDefault
+seccomp. Vendor-specific `runAsNonRoot`/read-only-root changes remain subject to
+runtime proof instead of blanket enforcement.
+
+### Runtime checkpoint
+
+`scripts/k8s_smoke.sh` waits for all core deployments/statefulsets/daemonsets,
+requires both static and runtime NetworkPolicies, checks Suricata EVE and its
+Wazuh sidecar, and retries until the Wazuh manager sees the Suricata agent.
+This checkpoint is deliberately outside PR CI because a real CNI/cluster is
+required.
+
+---
+
+## INC-053 — Supply-chain/lifecycle and long-term operational reproducibility
+
+**Status:** static/registry reviewed; selected lifecycle work remains explicit.
+
+### Closed items
+
+- Suricata moved from the sole mutable/deferred 8.0.1 tag to an immutable
+  multi-platform 8.0.6 index; image inventory is now 19/19 pinned.
+- Wazuh manager/indexer/dashboard/agent moved together to 4.14.7 immutable
+  refs so Path C/Compose versions do not drift.
+- Traefik moved from the obsolete 3.1 line to immutable 3.7.11 and the matching
+  CRD/RBAC design.
+- GitHub runner is `ubuntu-24.04`; direct CI Python dependencies are exact in
+  `requirements-ci.txt` / `requirements-batfish.txt`; local Debian images use a
+  fixed snapshot and CI builds them.
+- Legacy `dmacvicar/libvirt` is exact-pinned at 0.8.1. No lockfile hash was
+  fabricated: `make terraform-lock` is the required networked-host command to
+  generate cross-platform signed provider hashes. The 0.9 provider is a schema
+  rewrite and is a separate migration.
+- Leaf certificates renew inside a 30-day window. CA expiry blocks inside 90
+  days and `docs/PKI-ROTATION.md` defines a dual-trust staged rotation instead
+  of unsafe silent CA replacement.
+
+### BUG-053-A — YAML syntax checking treated Authentik tags as invalid
+
+Authentik Blueprints use application-specific tags such as `!Env` and `!Find`.
+Generic `yaml.safe_load` rejects those tags even when the YAML is syntactically
+valid. `scripts/check_yaml_syntax.py` uses PyYAML's composition layer to verify
+syntax/indentation while preserving unknown tags as nodes; CI and `make lint`
+run this gate in addition to yamllint.
+
+### Remaining P1 lifecycle debt — Authentik
+
+Authentik 2024.8 is immutable but outside the supported trains reviewed on
+2026-08-25. It is **not** direct-jumped in this patch: existing Authentik
+databases require sequential major-release upgrades. The machine-readable
+`supply-chain/lifecycle.yml` records `migration-required`, and
+`docs/AUTHENTIK-UPGRADE.md` defines backup, one-release-step-at-a-time,
+Blueprint and ZTNA checkpoints. This is an intentionally visible migration debt,
+not a claim that digest pinning makes the old branch supported.
+
+---
+
+## INC-054 — Model coverage and audit-trail closure
+
+**Status:** deterministic source/unit verified; model scope explicitly bounded.
+
+### BUG-054-A — Batfish was only a three-test smoke gate
+
+The generated snapshot previously proved DNS allow, RADIUS deny and parser
+health. The policy matrix now also proves NTP/123 allow and denies user-to-DC
+SNMP/161, SSH/22, HTTP/80 and HTTPS/443. This remains a campus-to-DC model test;
+it does not claim Internet/DMZ properties that are not represented in the
+snapshot.
+
+### BUG-054-B — evidence fallback ignored pytest setup/teardown failures
+
+Mapped controls now use one-artifact semantics across setup/call/teardown.
+Early setup errors and teardown failures become explicit ERROR/FAIL evidence
+instead of falling through to UNVERIFIED; the evidence unit suite covers those
+phases. A successful mapped test without explicit evidence is also not allowed
+to become PASS.
+
+### Path B runtime status
+
+Path B source/design readiness remains separate from runtime evidence. The
+12-node VyOS first-boot/apply/Day-2/HA audit has not been observed in this
+sandbox and must be reported as **UNVERIFIED**, not converted to a numerical
+runtime-confidence score. Existing `vm-health`, `vm-idempotency` and `vm-audit`
+targets remain the required live checkpoint.

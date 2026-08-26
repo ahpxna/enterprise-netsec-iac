@@ -11,7 +11,7 @@ from datetime import datetime, timezone
 
 import pytest
 
-from compliance.evidence import automatic_payload, classify_result, mapped_control_for_nodeid
+from compliance.evidence import automatic_payload, classify_phase_result, mapped_control_for_nodeid
 from compliance.provenance import current_provenance
 
 
@@ -85,26 +85,29 @@ def evidence(request):
 def pytest_runtest_makereport(item, call):
     outcome = yield
     report = outcome.get_result()
-    if report.when != "call":
+
+    mapped_control = mapped_control_for_nodeid(item.nodeid)
+    if mapped_control is None:
         return
 
     recorded = getattr(item, "_evidence_payload", {})
     evidence_recorded = bool(getattr(item, "_evidence_recorded", False))
-    mapped_control = mapped_control_for_nodeid(item.nodeid)
-    if not recorded:
-        if mapped_control is None:
-            return
-        recorded = automatic_payload(mapped_control)
-
     assertion_failure = call.excinfo is not None and call.excinfo.errisinstance(AssertionError)
-    result = classify_result(
+    result = classify_phase_result(
+        phase=report.when,
         passed=report.passed,
         assertion_failure=assertion_failure,
         evidence_recorded=evidence_recorded,
     )
+    if result is None:
+        return
+
+    if not recorded:
+        recorded = automatic_payload(mapped_control)
+
     if result == "PASS":
         failure = None
-    elif report.passed and not evidence_recorded:
+    elif report.when == "call" and report.passed and not evidence_recorded:
         failure = "mapped control test passed without calling evidence(); refusing to emit PASS"
     else:
         failure = report.longreprtext
@@ -116,9 +119,12 @@ def pytest_runtest_makereport(item, call):
         "result": result,
         **recorded,
         "failure": failure,
+        "pytest_phase": report.when,
         "started_at": getattr(item, "_evidence_started_at", utc_now()),
         "ended_at": utc_now(),
         "duration_seconds": round(time.monotonic() - started_monotonic, 6),
         **RUN_METADATA,
     }
+    # One file per mapped test. A teardown ERROR intentionally overwrites a
+    # prior call PASS so reports cannot hide fixture cleanup failures.
     save_evidence(item.nodeid, payload)

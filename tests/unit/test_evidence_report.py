@@ -2,7 +2,12 @@ import json
 import pathlib
 
 import compliance.generate_report as report_module
-from compliance.evidence import automatic_payload, classify_result, mapped_control_for_nodeid
+from compliance.evidence import (
+    automatic_payload,
+    classify_phase_result,
+    classify_result,
+    mapped_control_for_nodeid,
+)
 from compliance.generate_report import load_evidence, status_for, validate_provenance
 
 
@@ -189,3 +194,27 @@ def test_automatic_payload_is_bound_to_mapped_control():
     fallback = automatic_payload(control)
     assert fallback["control_id"] == "TIME-01"
     assert fallback["observed"] == {"evidence_recorded": False}
+
+
+def test_setup_failure_is_explicit_error_artifact_semantics():
+    assert classify_phase_result(
+        phase="setup", passed=False, assertion_failure=True, evidence_recorded=False
+    ) == "ERROR"
+
+
+def test_successful_setup_emits_no_control_result():
+    assert classify_phase_result(
+        phase="setup", passed=True, assertion_failure=False, evidence_recorded=False
+    ) is None
+
+
+def test_teardown_failure_overrides_call_result_as_error():
+    assert classify_phase_result(
+        phase="teardown", passed=False, assertion_failure=False, evidence_recorded=True
+    ) == "ERROR"
+
+
+def test_call_phase_still_requires_explicit_evidence_for_pass():
+    assert classify_phase_result(
+        phase="call", passed=True, assertion_failure=False, evidence_recorded=False
+    ) == "ERROR"

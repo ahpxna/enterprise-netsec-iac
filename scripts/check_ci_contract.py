@@ -47,6 +47,7 @@ shared_checks = {
     "container image lock": "python scripts/check_image_lock.py",
     "CI contract guard": "python scripts/check_ci_contract.py",
     "compliance wiring": "python compliance/check_wiring.py",
+    "YAML syntax including custom tags": "python scripts/check_yaml_syntax.py",
 }
 for label, command in shared_checks.items():
     if command not in lint_body:
@@ -78,6 +79,11 @@ ci_tokens = {
     "libvirt Terraform validate": "terraform -chdir=terraform/libvirt validate",
     "VyOS Terraform fmt": "terraform -chdir=terraform/vyos-fabric fmt -check",
     "VyOS Terraform validate": "terraform -chdir=terraform/vyos-fabric validate",
+    "pinned CI Python requirements": "python -m pip install -r requirements-ci.txt",
+    "pinned Batfish Python requirements": "python -m pip install -r requirements-batfish.txt",
+    "server1 deterministic image build": "docker build --pull=false -t cxyz/server1:ci docker/server1",
+    "syslog relay deterministic image build": "docker build --pull=false -t cxyz/syslog-relay:ci docker/syslog-relay",
+    "WireGuard peer fixture Compose render": "--profile vpn-test",
 }
 for label, token in ci_tokens.items():
     if token not in WORKFLOW:
@@ -98,6 +104,21 @@ for label, token in supply_chain_tokens.items():
         fail(f"GitHub Actions lost immutable supply-chain pin: {label}")
 if "batfish/allinone:latest" in WORKFLOW:
     fail("Batfish CI service must never use :latest")
+
+if "runs-on: ubuntu-latest" in WORKFLOW:
+    fail("CI runner OS must be explicitly pinned; ubuntu-latest is forbidden")
+if WORKFLOW.count("runs-on: ubuntu-24.04") < 4:
+    fail("every audited CI job must remain pinned to ubuntu-24.04")
+
+requirements_ci = (ROOT / "requirements-ci.txt").read_text().splitlines()
+requirements_batfish = (ROOT / "requirements-batfish.txt").read_text().splitlines()
+for filename, lines in (("requirements-ci.txt", requirements_ci), ("requirements-batfish.txt", requirements_batfish)):
+    entries = [line.strip() for line in lines if line.strip() and not line.lstrip().startswith("#")]
+    for entry in entries:
+        if "==" not in entry:
+            fail(f"{filename} contains a non-exact dependency: {entry}")
+if any(token in WORKFLOW for token in ("pip install ansible-core ansible-lint", "pip install pybatfish pytest")):
+    fail("CI must install Python tooling from exact requirements files, not floating command lines")
 
 if ERRORS:
     print("CI contract check FAILED:", file=sys.stderr)

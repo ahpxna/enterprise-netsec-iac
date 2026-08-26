@@ -113,6 +113,7 @@ topology:
         - mkdir -p /etc/rsyslog.d /etc/ssh/sshd_config.d
         - sh -c 'ip address replace 192.168.10.1/24 dev eth1'
         - sh -c 'ip route replace 0.0.0.0/0 via 192.168.10.254'
+        - sh -c 'ip link set eth0 down'
     pc4:
       kind: linux
       mgmt-ipv4: 10.1.1.144
@@ -154,6 +155,7 @@ topology:
         - mkdir -p /etc/rsyslog.d /etc/ssh/sshd_config.d
         - sh -c 'ip address replace 195.1.1.161/29 dev eth1'
         - sh -c 'ip route replace 0.0.0.0/0 via 195.1.1.166'
+        - sh -c 'ip link set eth0 down'
     access-switch:
       kind: linux
       image: alpine@sha256:d9e853e87e55526f6b2917df91a2115c36dd7c696a35be12163d44e6e2a4b6bc

@@ -1,15 +1,17 @@
 """Live identity, hardening, time, logging, and remote-access controls."""
-
 from __future__ import annotations
 
+import json
+import os
 import re
 import subprocess
-import os
+import sys
 import time
 import uuid
 from pathlib import Path
 
 from conftest import in_node
+from tests.validation.node_sets import MANAGED_NODES
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -138,66 +140,71 @@ def test_syslog_transport_is_tls(evidence):
 
 
 def test_ssh_idle_timeout(evidence):
-    nodes = ("pc1", "pc4", "server1")
     observed = {}
-    for name in nodes:
-        result = in_node(name, "sh", "-c", "cat /etc/ssh/sshd_config.d/10-cxyz-hardening.conf /etc/profile.d/cxyz-timeout.sh 2>/dev/null")
-        interval = re.search(r"ClientAliveInterval\s+(\d+)", result.stdout)
-        tmout = re.search(r"TMOUT=(\d+)", result.stdout)
+    for name in MANAGED_NODES:
+        timeout_result = in_node(
+            name, "sh", "-c",
+            "cat /etc/profile.d/cxyz-timeout.sh 2>/dev/null || true",
+        )
+        tmout = re.search(r"TMOUT=(\d+)", timeout_result.stdout)
+        sshd = in_node(name, "sh", "-c", "command -v sshd >/dev/null 2>&1")
+        effective = {}
+        if sshd.returncode == 0:
+            config = in_node(name, "sshd", "-T")
+            for raw in config.stdout.splitlines():
+                fields = raw.split(None, 1)
+                if len(fields) == 2:
+                    effective[fields[0].lower()] = fields[1].strip().lower()
         observed[name] = {
-            "client_alive_interval": int(interval.group(1)) if interval else None,
             "shell_tmout": int(tmout.group(1)) if tmout else None,
+            "sshd_installed": sshd.returncode == 0,
+            "client_alive_interval": int(effective["clientaliveinterval"]) if effective.get("clientaliveinterval", "").isdigit() else None,
+            "client_alive_count_max": int(effective["clientalivecountmax"]) if effective.get("clientalivecountmax", "").isdigit() else None,
+            "permit_root_login": effective.get("permitrootlogin"),
         }
-    evidence(control="HRD-01", assertion="SSH and interactive shell idle limits are configured <=300s", observed=observed)
-    assert all(item["client_alive_interval"] is not None and item["client_alive_interval"] <= 300 for item in observed.values())
+
+    evidence(
+        control="HRD-01",
+        assertion="interactive shell timeout is <=300s everywhere and effective sshd policy is hardened wherever SSH is installed",
+        observed=observed,
+    )
     assert all(item["shell_tmout"] is not None and item["shell_tmout"] <= 300 for item in observed.values())
+    for name, item in observed.items():
+        if not item["sshd_installed"]:
+            continue
+        assert item["client_alive_interval"] is not None and item["client_alive_interval"] <= 300, f"{name}: effective ClientAliveInterval is not hardened"
+        assert item["client_alive_count_max"] == 0, f"{name}: effective ClientAliveCountMax must be 0"
+        assert item["permit_root_login"] == "no", f"{name}: effective PermitRootLogin must be no"
 
 
 def test_telnet_disabled(evidence):
-    nodes = ("edge", "core", "dist1", "dist2", "fw-core", "fw-dmz", "server1")
     listeners = {}
-    for name in nodes:
+    for name in MANAGED_NODES:
         result = in_node(name, "sh", "-c", "ss -H -tlnp 2>/dev/null | grep ':23 ' || true")
         listeners[name] = result.stdout.strip()
-    evidence(control="HRD-02", assertion="no managed node listens on Telnet/23", observed={"listeners": listeners})
+    evidence(control="HRD-02", assertion="no managed Path A node listens on Telnet/23", observed={"listeners": listeners})
     assert not any(listeners.values()), f"Telnet listener found: {listeners}"
 
-
 def test_ntp_authenticated(evidence):
-    config = in_node("server1", "sh", "-c", "cat /etc/chrony/chrony.conf 2>/dev/null")
-    tracking = in_node("server1", "chronyc", "tracking")
-    runtime_sources = in_node("server1", "chronyc", "sources", "-n")
-    nts_sources = [line for line in config.stdout.splitlines() if line.strip().startswith("server ") and " nts" in line]
-    leap = re.search(r"Leap status\s*:\s*(.+)", tracking.stdout)
-    stratum = re.search(r"Stratum\s*:\s*(\d+)", tracking.stdout)
-    offset = re.search(r"System time\s*:\s*([0-9.eE+-]+) seconds", tracking.stdout)
-    selected = any(re.match(r"^\^\*", line.strip()) for line in runtime_sources.stdout.splitlines())
-    offset_seconds = abs(float(offset.group(1))) if offset else None
-    synchronized = bool(
-        leap
-        and leap.group(1).strip().lower() == "normal"
-        and stratum
-        and int(stratum.group(1)) > 0
-        and selected
+    result = subprocess.run(
+        [sys.executable, "scripts/host_time_status.py", "--json"],
+        cwd=ROOT, capture_output=True, text=True, check=False, timeout=20,
     )
+    try:
+        status = json.loads(result.stdout)
+    except json.JSONDecodeError:
+        status = {
+            "ok": False,
+            "observed": {"raw_stdout": result.stdout, "raw_stderr": result.stderr},
+            "errors": ["host time verifier returned invalid JSON"],
+        }
     evidence(
         control="TIME-01",
-        assertion="chronyd has at least two NTS upstreams and is actively synchronized within 1 second",
-        observed={
-            "nts_source_count": len(nts_sources),
-            "chronyc_tracking_rc": tracking.returncode,
-            "chronyc_sources_rc": runtime_sources.returncode,
-            "leap_status": leap.group(1).strip() if leap else None,
-            "stratum": int(stratum.group(1)) if stratum else None,
-            "selected_source_present": selected,
-            "system_time_offset_seconds": offset_seconds,
-        },
-        enforcement_node="server1",
+        assertion="the Linux host kernel clock inherited by Path A containers is synchronized to an authenticated NTS source within 1 second",
+        observed={**status.get("observed", {}), "errors": status.get("errors", [])},
+        enforcement_node="path-a-linux-host",
     )
-    assert len(nts_sources) >= 2, "fewer than two NTS sources configured"
-    assert tracking.returncode == 0 and runtime_sources.returncode == 0 and synchronized, "chronyd is not actively synchronized to a selected NTS source"
-    assert offset_seconds is not None and offset_seconds < 1.0, "chronyd system-time offset is >=1 second"
-
+    assert result.returncode == 0 and status.get("ok") is True, f"Path A host NTS verification failed: {status.get('errors')}"
 
 def test_no_mgmt_exposed_to_internet(evidence):
     service = in_node("server1", "sh", "-c", "ss -H -tln | grep -E ':22([[:space:]]|$)'")
@@ -242,6 +249,17 @@ def test_no_mgmt_exposed_to_internet(evidence):
                     recent_handshake = True
     peer_count = len([line for line in wg_peers.stdout.splitlines() if line.strip()]) if wg_peers.returncode == 0 else 0
     wg_ready = wg_if.returncode == 0 and bool(wg_if.stdout.strip())
+    probe_route = subprocess.run(
+        ["docker", "compose", "exec", "-T", "vpn-probe", "ip", "route", "get", "172.16.50.1"],
+        cwd=ROOT, capture_output=True, text=True, check=False, timeout=10,
+    )
+    probe_admin = subprocess.run(
+        ["docker", "compose", "exec", "-T", "vpn-probe", "bash", "-lc",
+         "timeout 4 bash -lc 'exec 3<>/dev/tcp/172.16.50.1/22'"],
+        cwd=ROOT, capture_output=True, text=True, check=False, timeout=10,
+    )
+    probe_tunnel_route = probe_route.returncode == 0 and "wg0" in probe_route.stdout
+    probe_admin_reachable = probe_admin.returncode == 0
     compose_text = (ROOT / "docker-compose.yml").read_text()
     forbidden_publishes = [
         token for token in ("55000:55000", "1515:1515", "1514:1514", "6514:6514", "8081:8080")
@@ -250,13 +268,16 @@ def test_no_mgmt_exposed_to_internet(evidence):
     counter_delta = int(after_match.group(1)) - int(before_match.group(1))
     evidence(
         control="VPN-01",
-        assertion="a configured WireGuard peer has recently handshaken while routed WAN cannot reach the healthy DC SSH service",
+        assertion="a real WireGuard peer reaches the approved DC SSH target through wg0 while routed WAN is denied",
         observed={
             "ssh_service_healthy": service.returncode == 0,
             "wireguard_ready": wg_ready,
             "wireguard_peer_count": peer_count,
             "recent_wireguard_handshake": recent_handshake,
             "handshake_ages_seconds": handshake_ages,
+            "vpn_probe_route": probe_route.stdout.strip(),
+            "vpn_probe_route_uses_wg0": probe_tunnel_route,
+            "vpn_probe_admin_ssh_reachable": probe_admin_reachable,
             "wan_ssh_reachable": negative.returncode == 0,
             "wan_deny_counter_delta": counter_delta,
             "forbidden_host_publishes": forbidden_publishes,
@@ -268,6 +289,7 @@ def test_no_mgmt_exposed_to_internet(evidence):
     assert service.returncode == 0, "DC SSH positive precondition failed"
     assert wg_ready and peer_count > 0, "WireGuard has no operational interface/configured peer"
     assert recent_handshake, "WireGuard requires at least one real peer handshake within the last 10 minutes"
+    assert probe_tunnel_route and probe_admin_reachable, "WireGuard peer cannot route to and reach the approved DC SSH target"
     assert negative.returncode != 0 and counter_delta > 0, "WAN SSH was not denied by fw-core"
     assert not forbidden_publishes, f"management/backend ports are published on the host: {forbidden_publishes}"
 
@@ -278,7 +300,8 @@ def test_ztna_redirects_unauthenticated_request(evidence):
     host = f"app.{domain}"
     response = subprocess.run(
         [
-            "curl", "--silent", "--show-error", "--insecure",
+            "curl", "--silent", "--show-error",
+            "--cacert", str(ROOT / "docker/zero-trust-gateway/certs/ca.crt"),
             "--output", "/dev/null", "--dump-header", "-",
             "--resolve", f"{host}:443:127.0.0.1", f"https://{host}/",
         ],
@@ -301,12 +324,13 @@ def test_ztna_redirects_unauthenticated_request(evidence):
     direct_backend_reachable = direct.returncode == 0
     evidence(
         control="ZTNA-01",
-        assertion="unauthenticated HTTPS request is redirected by Traefik/Authentik before reaching the app",
+        assertion="a CA-verified unauthenticated HTTPS request is redirected by declaratively bootstrapped Traefik/Authentik before reaching the ZTNA demo app",
         observed={
             "curl_returncode": response.returncode,
             "status_code": status_code,
             "redirect_target": redirect_target,
             "redirects_to_authentik": to_authentik,
+            "tls_ca_verified": response.returncode == 0,
             "direct_backend_8081_reachable": direct_backend_reachable,
         },
         enforcement_node="traefik,authentik-server",

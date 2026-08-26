@@ -70,6 +70,11 @@ harden: ## Apply CIS-aligned hardening only
 	cd $(ANSIBLE_DIR) && ansible-playbook playbooks/20-security.yml
 
 # ------------------------------------------------------------ validate
+
+.PHONY: host-time-check
+host-time-check: ## Verify the Linux host kernel clock is NTS-authenticated for Path A
+	python scripts/host_time_status.py
+
 .PHONY: dev-check
 dev-check: ## macOS-friendly CI parity gate without KVM/libvirt/containerlab/nftables
 	bash scripts/dev_check.sh
@@ -97,6 +102,7 @@ lint: ## Static checks: yamllint, ansible-lint, terraform, gitleaks
 	python scripts/security_static_checks.py
 	python scripts/check_image_lock.py
 	python scripts/check_ci_contract.py
+	python scripts/check_yaml_syntax.py
 	python -m compileall -q scripts compliance tests
 	find scripts clab/configs -type f -name '*.sh' -print0 | xargs -0 -n1 bash -n
 	python compliance/check_wiring.py
@@ -120,8 +126,14 @@ health: ## Blocking routing health gate before security validation
 	EVIDENCE_DIR=$(EVIDENCE) python -m pytest tests/validation/test_routing.py -v \
 		--junitxml=$(EVIDENCE)/routing-health.xml
 
+
+.PHONY: vpn-probe
+vpn-probe: ## Start a real WireGuard client fixture for VPN-01 end-to-end validation
+	python scripts/prepare_vpn_probe.py
+	docker compose --profile vpn-test up -d vpn-probe
+
 .PHONY: validate
-validate: health ## LIVE controls; skipped entirely if routing health fails
+validate: health vpn-probe ## LIVE controls; skipped entirely if routing health fails
 	EVIDENCE_DIR=$(EVIDENCE) python -m pytest \
 		tests/validation/test_segmentation.py \
 		tests/validation/test_hardening.py -v \
@@ -133,6 +145,11 @@ attack: ## Replay the CYB-240 attack chain and prove the SIEM sees it
 	EVIDENCE_DIR=$(EVIDENCE) bash scripts/attack_chain.sh
 
 # ---------------------------------------------------------- vm fabric (real NOS)
+.PHONY: terraform-lock
+terraform-lock: ## Generate verified cross-platform provider locks on a networked Terraform host
+	terraform -chdir=terraform/libvirt providers lock -platform=linux_amd64 -platform=darwin_amd64 -platform=darwin_arm64
+	terraform -chdir=terraform/vyos-fabric providers lock -platform=linux_amd64 -platform=darwin_amd64 -platform=darwin_arm64
+
 # Alternative to `make net`: real VyOS VMs via Terraform+libvirt instead
 # of containerlab/FRR. See terraform/vyos-fabric/README.md before first
 # use (image sourcing, Cisco licensing note, sizing).
@@ -194,14 +211,32 @@ vm-down: ## Destroy the real VyOS VM fabric
 k8s-assets: ## Refresh Kustomize-local generated config from canonical Docker IDS/SIEM sources
 	python scripts/render_k8s_assets.py
 
+
+.PHONY: k8s-runtime-secrets
+k8s-runtime-secrets: secrets wazuh-config k8s-assets ## Render ignored Path C secrets from the same local PKI/.env as Compose
+	python scripts/render_k8s_runtime_secrets.py
+
+.PHONY: k8s-runtime-policy
+k8s-runtime-policy: ## Render exact Traefik -> kubernetes.default API /32 egress policy
+	python scripts/render_k8s_runtime_policy.py
+
 .PHONY: k8s-up
-k8s-up: k8s-assets ## Deploy the security plane (Wazuh/Suricata/Traefik/Authentik/WG) to k8s
+k8s-up: k8s-runtime-secrets k8s-runtime-policy ## Deploy the security plane (Wazuh/Suricata/Traefik/Authentik/WG) to k8s
+	kubectl apply -f k8s/00-namespace.yaml
+	kubectl apply -f k8s/runtime-networkpolicy.yaml
+	kubectl apply -f k8s/runtime-secrets.yaml
 	kubectl apply -k k8s/
 	@echo "==> kubectl -n cxyz-security get pods -w"
 
+.PHONY: k8s-smoke
+k8s-smoke: ## Live Path C rollout/trust/policy checkpoint (requires deployed cluster)
+	bash scripts/k8s_smoke.sh
+
 .PHONY: k8s-down
 k8s-down: ## Tear down the k8s security plane
+	@test ! -f k8s/runtime-networkpolicy.yaml || kubectl delete -f k8s/runtime-networkpolicy.yaml --ignore-not-found
 	kubectl delete -k k8s/ --ignore-not-found
+	@test ! -f k8s/runtime-secrets.yaml || kubectl delete -f k8s/runtime-secrets.yaml --ignore-not-found
 
 .PHONY: k8s-status
 k8s-status: ## Show pod/service status for the k8s security plane

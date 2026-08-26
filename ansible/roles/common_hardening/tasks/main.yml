@@ -9,7 +9,20 @@
   loop: [telnetd, inetutils-telnetd]
   failed_when: false
 
-- name: Enforce SSH idle timeout and root policy (HRD-01 / CIS 1.8, 5.x)
+- name: Detect whether OpenSSH server is installed
+  ansible.builtin.shell: command -v sshd
+  register: common_hardening_sshd
+  changed_when: false
+  failed_when: false
+
+- name: Ensure OpenSSH drop-in directory exists
+  ansible.builtin.file:
+    path: /etc/ssh/sshd_config.d
+    state: directory
+    mode: "0755"
+  when: common_hardening_sshd.rc == 0
+
+- name: Enforce SSH idle timeout and root policy where SSH exists (HRD-01 / CIS 1.8, 5.x)
   ansible.builtin.copy:
     dest: /etc/ssh/sshd_config.d/10-cxyz-hardening.conf
     mode: "0644"
@@ -20,6 +33,7 @@
       PermitRootLogin {{ common_hardening_ssh_permit_root_login }}
       Protocol 2
       Banner /etc/issue.net
+  when: common_hardening_sshd.rc == 0
   notify: restart sshd
 
 - name: Enforce interactive shell timeout

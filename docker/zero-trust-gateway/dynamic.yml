@@ -1,6 +1,11 @@
 # Traefik file-provider configuration. Docker discovery is intentionally
 # disabled so the public gateway never receives the Docker daemon socket.
 ---
+tls:
+  certificates:
+    - certFile: /run/ztna/tls.crt
+      keyFile: /run/ztna/tls.key
+
 http:
   middlewares:
     authentik:
@@ -18,11 +23,19 @@ http:
       entryPoints: [websecure]
       service: authentik
       tls: {}
-    dmzweb:
+    # Single-application forward auth requires the outpost path on the
+    # protected application's host to bypass the auth middleware.
+    authentik-outpost-app:
+      rule: "HostRegexp(`^app\\..+$`) && PathPrefix(`/outpost.goauthentik.io/`)"
+      priority: 100
+      entryPoints: [websecure]
+      service: authentik
+      tls: {}
+    ztna-demo:
       rule: "HostRegexp(`^app\\..+$`)"
       entryPoints: [websecure]
       middlewares: [authentik]
-      service: dmzweb
+      service: ztna-demo
       tls: {}
 
   services:
@@ -30,7 +43,7 @@ http:
       loadBalancer:
         servers:
           - url: "http://authentik-server:9000"
-    dmzweb:
+    ztna-demo:
       loadBalancer:
         servers:
-          - url: "http://dmz-web:8080"
+          - url: "http://ztna-demo-app:8080"
