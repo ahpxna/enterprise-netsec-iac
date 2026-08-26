@@ -34,7 +34,7 @@ spec:
             requests: { cpu: "250m", memory: "512Mi" }
             limits: { cpu: "1", memory: "1Gi" }
         - name: wazuh-agent
-          image: wazuh/wazuh-agent:4.14.6
+          image: wazuh/wazuh-agent@sha256:4acdfb11b124a7b00420ce335382d5276150f62f410b5958c290019eea13e90e
           env:
             - { name: WAZUH_MANAGER_SERVER, value: "wazuh-manager.cxyz-security.svc" }
             - { name: WAZUH_REGISTRATION_SERVER, value: "wazuh-manager.cxyz-security.svc" }

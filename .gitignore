@@ -39,7 +39,9 @@ evidence/COMPLIANCE-REPORT.md
 tests/batfish/snapshots/*/batfish_state/
 
 # ---- Local reference documents ----
-docs/
+docs/*
+!docs/IMAGE-SUPPLY-CHAIN.md
+!docs/SECURITY-IMPLEMENTATION-LEDGER.md
 
 # ---- Python / tooling ----
 __pycache__/

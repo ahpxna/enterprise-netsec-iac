@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# Optional developer/auditor supply-chain check. It is intentionally separate
-# from PR CI until the remaining mutable application images have approved
-# upgrade/digest baselines; adding it as a blocking gate today would conflate
-# known migration work with source regressions.
+# Optional developer/auditor supply-chain check. Keep this separate from PR CI:
+# vulnerability/advisory feeds and registry/network availability evolve outside
+# the repository, so a deterministic source commit should not randomly change
+# PR status when those external services change.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -11,6 +11,8 @@ command -v trivy >/dev/null 2>&1 || {
   echo "supply-chain-scan: install Trivy first (https://trivy.dev/)" >&2
   exit 2
 }
+
+python scripts/check_image_lock.py
 
 OUT="${SUPPLY_CHAIN_DIR:-evidence/supply-chain}"
 mkdir -p "$OUT"

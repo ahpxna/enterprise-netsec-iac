@@ -20,8 +20,8 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 INTENT_PATH = ROOT / "intent" / "fabric.yaml"
 OUTPUT_PATH = ROOT / "clab" / "companyxyz.clab.yml"
 
-FRR_IMAGE = "quay.io/frrouting/frr:9.1.0"
-TOOLS_IMAGE = "wbitt/network-multitool:sha-2e883bc"
+FRR_IMAGE = "quay.io/frrouting/frr@sha256:f310c2ebb3827fa03b9674ee05e70a7d5eef2123bcc3b475eb2ef14dafcb52b4"
+TOOLS_IMAGE = "wbitt/network-multitool@sha256:db2810fe2c8d36db074eab5d98fbf861c8ed55e0786d648d3477b3de9135632e"
 
 
 class IndentedSafeDumper(yaml.SafeDumper):
@@ -118,7 +118,7 @@ def render(intent: dict) -> str:
     # objects are created by containerlab inside this namespace.
     nodes["access-switch"] = {
         "kind": "linux",
-        "image": "alpine:3.20",
+        "image": "alpine@sha256:d9e853e87e55526f6b2917df91a2115c36dd7c696a35be12163d44e6e2a4b6bc",
         "cmd": "sleep infinity",
     }
     for link_name, link in intent["links"].items():

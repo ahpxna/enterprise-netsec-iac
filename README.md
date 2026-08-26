@@ -42,7 +42,10 @@ sizing still require validation on the target cluster.
 ## Quick start
 
 Prerequisites for the default path are Docker, Docker Compose, containerlab,
-Ansible Core, Terraform, and Python 3.11 or newer.
+Ansible Core, Terraform, and Python 3.11 or newer. The historical FRR 9.1.0
+container used by live Path A is pinned as a `linux/amd64` single-platform
+manifest; Apple-silicon/macOS development should use `make dev-check` rather
+than treating Path A live execution as architecture-portable.
 
 ```bash
 git clone <repository-url>
@@ -167,6 +170,14 @@ failover while collecting SIEM-visible evidence.
 - [VyOS VM fabric](terraform/vyos-fabric/README.md)
 - [Kubernetes security plane](k8s/README.md)
 - [Control-to-test mapping](compliance/mappings/cyb-to-repo.md)
+- [Security implementation ledger](docs/SECURITY-IMPLEMENTATION-LEDGER.md)
+- [Container image supply-chain policy](docs/IMAGE-SUPPLY-CHAIN.md)
+
+Container image selection is tracked in `supply-chain/images.lock.yml`.
+`make image-lock-check` is deterministic/offline and runs in CI;
+`make verify-image-platforms` performs explicit online OCI index/platform
+verification on a networked Docker host. Use `make supply-chain-scan` for the
+separate SBOM/Trivy audit.
 
 ## License
 

@@ -59,7 +59,7 @@ spec:
       serviceAccountName: traefik
       containers:
         - name: traefik
-          image: traefik:v3.1
+          image: traefik@sha256:74d72c7a1345984f186bddbabcc462b2128d0d8054177dc84afaeac4db1f0f56
           args:
             - --providers.kubernetescrd
             - --providers.kubernetesingress

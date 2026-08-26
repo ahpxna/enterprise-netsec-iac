@@ -42,7 +42,7 @@ services:
   # -------------------- SIEM: Wazuh single-node --------------------
   wazuh.manager:
     profiles: ["siem"]
-    image: wazuh/wazuh-manager:4.14.6
+    image: wazuh/wazuh-manager@sha256:f72a63b5a93c54b3b99bacc463de9217b19de674aa7413016ec4f3d0ff975dda
     hostname: wazuh.manager
     restart: unless-stopped
     environment:
@@ -82,7 +82,7 @@ services:
 
   wazuh.indexer:
     profiles: ["siem"]
-    image: wazuh/wazuh-indexer:4.14.6
+    image: wazuh/wazuh-indexer@sha256:afc3feafe16fa863abb7686369f4f17397297d10c8bac10320f22cc3e2a27363
     hostname: wazuh.indexer
     restart: unless-stopped
     environment:
@@ -101,7 +101,7 @@ services:
 
   wazuh.dashboard:
     profiles: ["siem"]
-    image: wazuh/wazuh-dashboard:4.14.6
+    image: wazuh/wazuh-dashboard@sha256:261d270587933778f9ca61ec0334adf3b9a25e30d41d71c937890a60dab6eb04
     hostname: wazuh.dashboard
     restart: unless-stopped
     depends_on: [wazuh.indexer, wazuh.manager]
@@ -139,7 +139,7 @@ services:
   # -------------------- Zero-Trust gateway -------------------------
   traefik:
     profiles: ["ztna"]
-    image: traefik:v3.1
+    image: traefik@sha256:74d72c7a1345984f186bddbabcc462b2128d0d8054177dc84afaeac4db1f0f56
     hostname: traefik
     restart: unless-stopped
     command:
@@ -155,7 +155,7 @@ services:
 
   authentik-server:
     profiles: ["ztna"]
-    image: ghcr.io/goauthentik/server:2024.8
+    image: ghcr.io/goauthentik/server@sha256:f2e5c18e922b40bd0cc3b5a2e9ac96ffb9f4109282bbc92f43c9d4e8f232c381
     hostname: authentik
     restart: unless-stopped
     command: server
@@ -173,7 +173,7 @@ services:
   # worker in addition to the web server.
   authentik-worker:
     profiles: ["ztna"]
-    image: ghcr.io/goauthentik/server:2024.8
+    image: ghcr.io/goauthentik/server@sha256:f2e5c18e922b40bd0cc3b5a2e9ac96ffb9f4109282bbc92f43c9d4e8f232c381
     hostname: authentik-worker
     restart: unless-stopped
     command: worker
@@ -189,7 +189,7 @@ services:
 
   authentik-postgres:
     profiles: ["ztna"]
-    image: postgres:16-alpine
+    image: postgres@sha256:cf78e76683b9ca8c5733cbbdce6c9262b45b6767934dd0a95e671f9a0fc20685
     restart: unless-stopped
     environment:
       POSTGRES_USER: authentik
@@ -200,7 +200,7 @@ services:
 
   authentik-redis:
     profiles: ["ztna"]
-    image: redis:7-alpine
+    image: redis@sha256:ff02b58f971e7d7d156a1267e283fcbbeee91773b6aa36c49dac28ecfe28eadf
     restart: unless-stopped
     networks: [cxyz_identity_backend]
 
@@ -224,7 +224,7 @@ services:
   # -------------------- DMZ demo app (behind gateway) --------------
   dmz-web:
     profiles: ["dmz"]
-    image: nginxinc/nginx-unprivileged:stable-alpine
+    image: nginxinc/nginx-unprivileged@sha256:93722936b82ec8a1178d48448e619226680d2de3706a1640800e186cd5fa7fd3
     hostname: dmz-web
     restart: unless-stopped
     networks: [cxyz_dmz_backend]

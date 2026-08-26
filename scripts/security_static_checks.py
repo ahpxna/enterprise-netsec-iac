@@ -9,6 +9,7 @@ import sys
 import yaml
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
+IMAGE_LOCK = yaml.safe_load((ROOT / "supply-chain/images.lock.yml").read_text())["images"]
 ERRORS: list[str] = []
 
 
@@ -213,7 +214,7 @@ suricata_k8s = text("k8s/20-suricata.yaml")
 for token in (
     "dnsPolicy: ClusterFirstWithHostNet",
     "name: wazuh-agent",
-    "wazuh/wazuh-agent:4.14.6",
+    IMAGE_LOCK["wazuh-agent"]["pinned_ref"],
     "WAZUH_MANAGER_SERVER",
     "WAZUH_REGISTRATION_SERVER",
     "WAZUH_AGENT_NAME",
@@ -263,8 +264,9 @@ if local_env.exists() and (local_env.stat().st_mode & 0o077):
 
 wazuh_k8s = text("k8s/10-wazuh.yaml")
 for component in ("indexer", "manager", "dashboard"):
-    if f"wazuh/wazuh-{component}:4.14.6" not in wazuh_k8s:
-        fail(f"Kubernetes Wazuh {component} is not aligned to 4.14.6")
+    expected = IMAGE_LOCK[f"wazuh-{component}"]["pinned_ref"]
+    if expected not in wazuh_k8s:
+        fail(f"Kubernetes Wazuh {component} is not aligned to the audited 4.14.6 image-index pin")
 
 root_report = ROOT / "COMPLIANCE-REPORT.md"
 if root_report.exists():

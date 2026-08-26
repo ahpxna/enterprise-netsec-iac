@@ -25,6 +25,7 @@ python scripts/render_k8s_assets.py --check
 python scripts/check_vyos_boot.py
 python scripts/check_path_b_intent.py
 python scripts/security_static_checks.py
+python scripts/check_image_lock.py
 python scripts/check_ci_contract.py
 python -m compileall -q scripts compliance tests
 find scripts clab/configs -type f -name '*.sh' -print0 | xargs -0 -n1 bash -n
@@ -38,7 +39,7 @@ yamllint .
 kubectl kustomize k8s/ >/tmp/cxyz-k8s-rendered.yaml
 
 echo "==> Terraform fmt/validate in Linux containers (no host libvirt/KVM required)"
-TF_IMAGE="${TF_IMAGE:-hashicorp/terraform:1.15.9}"
+TF_IMAGE="${TF_IMAGE:-hashicorp/terraform@sha256:fd5debae63188975d6febc6aa5bd1a982a588f55e4a4ddb7de28be923f250456}"
 tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT
 mkdir -p "$tmp/terraform"

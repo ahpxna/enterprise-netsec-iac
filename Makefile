@@ -78,6 +78,14 @@ dev-check: ## macOS-friendly CI parity gate without KVM/libvirt/containerlab/nft
 supply-chain-scan: ## Generate CycloneDX SBOM + fail on HIGH/CRITICAL IaC findings (requires Trivy)
 	bash scripts/supply_chain_scan.sh
 
+.PHONY: image-lock-check
+image-lock-check: ## Offline: require every audited external image to match supply-chain/images.lock.yml
+	python scripts/check_image_lock.py
+
+.PHONY: verify-image-platforms
+verify-image-platforms: ## Online: verify locked OCI index digests and amd64/arm64 coverage with Docker buildx
+	python scripts/verify_image_platforms.py --strict
+
 .PHONY: lint
 lint: ## Static checks: yamllint, ansible-lint, terraform, gitleaks
 	python scripts/render_fabric.py --check
@@ -87,6 +95,7 @@ lint: ## Static checks: yamllint, ansible-lint, terraform, gitleaks
 	python scripts/check_vyos_boot.py
 	python scripts/check_path_b_intent.py
 	python scripts/security_static_checks.py
+	python scripts/check_image_lock.py
 	python scripts/check_ci_contract.py
 	python -m compileall -q scripts compliance tests
 	find scripts clab/configs -type f -name '*.sh' -print0 | xargs -0 -n1 bash -n

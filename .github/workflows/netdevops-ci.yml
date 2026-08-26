@@ -33,6 +33,7 @@ jobs:
           python scripts/check_vyos_boot.py
           python scripts/check_path_b_intent.py
           python scripts/security_static_checks.py
+          python scripts/check_image_lock.py
           python scripts/check_ci_contract.py
 
       - name: Check Python and Bash syntax
@@ -73,7 +74,7 @@ jobs:
       - name: Scan every reachable commit with gitleaks
         run: >-
           docker run --rm -v "$GITHUB_WORKSPACE:/repo"
-          ghcr.io/gitleaks/gitleaks:v8.24.3 detect
+          ghcr.io/gitleaks/gitleaks@sha256:e1b35e12a8c6fa8901f060459cfb6b2fc4c484d3afbe3b029733a3bbfab07055 detect
           --source=/repo --redact --log-opts=--all
 
   # --- Batfish offline policy tests: catches firewall regressions pre-merge ---

@@ -23,7 +23,7 @@ spec:
     spec:
       containers:
         - name: wazuh-indexer
-          image: wazuh/wazuh-indexer:4.14.6
+          image: wazuh/wazuh-indexer@sha256:afc3feafe16fa863abb7686369f4f17397297d10c8bac10320f22cc3e2a27363
           env:
             - { name: OPENSEARCH_JAVA_OPTS, value: "-Xms1g -Xmx1g" }
           ports: [{ containerPort: 9200 }]
@@ -74,7 +74,7 @@ spec:
     spec:
       containers:
         - name: wazuh-manager
-          image: wazuh/wazuh-manager:4.14.6
+          image: wazuh/wazuh-manager@sha256:f72a63b5a93c54b3b99bacc463de9217b19de674aa7413016ec4f3d0ff975dda
           env:
             - { name: INDEXER_URL, value: "https://wazuh-indexer:9200" }
             - { name: INDEXER_USERNAME, value: "admin" }
@@ -135,7 +135,7 @@ spec:
     spec:
       containers:
         - name: wazuh-dashboard
-          image: wazuh/wazuh-dashboard:4.14.6
+          image: wazuh/wazuh-dashboard@sha256:261d270587933778f9ca61ec0334adf3b9a25e30d41d71c937890a60dab6eb04
           env:
             - { name: INDEXER_USERNAME, value: "admin" }
             - name: INDEXER_PASSWORD

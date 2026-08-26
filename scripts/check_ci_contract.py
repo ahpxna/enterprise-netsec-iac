@@ -44,6 +44,7 @@ shared_checks = {
     "VyOS bootstrap invariants": "python scripts/check_vyos_boot.py",
     "Path B intent invariants": "python scripts/check_path_b_intent.py",
     "security regression invariants": "python scripts/security_static_checks.py",
+    "container image lock": "python scripts/check_image_lock.py",
     "CI contract guard": "python scripts/check_ci_contract.py",
     "compliance wiring": "python compliance/check_wiring.py",
 }
@@ -90,6 +91,7 @@ supply_chain_tokens = {
     "setup-terraform v4.0.1 SHA": "hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e",
     "Terraform CLI pin": 'terraform_version: "1.15.9"',
     "Batfish image digest": "batfish/allinone@sha256:445818fc17c0e24eb097387c84184334ad3fc42807de1ed9fef773762a0be515",
+    "Gitleaks image digest": "ghcr.io/gitleaks/gitleaks@sha256:e1b35e12a8c6fa8901f060459cfb6b2fc4c484d3afbe3b029733a3bbfab07055",
 }
 for label, token in supply_chain_tokens.items():
     if token not in WORKFLOW:

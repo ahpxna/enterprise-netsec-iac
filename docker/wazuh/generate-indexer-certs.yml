@@ -1,7 +1,7 @@
 ---
 services:
   generator:
-    image: wazuh/wazuh-certs-generator:0.0.4
+    image: wazuh/wazuh-certs-generator@sha256:369b4d58509aab074b188596870c81584f7120e653d9ef83c591f0f785dcf325
     environment:
       CERT_TOOL_VERSION: "4.14"
     volumes:
