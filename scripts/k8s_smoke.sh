@@ -15,14 +15,14 @@ rollout() {
 
 for workload in \
   statefulset/wazuh-indexer deployment/wazuh-manager deployment/wazuh-dashboard \
-  statefulset/authentik-postgres deployment/authentik-redis deployment/authentik-server \
+  statefulset/authentik-postgres deployment/authentik-server \
   deployment/authentik-worker deployment/traefik deployment/wireguard daemonset/suricata; do
   rollout "$workload"
 done
 
 echo "==> required NetworkPolicies"
 for policy in default-deny allow-cluster-dns traefik-ingress-egress traefik-kubernetes-api \
-  authentik-server authentik-worker authentik-postgres authentik-redis \
+  authentik-server authentik-worker authentik-postgres \
   wazuh-indexer wazuh-manager wazuh-dashboard suricata-wazuh-agent wireguard-vpn ztna-demo-app; do
   kubectl -n "$ns" get networkpolicy "$policy" >/dev/null
 done

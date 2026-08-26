@@ -52,16 +52,18 @@ def service_networks(name: str) -> set[str]:
 
 if service_networks("ztna-demo-app") & service_networks("authentik-postgres"):
     fail("protected ZTNA demo application must not share a Docker network with the identity database")
-if service_networks("ztna-demo-app") & service_networks("authentik-redis"):
-    fail("protected ZTNA demo application must not share a Docker network with the identity cache")
 if service_networks("traefik").isdisjoint(service_networks("ztna-demo-app")):
     fail("Traefik must retain a private network path to the protected ZTNA demo application")
 if service_networks("traefik").isdisjoint(service_networks("authentik-server")):
     fail("Traefik must retain a private network path to Authentik forward-auth")
 identity_env = services.get("authentik-server", {}).get("environment", {})
-for key in ("AUTHENTIK_POSTGRESQL__HOST", "AUTHENTIK_POSTGRESQL__USER", "AUTHENTIK_POSTGRESQL__NAME", "AUTHENTIK_REDIS__HOST"):
+for key in ("AUTHENTIK_POSTGRESQL__HOST", "AUTHENTIK_POSTGRESQL__USER", "AUTHENTIK_POSTGRESQL__NAME", "AUTHENTIK_WEB__BASE_URL"):
     if key not in identity_env:
         fail(f"Authentik server lacks explicit dependency setting {key}")
+if "authentik-redis" in compose or "AUTHENTIK_REDIS__HOST" in compose:
+    fail("Authentik 2026.8 must not deploy or configure the removed Redis dependency")
+if "authentik_db_2026:/var/lib/postgresql/data" not in compose:
+    fail("Authentik 2026.8 must use a fresh versioned database volume")
 postgres_env = services.get("authentik-postgres", {}).get("environment", {})
 if postgres_env.get("POSTGRES_USER") != "authentik":
     fail("Authentik PostgreSQL must create the same explicit database user Authentik uses")
@@ -162,9 +164,11 @@ for document in k8s_documents:
             fail("Authentik websecure IngressRoute must explicitly enable TLS")
 
 authentik_k8s = text("k8s/31-authentik.yaml")
-for key in ("POSTGRES_USER", "AUTHENTIK_POSTGRESQL__USER", "AUTHENTIK_POSTGRESQL__NAME", "AUTHENTIK_REDIS__HOST"):
+for key in ("POSTGRES_USER", "AUTHENTIK_POSTGRESQL__USER", "AUTHENTIK_POSTGRESQL__NAME", "AUTHENTIK_WEB__BASE_URL"):
     if key not in authentik_k8s:
         fail(f"Kubernetes Authentik deployment lacks explicit dependency setting {key}")
+if "authentik-redis" in authentik_k8s or "AUTHENTIK_REDIS__HOST" in authentik_k8s:
+    fail("Kubernetes Authentik 2026.8 must not deploy or configure Redis")
 
 # Path C must retain namespace micro-segmentation and health semantics.
 kustomization = yaml.safe_load(text("k8s/kustomization.yaml"))
@@ -175,7 +179,7 @@ policy_names = {doc.get("metadata", {}).get("name") for doc in network_policies}
 required_policies = {
     "default-deny", "allow-cluster-dns", "traefik-ingress-egress",
     "authentik-server", "authentik-worker", "authentik-postgres",
-    "authentik-redis", "wazuh-indexer", "wazuh-manager",
+    "wazuh-indexer", "wazuh-manager",
     "wazuh-dashboard", "suricata-wazuh-agent", "wireguard-vpn", "ztna-demo-app",
 }
 missing_policies = required_policies - policy_names
@@ -192,7 +196,6 @@ probe_requirements = {
     ("Deployment", "wazuh-dashboard", "wazuh-dashboard"),
     ("Deployment", "traefik", "traefik"),
     ("StatefulSet", "authentik-postgres", "postgres"),
-    ("Deployment", "authentik-redis", "redis"),
     ("Deployment", "authentik-server", "authentik-server"),
     ("Deployment", "authentik-worker", "authentik-worker"),
     ("Deployment", "wireguard", "wireguard"),
@@ -278,8 +281,6 @@ if "ztna-demo-app" not in services:
     fail("Docker ZTNA demo application is missing")
 if service_networks("ztna-demo-app") & service_networks("authentik-postgres"):
     fail("ZTNA demo application must not share a network with Authentik PostgreSQL")
-if service_networks("ztna-demo-app") & service_networks("authentik-redis"):
-    fail("ZTNA demo application must not share a network with Authentik Redis")
 
 blueprint_path = ROOT / "docker/authentik/blueprints/cxyz-ztna.yaml"
 if not blueprint_path.exists():
@@ -372,6 +373,23 @@ for token in ("pc1_management_interface_down", "dmz_management_interface_down", 
     if token not in segmentation_test:
         fail(f"Path A segmentation test lost alternate-management-path proof: {token}")
 
+# Path B is stricter: Linux endpoints never receive a persistent libvirt OOB
+# NIC. They are administered over their data address through a trusted VyOS
+# ProxyJump, while every network device rejects routed SSH to its OOB address.
+path_b_intent = yaml.safe_load(text("intent/fabric.yaml"))
+for name, node in (path_b_intent.get("nodes") or {}).items():
+    if node.get("role") == "endpoint":
+        if node.get("path_b_management", True) is not False or not node.get("path_b_proxy"):
+            fail(f"Path B endpoint {name} must be detached from OOB and declare a trusted ProxyJump")
+path_b_tf = text("terraform/vyos-fabric/main.tf")
+for token in ("if try(node.path_b_management, true)", "endpoint_management_isolation", "Path B endpoint VMs must not retain persistent management-network NICs"):
+    if token not in path_b_tf:
+        fail(f"Path B OOB isolation guard lost token: {token}")
+path_b_audit = text("scripts/path_b_audit.py")
+for token in ("pc1_management_ssh_reachable", "dmz_management_ssh_reachable", "OOB management SSH address"):
+    if token not in path_b_audit:
+        fail(f"Path B audit lost OOB bypass negative proof: {token}")
+
 # HRD controls use one canonical managed-node set and effective sshd settings.
 node_sets = text("tests/validation/node_sets.py")
 for endpoint in ("pc1", "pc4", "dmz-web"):
@@ -446,6 +464,9 @@ if "https://wazuh.indexer:9200" in text("k8s/generated/ossec.conf"):
     fail("generated Kubernetes Wazuh manager config still uses Compose DNS wazuh.indexer")
 if "https://wazuh-indexer:9200" not in text("k8s/generated/ossec.conf"):
     fail("generated Kubernetes Wazuh manager config must target Service DNS wazuh-indexer")
+for stale_path in ("/var/log/suricata/eve.json", "/var/log/cxyz/remote.log"):
+    if stale_path in text("k8s/generated/ossec.conf"):
+        fail(f"generated Kubernetes Wazuh config retains unavailable Path A collector {stale_path}")
 
 for token in (
     "cxyz-wazuh-tls",
@@ -467,6 +488,9 @@ for component, entry in IMAGE_LOCK.items():
 supply_chain_scan = text("scripts/supply_chain_scan.sh")
 if "python scripts/scan_locked_images.py" not in supply_chain_scan or not (ROOT / "scripts/scan_locked_images.py").exists():
     fail("manual supply-chain scan must vulnerability-scan every immutable locked image")
+authentik_preflight = ROOT / "scripts/check_authentik_migration.py"
+if not authentik_preflight.exists() or "authentik-preflight" not in makefile_text or "security: authentik-preflight" not in makefile_text:
+    fail("normal security deployment must fail closed before reusing a legacy Authentik database volume")
 
 # Certificate lifecycle: leaves renew before expiry; CA requires an explicit
 # overlap/rotation operation instead of silently expiring in place.

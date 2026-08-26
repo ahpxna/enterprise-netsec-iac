@@ -139,20 +139,6 @@ images:
       level: registry-metadata
       kind: multi-platform-index
       source: https://hub.docker.com/layers/library/postgres/16-alpine
-  redis:
-    intent_ref: redis:7-alpine
-    pinned_ref: redis@sha256:ff02b58f971e7d7d156a1267e283fcbbeee91773b6aa36c49dac28ecfe28eadf
-    status: verified
-    scopes:
-      - compose
-      - kubernetes
-    required_platforms:
-      - linux/amd64
-      - linux/arm64
-    verification:
-      level: registry-metadata
-      kind: multi-platform-index
-      source: https://hub.docker.com/layers/library/redis/7-alpine
   nginx-unprivileged:
     intent_ref: nginxinc/nginx-unprivileged:stable-alpine
     pinned_ref: nginxinc/nginx-unprivileged@sha256:93722936b82ec8a1178d48448e619226680d2de3706a1640800e186cd5fa7fd3

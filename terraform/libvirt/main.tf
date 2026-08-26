@@ -15,7 +15,7 @@ resource "libvirt_pool" "cxyz" {
 resource "libvirt_volume" "dc_base" {
   name   = "dc-base.qcow2"
   pool   = libvirt_pool.cxyz.name
-  source = var.base_image_url
+  source = var.base_image_path
   format = "qcow2"
 }
 
@@ -26,14 +26,17 @@ resource "libvirt_volume" "dc_disk" {
   size           = 21474836480 # 20 GiB
 }
 
-data "template_file" "user_data" {
-  template = file("${path.module}/cloud-init/user-data.yml")
-}
-
 resource "libvirt_cloudinit_disk" "dc" {
   name      = "dc-cloudinit.iso"
   pool      = libvirt_pool.cxyz.name
-  user_data = data.template_file.user_data.rendered
+  user_data = file("${path.module}/cloud-init/user-data.yml")
+}
+
+check "pinned_dc_base_image" {
+  assert {
+    condition     = lower(filesha256(var.base_image_path)) == lower(var.base_image_sha256)
+    error_message = "base_image_path does not match base_image_sha256; use the reviewed immutable cloud image."
+  }
 }
 
 resource "libvirt_domain" "dc_services" {

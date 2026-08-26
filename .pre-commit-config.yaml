@@ -9,6 +9,15 @@ repos:
       - id: detect-private-key
       - id: check-yaml
         args: [--allow-multiple-documents]
+        exclude: ^docker/authentik/blueprints/
+
+  - repo: local
+    hooks:
+      - id: authentik-blueprint-yaml-syntax
+        name: Authentik Blueprint YAML syntax
+        entry: python scripts/check_yaml_syntax.py
+        language: system
+        files: ^docker/authentik/blueprints/.*\.ya?ml$
 
   - repo: https://github.com/gitleaks/gitleaks
     rev: v8.18.4

@@ -42,11 +42,11 @@ docker compose exec -T authentik-postgres \
   pg_dump -U authentik -d authentik -Fc > authentik-before-upgrade.dump
 
 # Record current containers/logs before each step.
-docker compose ps authentik-server authentik-worker authentik-postgres authentik-redis
+docker compose ps authentik-server authentik-worker authentik-postgres
 docker compose logs --tail=200 authentik-server authentik-worker
 
 # After changing exactly one release-train step:
-docker compose --profile ztna --profile dmz up -d authentik-postgres authentik-redis authentik-server authentik-worker traefik ztna-demo-app
+docker compose --profile ztna --profile dmz up -d authentik-postgres authentik-server authentik-worker traefik ztna-demo-app
 
 docker compose ps authentik-server authentik-worker
 # Then run the repository ZTNA validation as part of the normal live suite.

@@ -24,6 +24,29 @@ protocols {
         interface eth2 { passive }
     }
 }
+firewall {
+    ipv4 {
+        input {
+            filter {
+                default-action accept
+                rule 10 {
+                    action accept
+                    description "OOB SSH from trusted libvirt host only"
+                    inbound-interface { name eth3 }
+                    source { address 10.1.1.1/32 }
+                    destination { port 22 }
+                    protocol tcp
+                }
+                rule 20 {
+                    action drop
+                    description "Deny routed OOB SSH bypass"
+                    destination { port 22 }
+                    protocol tcp
+                }
+            }
+        }
+    }
+}
 system {
     host-name dist2
     login {

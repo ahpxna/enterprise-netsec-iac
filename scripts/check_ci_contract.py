@@ -55,6 +55,11 @@ for label, command in shared_checks.items():
     if command not in WORKFLOW:
         fail(f"GitHub Actions lost {label}: {command}")
 
+for module in ("libvirt", "vyos-fabric"):
+    init = f"terraform -chdir=terraform/{module} init -backend=false -input=false"
+    if init not in lint_body:
+        fail(f"make lint must initialize {module} before Terraform validation")
+
 # Syntax gates prevent a shell/Python parse regression from waiting until a
 # later runtime job. Keep them mirrored locally and in CI.
 for label, token in {

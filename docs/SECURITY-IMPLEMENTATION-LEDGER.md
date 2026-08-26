@@ -715,7 +715,8 @@ required.
 ### Closed items
 
 - Suricata moved from the sole mutable/deferred 8.0.1 tag to an immutable
-  multi-platform 8.0.6 index; image inventory is now 19/19 pinned.
+  multi-platform 8.0.6 index; image inventory is now 18/18 pinned after the
+  removed Authentik Redis dependency.
 - Wazuh manager/indexer/dashboard/agent moved together to 4.14.7 immutable
   refs so Path C/Compose versions do not drift.
 - Traefik moved from the obsolete 3.1 line to immutable 3.7.11 and the matching
@@ -739,15 +740,13 @@ valid. `scripts/check_yaml_syntax.py` uses PyYAML's composition layer to verify
 syntax/indentation while preserving unknown tags as nodes; CI and `make lint`
 run this gate in addition to yamllint.
 
-### Remaining P1 lifecycle debt — Authentik
+### Remaining P1 lifecycle debt — legacy Authentik databases
 
-Authentik 2024.8 is immutable but outside the supported trains reviewed on
-2026-08-25. It is **not** direct-jumped in this patch: existing Authentik
-databases require sequential major-release upgrades. The machine-readable
-`supply-chain/lifecycle.yml` records `migration-required`, and
-`docs/AUTHENTIK-UPGRADE.md` defines backup, one-release-step-at-a-time,
-Blueprint and ZTNA checkpoints. This is an intentionally visible migration debt,
-not a claim that digest pinning makes the old branch supported.
+Fresh deployments use the reviewed Authentik 2026.8 image and a separate
+`authentik_db_2026` volume. Existing 2024.8 databases still require sequential
+major-release migration. `make security` now fails closed when it detects the
+legacy `authentik_db` volume, and points operators to
+`docs/AUTHENTIK-UPGRADE.md`; the legacy database must never be direct-jumped.
 
 ---
 

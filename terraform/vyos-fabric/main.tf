@@ -98,7 +98,7 @@ resource "libvirt_cloudinit_disk" "node_ci" {
           }
         )
       },
-      {
+      contains(keys(local.management_plan), each.key) ? {
         (local.management_plan[each.key].device) = {
           match = {
             macaddress = lower(local.management_plan[each.key].mac)
@@ -109,7 +109,7 @@ resource "libvirt_cloudinit_disk" "node_ci" {
             "use-routes" = false
           }
         }
-      }
+      } : {}
     )
   }) : null
 }
@@ -138,17 +138,18 @@ resource "libvirt_domain" "node" {
     }
   }
 
-  # Final NIC: out-of-band management. The management network reserves the
-  # requested address for this stable MAC; VyOS and Linux both request DHCP
-  # without accepting a management-plane default route.
-  network_interface {
-    network_name = libvirt_network.mgmt.name
-    mac          = local.management_plan[each.key].mac
-    hostname     = each.key
-    # IP ownership belongs only to intent/fabric.yaml. Libvirt uses this
-    # address to create a deterministic DHCP reservation for the stable MAC.
-    addresses      = [local.management_plan[each.key].address]
-    wait_for_lease = false
+  # Only trusted network devices retain a persistent OOB NIC. Endpoint guests
+  # are configured through a named network-device ProxyJump and never attach
+  # to the management LAN after first boot.
+  dynamic "network_interface" {
+    for_each = contains(keys(local.management_plan), each.key) ? [local.management_plan[each.key]] : []
+    content {
+      network_name   = libvirt_network.mgmt.name
+      mac            = network_interface.value.mac
+      hostname       = each.key
+      addresses      = [network_interface.value.address]
+      wait_for_lease = false
+    }
   }
 
   console {
@@ -200,6 +201,7 @@ locals {
       network_name = var.management_network
       address      = node.mgmt_ip
     }
+    if try(node.path_b_management, true)
   }
 
   # Terraform bootstrap never receives long-lived routing credentials. Each
@@ -238,6 +240,15 @@ check "intent_management_complete" {
   assert {
     condition     = toset(keys(var.nodes)) == toset(keys(local.fabric_intent.nodes))
     error_message = "Path B sizing entries and intent/fabric.yaml nodes must be identical."
+  }
+}
+
+check "endpoint_management_isolation" {
+  assert {
+    condition = alltrue([
+      for node in values(local.fabric_intent.nodes) : node.role != "endpoint" || try(node.path_b_management, true) == false
+    ])
+    error_message = "Path B endpoint VMs must not retain persistent management-network NICs."
   }
 }
 

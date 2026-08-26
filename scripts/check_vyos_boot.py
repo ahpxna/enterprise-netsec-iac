@@ -41,6 +41,11 @@ def main() -> int:
             errors.append(f"{path.name}: persistent SSH bootstrap public-key placeholders are missing")
         if "address dhcp" not in syntax or "no-default-route" not in syntax:
             errors.append(f"{path.name}: management DHCP/no-default-route bootstrap is incomplete")
+        if path.name not in FIREWALLS:
+            if "OOB SSH from trusted libvirt host only" not in syntax or "Deny routed OOB SSH bypass" not in syntax:
+                errors.append(f"{path.name}: routed OOB SSH bypass guard is missing")
+            if "source { address 10.1.1.1/32 }" not in syntax:
+                errors.append(f"{path.name}: OOB SSH must be limited to the libvirt management host")
         if path.name in FIREWALLS:
             if not re.search(r"firewall\s*\{.*?ipv4\s*\{.*?forward\s*\{.*?filter\s*\{", syntax, re.DOTALL):
                 errors.append(f"{path.name}: missing VyOS 1.4 ipv4 forward filter")

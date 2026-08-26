@@ -167,13 +167,13 @@ services:
       AUTHENTIK_POSTGRESQL__USER: authentik
       AUTHENTIK_POSTGRESQL__NAME: authentik
       AUTHENTIK_POSTGRESQL__PASSWORD: ${AUTHENTIK_POSTGRES_PASSWORD:?run make secrets}
-      AUTHENTIK_REDIS__HOST: authentik-redis
+      AUTHENTIK_WEB__BASE_URL: https://sso.${ORG_DOMAIN:-companyxyz.lab}
       AUTHENTIK_DISABLE_UPDATE_CHECK: "true"
       CXYZ_AUTHENTIK_APP_URL: https://app.${ORG_DOMAIN:-companyxyz.lab}
       CXYZ_AUTHENTIK_SSO_URL: https://sso.${ORG_DOMAIN:-companyxyz.lab}
     volumes:
       - ./docker/authentik/blueprints/cxyz-ztna.yaml:/blueprints/cxyz-ztna.yaml:ro
-    depends_on: [authentik-postgres, authentik-redis]
+    depends_on: [authentik-postgres]
     networks: [cxyz_identity_front, cxyz_identity_backend]
 
   # Background jobs, blueprints, and embedded-outpost lifecycle require a
@@ -190,13 +190,13 @@ services:
       AUTHENTIK_POSTGRESQL__USER: authentik
       AUTHENTIK_POSTGRESQL__NAME: authentik
       AUTHENTIK_POSTGRESQL__PASSWORD: ${AUTHENTIK_POSTGRES_PASSWORD:?run make secrets}
-      AUTHENTIK_REDIS__HOST: authentik-redis
+      AUTHENTIK_WEB__BASE_URL: https://sso.${ORG_DOMAIN:-companyxyz.lab}
       AUTHENTIK_DISABLE_UPDATE_CHECK: "true"
       CXYZ_AUTHENTIK_APP_URL: https://app.${ORG_DOMAIN:-companyxyz.lab}
       CXYZ_AUTHENTIK_SSO_URL: https://sso.${ORG_DOMAIN:-companyxyz.lab}
     volumes:
       - ./docker/authentik/blueprints/cxyz-ztna.yaml:/blueprints/cxyz-ztna.yaml:ro
-    depends_on: [authentik-postgres, authentik-redis]
+    depends_on: [authentik-postgres]
     networks: [cxyz_identity_front, cxyz_identity_backend]
 
   authentik-postgres:
@@ -207,13 +207,8 @@ services:
       POSTGRES_USER: authentik
       POSTGRES_PASSWORD: ${AUTHENTIK_POSTGRES_PASSWORD:?run make secrets}
       POSTGRES_DB: authentik
-    volumes: ["authentik_db:/var/lib/postgresql/data"]
-    networks: [cxyz_identity_backend]
-
-  authentik-redis:
-    profiles: ["ztna"]
-    image: redis@sha256:ff02b58f971e7d7d156a1267e283fcbbeee91773b6aa36c49dac28ecfe28eadf
-    restart: unless-stopped
+    # Fresh 2026.8 state must never auto-mount the legacy authentik_db volume.
+    volumes: ["authentik_db_2026:/var/lib/postgresql/data"]
     networks: [cxyz_identity_backend]
 
   wireguard:
@@ -262,7 +257,7 @@ services:
     networks: [cxyz_dmz_backend]
 
 volumes:
-  authentik_db:
+  authentik_db_2026:
   cxyz_remote_logs:
   wazuh_api_configuration:
   wazuh_etc:

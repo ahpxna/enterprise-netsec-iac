@@ -57,8 +57,12 @@ runtime-config: secrets ## Render secret-bearing Path A runtime configs outside 
 net: dc-network runtime-config ## Deploy the routed network fabric (containerlab + FRR/VyOS)
 	sudo containerlab deploy -t $(CLAB_TOPO) --reconfigure
 
+.PHONY: authentik-preflight
+authentik-preflight: ## Block unsafe reuse of a legacy Authentik database volume
+	python scripts/check_authentik_migration.py
+
 .PHONY: security
-security: images dc-network wazuh-config ## Deploy SIEM + IDS + Zero-Trust gateway + DMZ app
+security: authentik-preflight images dc-network wazuh-config ## Deploy SIEM + IDS + Zero-Trust gateway + DMZ app
 	docker compose --profile siem --profile ids --profile ztna --profile dmz up -d
 
 .PHONY: configure
@@ -67,7 +71,7 @@ configure: secrets ## Push all device/server configuration with Ansible
 
 .PHONY: harden
 harden: ## Apply CIS-aligned hardening only
-	cd $(ANSIBLE_DIR) && ansible-playbook playbooks/20-security.yml
+	cd $(ANSIBLE_DIR) && ansible-playbook playbooks/00-baseline.yml --tags baseline,cis
 
 # ------------------------------------------------------------ validate
 
@@ -110,8 +114,10 @@ lint: ## Static checks: yamllint, ansible-lint, terraform, gitleaks
 	docker compose --env-file .env.example --profile siem --profile ids --profile ztna --profile dmz config --quiet
 	yamllint .
 	cd $(ANSIBLE_DIR) && ansible-lint
+	terraform -chdir=terraform/libvirt init -backend=false -input=false
 	terraform -chdir=terraform/libvirt fmt -check -recursive
 	terraform -chdir=terraform/libvirt validate
+	terraform -chdir=terraform/vyos-fabric init -backend=false -input=false
 	terraform -chdir=terraform/vyos-fabric fmt -check -recursive
 	terraform -chdir=terraform/vyos-fabric validate
 	gitleaks detect --no-banner --redact

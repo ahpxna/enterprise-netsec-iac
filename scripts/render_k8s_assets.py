@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import argparse
 import pathlib
+import re
 import sys
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
@@ -31,6 +32,16 @@ def rendered_content(source: pathlib.Path) -> bytes:
     content = source.read_bytes()
     if source.name in {"opensearch_dashboards.yml", "ossec.conf"}:
         content = content.replace(b"https://wazuh.indexer:9200", b"https://wazuh-indexer:9200")
+    if source.name == "ossec.conf":
+        # Suricata reaches the Kubernetes manager through its Wazuh-agent
+        # sidecar; those Path A host-file collectors are not mounted in Path C.
+        for location in (b"/var/log/suricata/eve.json", b"/var/log/cxyz/remote.log"):
+            content = re.sub(
+                rb"\s*<localfile>.*?<location>" + re.escape(location) + rb"</location>.*?</localfile>",
+                b"",
+                content,
+                flags=re.DOTALL,
+            )
     return content
 
 

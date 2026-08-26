@@ -40,12 +40,14 @@ Kubernetes realistically requires 32GB or more.
 
 ## Stable interface model
 
-Data-plane NICs are attached first and map to `eth0..ethN`; the management NIC
-is attached last. Every interface also receives a deterministic MAC address.
-Linux cloud-init matches and renames interfaces by MAC, while each VyOS
-`config.boot` declares its final management interface as DHCP with no imported
-default route. The plan displays the proposed `node_interface_plan`; after
-apply, inspect the same mapping with:
+Data-plane NICs are attached first and map to `eth0..ethN`; only trusted VyOS
+network devices receive a final management NIC. Linux endpoints have no
+persistent libvirt management attachment and are reached on their data address
+through their declared trusted VyOS `ProxyJump`. Every interface receives a
+deterministic MAC address. VyOS `config.boot` declares its management interface
+as DHCP with no imported default route and rejects routed SSH to that address.
+The plan displays the proposed `node_interface_plan`; after apply, inspect the
+same mapping with:
 
 ```bash
 terraform output node_interface_plan
@@ -67,9 +69,10 @@ per-node non-secret bootstrap authentication tokens. Long-lived routing secrets
 never enter Terraform state; Ansible injects them only after the management SSH
 trust boundary has been established.
 
-Before any Ansible connection, verify each VM SSH host key from its console or
-trusted hypervisor inventory and store it in `ansible/inventory/known_hosts`.
-The file is intentionally local-only; the automation refuses to disable host
+Before any Ansible connection, verify each VM SSH host key (including both
+ProxyJump devices and endpoint data addresses) from its console or trusted
+hypervisor inventory and store it in `ansible/inventory/known_hosts`. The file
+is intentionally local-only; the automation refuses to disable host
 verification. Then run the complete Path-B lifecycle:
 
 ```bash

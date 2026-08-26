@@ -70,9 +70,6 @@ spec:
     - to:
         - podSelector: { matchLabels: { app: authentik-postgres } }
       ports: [{ protocol: TCP, port: 5432 }]
-    - to:
-        - podSelector: { matchLabels: { app: authentik-redis } }
-      ports: [{ protocol: TCP, port: 6379 }]
 ---
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
@@ -84,9 +81,6 @@ spec:
     - to:
         - podSelector: { matchLabels: { app: authentik-postgres } }
       ports: [{ protocol: TCP, port: 5432 }]
-    - to:
-        - podSelector: { matchLabels: { app: authentik-redis } }
-      ports: [{ protocol: TCP, port: 6379 }]
 ---
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
@@ -99,18 +93,6 @@ spec:
         - podSelector: { matchLabels: { app: authentik-server } }
         - podSelector: { matchLabels: { app: authentik-worker } }
       ports: [{ protocol: TCP, port: 5432 }]
----
-apiVersion: networking.k8s.io/v1
-kind: NetworkPolicy
-metadata: { name: authentik-redis, namespace: cxyz-security }
-spec:
-  podSelector: { matchLabels: { app: authentik-redis } }
-  policyTypes: [Ingress]
-  ingress:
-    - from:
-        - podSelector: { matchLabels: { app: authentik-server } }
-        - podSelector: { matchLabels: { app: authentik-worker } }
-      ports: [{ protocol: TCP, port: 6379 }]
 ---
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy

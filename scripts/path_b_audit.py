@@ -66,8 +66,16 @@ def mgmt_ip(node: str) -> str:
     return str(NODES[node]["mgmt_ip"])
 
 
+def node_ssh_address(node: str) -> str:
+    if NODES[node].get("path_b_management", True) is not False:
+        return mgmt_ip(node)
+    return str(NODES[node]["attachments"][0]["address"]).split("/", 1)[0]
+
+
 def ssh_argv(node: str, user: str, command: str) -> list[str]:
-    return [*SSH_BASE, f"{user}@{mgmt_ip(node)}", command]
+    proxy = NODES[node].get("path_b_proxy")
+    proxy_args = ["-J", f"vyos@{mgmt_ip(proxy)}"] if proxy else []
+    return [*SSH_BASE, *proxy_args, f"{user}@{node_ssh_address(node)}", command]
 
 
 def linux(node: str, command: str, timeout: int = 30) -> subprocess.CompletedProcess[str]:
@@ -179,6 +187,13 @@ def test_seg01() -> tuple[str, dict]:
     ssh_ready = ":22" in listeners
     mgmt_ssh = tcp_from_linux("pc4", "172.16.50.1", 22)
     user_ssh = tcp_from_linux("pc1", "172.16.50.1", 22)
+    management_targets = [
+        mgmt_ip(name)
+        for name, node in NODES.items()
+        if node.get("path_b_management", True) is not False
+    ]
+    pc1_management_bypass = {address: tcp_from_linux("pc1", address, 22) for address in management_targets}
+    dmz_management_bypass = {address: tcp_from_linux("dmz-web", address, 22) for address in management_targets}
 
     pc4_secret = require_secret("RADIUS_SECRET_PC4")
     positive_cmd = (
@@ -207,12 +222,16 @@ def test_seg01() -> tuple[str, dict]:
         "user_dns_positive": dns_allowed,
         "user_ssh_reachable": user_ssh,
         "user_radius_received_response": radius_user_response,
+        "pc1_management_ssh_reachable": pc1_management_bypass,
+        "dmz_management_ssh_reachable": dmz_management_bypass,
     }
     assert radius_ready and dns_ready and ssh_ready, "SEG-01 DC service preconditions are not healthy"
     assert mgmt_ssh and radius_mgmt_response, "SEG-01 management positive controls failed"
     assert dns_allowed, "SEG-01 approved user DNS path failed"
     assert not user_ssh and not radius_user_response, "SEG-01 user VLAN reached prohibited SSH/RADIUS service"
-    return "healthy DC services; user DNS allowed; user SSH/RADIUS denied on real VyOS fw-core", observed
+    assert not any(pc1_management_bypass.values()), "SEG-01 user VLAN reached an OOB management SSH address"
+    assert not any(dmz_management_bypass.values()), "SEG-01 DMZ reached an OOB management SSH address"
+    return "healthy DC services; user DNS allowed; user SSH/RADIUS and every OOB SSH address denied", observed
 
 
 def test_seg02() -> tuple[str, dict]:

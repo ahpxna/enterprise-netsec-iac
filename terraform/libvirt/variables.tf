@@ -14,8 +14,17 @@ variable "siem_ram_mb" {
   default = 4096
 }
 
-variable "base_image_url" {
-  description = "Ubuntu cloud image used for the DC services VM"
+variable "base_image_path" {
+  description = "Absolute path to the reviewed Ubuntu cloud image used for the DC services VM"
   type        = string
-  default     = "https://cloud-images.ubuntu.com/noble/current/noble-server-cloudimg-amd64.img"
+}
+
+variable "base_image_sha256" {
+  description = "SHA-256 of base_image_path; required so Terraform never consumes a mutable current cloud-image URL"
+  type        = string
+
+  validation {
+    condition     = can(regex("^[0-9a-fA-F]{64}$", var.base_image_sha256))
+    error_message = "base_image_sha256 must be a 64-character SHA-256 hexadecimal digest."
+  }
 }
