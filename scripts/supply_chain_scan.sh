@@ -19,4 +19,5 @@ mkdir -p "$OUT"
 
 trivy fs --format cyclonedx --output "$OUT/sbom.cdx.json" .
 trivy config --severity HIGH,CRITICAL --exit-code 1 .
-echo "OK: SBOM written to $OUT/sbom.cdx.json and HIGH/CRITICAL IaC scan passed"
+python scripts/scan_locked_images.py
+echo "OK: SBOM written to $OUT/sbom.cdx.json; HIGH/CRITICAL IaC and locked-image scans passed"

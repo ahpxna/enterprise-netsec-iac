@@ -464,6 +464,9 @@ for token in (
 for component, entry in IMAGE_LOCK.items():
     if entry.get("status") == "deferred" or not entry.get("pinned_ref"):
         fail(f"image-lock component {component} remains mutable/deferred")
+supply_chain_scan = text("scripts/supply_chain_scan.sh")
+if "python scripts/scan_locked_images.py" not in supply_chain_scan or not (ROOT / "scripts/scan_locked_images.py").exists():
+    fail("manual supply-chain scan must vulnerability-scan every immutable locked image")
 
 # Certificate lifecycle: leaves renew before expiry; CA requires an explicit
 # overlap/rotation operation instead of silently expiring in place.
@@ -481,6 +484,9 @@ if (
     or "read_env_value WAZUH_DASHBOARD_PASSWORD" not in render_wazuh_users
 ):
     fail("Wazuh user renderer must parse required dotenv values without shell sourcing")
+k8s_smoke = text("scripts/k8s_smoke.sh")
+if "statefulset/authentik-postgres" not in k8s_smoke or "deployment/authentik-postgres" in k8s_smoke:
+    fail("Kubernetes smoke gate must wait for the Authentik PostgreSQL StatefulSet")
 if "docker/zero-trust-gateway/certs/" not in text(".gitignore"):
     fail("local ZTNA CA/private key directory must be gitignored")
 

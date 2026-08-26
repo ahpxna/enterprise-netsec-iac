@@ -80,7 +80,7 @@ dev-check: ## macOS-friendly CI parity gate without KVM/libvirt/containerlab/nft
 	bash scripts/dev_check.sh
 
 .PHONY: supply-chain-scan
-supply-chain-scan: ## Generate CycloneDX SBOM + fail on HIGH/CRITICAL IaC findings (requires Trivy)
+supply-chain-scan: ## Generate SBOM + scan locked images and IaC for HIGH/CRITICAL findings (requires Trivy)
 	bash scripts/supply_chain_scan.sh
 
 .PHONY: image-lock-check

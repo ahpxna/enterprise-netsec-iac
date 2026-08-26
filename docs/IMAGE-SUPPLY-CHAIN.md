@@ -113,9 +113,10 @@ The only unresolved historical portable ref after INC-042 is:
 
 - Suricata 8.0.1.
 
-Authentik 2024.8 is now reproducibly pinned to the first-party GitHub Packages
-top-level index digest shared by tags `2024.8.6` and `2024.8`; GitHub lists
-both amd64 and arm64 children for that index. This is not a lifecycle upgrade.
+Authentik is pinned to the first-party GitHub Packages top-level index digest
+for the reviewed 2026.8 train; GitHub lists both amd64 and arm64 children for
+that index. Existing 2024.8 databases still require the controlled sequential
+migration in `docs/AUTHENTIK-UPGRADE.md`.
 
 Do not copy a child digest from an amd64/arm64 row and use it as a universal
 pin. Use the online verifier to obtain the top-level index digest, or replace
@@ -134,12 +135,15 @@ make supply-chain-scan
 ```
 
 The scan is explicit rather than a registry/network-dependent PR requirement.
-Its result can change when vulnerability feeds change even if the repository
-commit is unchanged.
+It covers both the checked source/IaC and every immutable `pinned_ref` in the
+image lock. Its result can change when vulnerability feeds change even if the
+repository commit is unchanged.
 
 ## Lifecycle upgrades are separate increments
 
 An immutable digest can preserve an old vulnerable/unsupported release forever.
 Therefore release lifecycle work is tracked separately in
-`docs/SECURITY-IMPLEMENTATION-LEDGER.md`. In particular, resolving an Authentik
-2024.8 or Traefik 3.1 digest must not be described as upgrading those products.
+`docs/SECURITY-IMPLEMENTATION-LEDGER.md`. In particular, an existing Authentik
+2024.8 database still requires its sequential migration even though fresh
+deployments now use the reviewed 2026.8 pin; likewise, resolving a Traefik 3.1
+digest alone is not a lifecycle upgrade.
