@@ -44,6 +44,11 @@ docs/*
 !docs/PKI-ROTATION.md
 !docs/IMAGE-SUPPLY-CHAIN.md
 !docs/SECURITY-IMPLEMENTATION-LEDGER.md
+!docs/NETSEC-BASELINE.md
+!docs/SOC-AI-ARCHITECTURE.md
+!docs/adr/
+docs/adr/*
+!docs/adr/0006-soc-ai-closed-loop-architecture.md
 
 # ---- Python / tooling ----
 __pycache__/

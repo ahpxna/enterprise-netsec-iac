@@ -71,6 +71,20 @@ for label, token in {
     if token not in WORKFLOW:
         fail(f"GitHub Actions lost {label}")
 
+# Phase-1 SOC contracts must run in the same local and CI gates as the existing
+# evidence tests. This blocks later ingestion/model work from weakening the
+# agreed trust boundaries or response policy.
+soc_contract_local = "python -m pytest tests/unit tests/soc -q"
+soc_contract_ci = "pytest tests/unit tests/soc -q"
+if soc_contract_local not in lint_body:
+    fail("make lint must run SOC architecture/schema contracts")
+if soc_contract_local not in (ROOT / "scripts/dev_check.sh").read_text():
+    fail("scripts/dev_check.sh must run SOC architecture/schema contracts")
+if soc_contract_ci not in WORKFLOW:
+    fail("GitHub Actions must run SOC architecture/schema contracts")
+if "push: { branches: [main, soc-ai] }" not in WORKFLOW:
+    fail("netdevops-ci must validate direct pushes to the soc-ai integration branch")
+
 # CI-only infrastructure-independent gates. These intentionally remain in CI
 # rather than being required by this script on developer machines.
 ci_tokens = {

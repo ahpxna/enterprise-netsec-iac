@@ -31,7 +31,7 @@ python scripts/check_yaml_syntax.py
 python -m compileall -q scripts compliance tests
 find scripts clab/configs -type f -name '*.sh' -print0 | xargs -0 -n1 bash -n
 python compliance/check_wiring.py
-python -m pytest tests/unit -q
+python -m pytest tests/unit tests/soc -q
 
 echo "==> Docker Compose / YAML / Ansible / Kubernetes render"
 docker compose --env-file .env.example --profile siem --profile ids --profile ztna --profile dmz --profile vpn-test config --quiet

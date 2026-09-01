@@ -1,0 +1,49 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://companyxyz.test/schemas/ecs/soc-event-v1.json",
+  "title": "CompanyXYZ normalized SOC event",
+  "type": "object",
+  "required": ["@timestamp", "event", "observer", "cxyz"],
+  "properties": {
+    "@timestamp": {"type": "string", "format": "date-time"},
+    "event": {
+      "type": "object",
+      "required": ["kind", "category", "dataset"],
+      "properties": {
+        "kind": {"type": "string"},
+        "category": {"type": "array", "minItems": 1, "items": {"type": "string"}},
+        "dataset": {"type": "string", "minLength": 1},
+        "original": {"type": "string"}
+      },
+      "additionalProperties": true
+    },
+    "observer": {
+      "type": "object",
+      "required": ["name", "type"],
+      "properties": {
+        "name": {"type": "string", "minLength": 1},
+        "type": {"type": "string", "minLength": 1}
+      },
+      "additionalProperties": true
+    },
+    "source": {"type": "object", "additionalProperties": true},
+    "destination": {"type": "object", "additionalProperties": true},
+    "network": {"type": "object", "additionalProperties": true},
+    "user": {"type": "object", "additionalProperties": true},
+    "host": {"type": "object", "additionalProperties": true},
+    "cxyz": {
+      "type": "object",
+      "required": ["schema_version", "sensor", "zone", "vlan", "asset_role", "ingestion_id"],
+      "properties": {
+        "schema_version": {"const": "soc-event-v1"},
+        "sensor": {"type": "string", "minLength": 1},
+        "zone": {"type": "string", "minLength": 1},
+        "vlan": {"type": ["integer", "null"], "minimum": 1, "maximum": 4094},
+        "asset_role": {"type": "string", "minLength": 1},
+        "ingestion_id": {"type": "string", "minLength": 1}
+      },
+      "additionalProperties": true
+    }
+  },
+  "additionalProperties": true
+}

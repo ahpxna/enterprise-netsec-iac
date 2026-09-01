@@ -1,10 +1,11 @@
 # CompanyXYZ-NG — Enterprise Network Security as Code
 
-CompanyXYZ-NG is a reproducible enterprise network-security lab built from
-open-source infrastructure components. The repository combines a three-tier
-routed fabric, DMZ isolation, dual-ISP edge routing, centralized logging,
-intrusion detection, zero-trust access, infrastructure provisioning,
-configuration management, and evidence-backed compliance checks.
+CompanyXYZ-NG is a reproducible automated SOC and AI-assisted detection and
+response research platform. Network-security IaC remains its foundation for
+isolation, realistic telemetry, controlled attack scenarios, and evidence.
+The repository combines a three-tier routed fabric, DMZ isolation, dual-ISP
+edge routing, centralized detection, zero-trust access, infrastructure
+provisioning, configuration management, and evidence-backed compliance checks.
 
 The default fabric uses containerlab, FRRouting, and nftables. The security
 plane uses Wazuh, Suricata, Traefik, Authentik, and WireGuard. Terraform and
@@ -118,7 +119,9 @@ The logical design contains:
 - WireGuard remote-access transport with an end-to-end peer-to-DC fixture.
 
 The full topology and data flows are documented in
-[ARCHITECTURE.md](ARCHITECTURE.md).
+[ARCHITECTURE.md](ARCHITECTURE.md). The accepted SOC analytics, AI, correlation,
+and response boundaries are documented in
+[SOC-AI-ARCHITECTURE.md](docs/SOC-AI-ARCHITECTURE.md).
 
 ## Evidence model
 
@@ -149,10 +152,15 @@ version control.
 ├── ansible/                  # hardening and network/service configuration
 ├── docker/                   # SIEM, IDS, and zero-trust configuration
 ├── k8s/                      # Kubernetes security-plane alternative
+├── soc/                      # Logstash, Elasticsearch, and Kibana analytics plane
+├── ai/                       # features, training, models, inference, and evaluation
+├── response/                 # policy engine, orchestrator, and privileged adapters
+├── schemas/                  # versioned event, feature, and response contracts
 ├── compliance/               # controls, mappings, and report generation
 ├── tests/
 │   ├── validation/           # live checks that emit evidence
-│   └── batfish/              # offline policy tests used in CI
+│   ├── batfish/              # offline policy tests used in CI
+│   └── soc/                  # SOC architecture/schema contract gates
 ├── scripts/                  # deployment, secret, URL, and attack utilities
 ├── evidence/                 # generated evidence and reports; gitignored
 └── .github/workflows/        # NetDevOps CI
@@ -176,6 +184,8 @@ failover while collecting SIEM-visible evidence.
 ## Technical references
 
 - [Architecture](ARCHITECTURE.md)
+- [SOC/AI closed-loop architecture](docs/SOC-AI-ARCHITECTURE.md)
+- [Frozen NetSec baseline](docs/NETSEC-BASELINE.md)
 - [VyOS VM fabric](terraform/vyos-fabric/README.md)
 - [Kubernetes security plane](k8s/README.md)
 - [Authentik lifecycle migration](docs/AUTHENTIK-UPGRADE.md)

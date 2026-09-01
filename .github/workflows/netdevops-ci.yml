@@ -1,7 +1,7 @@
 name: netdevops-ci
 
 on:
-  push: { branches: [main] }
+  push: { branches: [main, soc-ai] }
   pull_request: { branches: [main] }
 
 permissions:
@@ -42,8 +42,8 @@ jobs:
           python -m compileall -q scripts compliance tests
           find scripts clab/configs -type f -name '*.sh' -print0 | xargs -0 -n1 bash -n
 
-      - name: Unit-test evidence semantics
-        run: pytest tests/unit -q
+      - name: Test evidence and SOC architecture contracts
+        run: pytest tests/unit tests/soc -q
 
       - name: Validate Docker Compose model
         run: >-

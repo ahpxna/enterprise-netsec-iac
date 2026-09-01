@@ -108,6 +108,10 @@ image-lock-check: ## Offline: require every audited external image to match supp
 verify-image-platforms: ## Online: verify locked OCI index digests and amd64/arm64 coverage with Docker buildx
 	python scripts/verify_image_platforms.py --strict
 
+.PHONY: soc-contracts
+soc-contracts: ## Validate SOC architecture and schema invariants
+	python -m pytest tests/soc -q
+
 .PHONY: lint
 lint: ## Static checks: yamllint, ansible-lint, terraform, gitleaks
 	python scripts/render_fabric.py --check
@@ -123,7 +127,7 @@ lint: ## Static checks: yamllint, ansible-lint, terraform, gitleaks
 	python -m compileall -q scripts compliance tests
 	find scripts clab/configs -type f -name '*.sh' -print0 | xargs -0 -n1 bash -n
 	python compliance/check_wiring.py
-	python -m pytest tests/unit -q
+	python -m pytest tests/unit tests/soc -q
 	docker compose --env-file .env.example --profile siem --profile ids --profile ztna --profile dmz config --quiet
 	yamllint .
 	cd $(ANSIBLE_DIR) && ansible-lint

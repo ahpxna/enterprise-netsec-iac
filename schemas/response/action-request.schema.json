@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://companyxyz.test/schemas/response/action-request-v1.json",
+  "title": "CompanyXYZ correlation-gated response request",
+  "type": "object",
+  "required": [
+    "schema_version", "correlation_id", "entity", "action", "reason", "ai_score",
+    "model_id", "signals", "ttl_seconds", "allowlist_checked", "rollback_required",
+    "requested_at"
+  ],
+  "properties": {
+    "schema_version": {"const": "response-request-v1"},
+    "correlation_id": {"type": "string", "minLength": 1},
+    "entity": {
+      "type": "object",
+      "required": ["type", "id"],
+      "properties": {
+        "type": {"enum": ["ip", "host"]},
+        "id": {"type": "string", "minLength": 1}
+      },
+      "additionalProperties": false
+    },
+    "action": {"enum": ["block_ip", "isolate_host"]},
+    "reason": {"type": "string", "minLength": 1},
+    "ai_score": {"type": "number", "minimum": 0.9, "maximum": 1},
+    "model_id": {"type": "string", "minLength": 1},
+    "signals": {
+      "type": "array",
+      "minItems": 2,
+      "uniqueItems": true,
+      "items": {
+        "type": "object",
+        "required": ["type", "reference"],
+        "properties": {
+          "type": {"enum": ["ai", "suricata", "wazuh", "authentication", "threat_intel", "protected_asset"]},
+          "reference": {"type": "string", "minLength": 1}
+        },
+        "additionalProperties": false
+      }
+    },
+    "ttl_seconds": {"type": "integer", "minimum": 60, "maximum": 86400},
+    "allowlist_checked": {"const": true},
+    "rollback_required": {"const": true},
+    "requested_at": {"type": "string", "format": "date-time"}
+  },
+  "additionalProperties": false
+}

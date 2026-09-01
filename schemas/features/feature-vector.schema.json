@@ -1,0 +1,65 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://companyxyz.test/schemas/features/soc-feature-v1.json",
+  "title": "CompanyXYZ SOC feature vector",
+  "type": "object",
+  "required": ["schema_version", "entity", "window", "features"],
+  "properties": {
+    "schema_version": {"const": "soc-feature-v1"},
+    "entity": {
+      "type": "object",
+      "required": ["type", "id"],
+      "properties": {
+        "type": {"enum": ["host", "user", "src_ip"]},
+        "id": {"type": "string", "minLength": 1}
+      },
+      "additionalProperties": false
+    },
+    "window": {
+      "type": "object",
+      "required": ["duration", "start", "end"],
+      "properties": {
+        "duration": {"enum": ["1m", "5m", "15m"]},
+        "start": {"type": "string", "format": "date-time"},
+        "end": {"type": "string", "format": "date-time"}
+      },
+      "additionalProperties": false
+    },
+    "features": {
+      "type": "object",
+      "required": [
+        "conn_count", "unique_dst_ip", "unique_dst_port", "bytes_in", "bytes_out",
+        "blocked_ratio", "dns_count", "unique_domain", "rare_port_ratio",
+        "suricata_alert_count", "login_success", "login_failed", "distinct_src_ip",
+        "fail_to_success", "after_hours_login", "process_count", "rare_process_count",
+        "powershell_count", "fim_change_count", "account_change_count",
+        "privilege_event_count"
+      ],
+      "properties": {
+        "conn_count": {"type": "number", "minimum": 0},
+        "unique_dst_ip": {"type": "number", "minimum": 0},
+        "unique_dst_port": {"type": "number", "minimum": 0},
+        "bytes_in": {"type": "number", "minimum": 0},
+        "bytes_out": {"type": "number", "minimum": 0},
+        "blocked_ratio": {"type": "number", "minimum": 0, "maximum": 1},
+        "dns_count": {"type": "number", "minimum": 0},
+        "unique_domain": {"type": "number", "minimum": 0},
+        "rare_port_ratio": {"type": "number", "minimum": 0, "maximum": 1},
+        "suricata_alert_count": {"type": "number", "minimum": 0},
+        "login_success": {"type": "number", "minimum": 0},
+        "login_failed": {"type": "number", "minimum": 0},
+        "distinct_src_ip": {"type": "number", "minimum": 0},
+        "fail_to_success": {"type": "number", "minimum": 0},
+        "after_hours_login": {"type": "number", "minimum": 0},
+        "process_count": {"type": "number", "minimum": 0},
+        "rare_process_count": {"type": "number", "minimum": 0},
+        "powershell_count": {"type": "number", "minimum": 0},
+        "fim_change_count": {"type": "number", "minimum": 0},
+        "account_change_count": {"type": "number", "minimum": 0},
+        "privilege_event_count": {"type": "number", "minimum": 0}
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}
