@@ -269,6 +269,7 @@ services:
       - ./docker/ids/logs:/var/log/suricata:ro
       - wazuh_logs:/var/ossec/logs:ro
       - cxyz_remote_logs:/var/log/cxyz:ro
+      - dmzlab_cowrie_var:/honeypot/cowrie:ro
       - soc_fixtures:/fixtures
     healthcheck:
       test: ["CMD-SHELL", "curl --silent --fail http://localhost:9600/_node/pipelines >/dev/null"]
@@ -606,7 +607,44 @@ services:
     restart: unless-stopped
     networks: [cxyz_dmz_backend]
 
+  # -------------------- DMZ deception lab (profile dmzlab, Path A) ------------------
+  # A deliberately vulnerable web application and an SSH/Telnet honeypot for generating and
+  # studying hostile traffic. Both JOIN THE NETWORK NAMESPACE of the containerlab `dmz-web` node
+  # (start the fabric first), so they live on the DMZ segment behind fw-dmz with dmz-web's address
+  # 195.1.1.161: every probe crosses fw-dmz (logged, counted, seen by Suricata) and the existing
+  # pivot deny stops any of them from reaching internal zones. They have no network of their own,
+  # publish no host port, run without capabilities and are disposable.
+  #   dmz-vuln      OWASP Juice Shop  tcp/3000         (OWASP flagship; use only here)
+  #   dmz-honeypot  Cowrie            tcp/2222 ssh, tcp/2223 telnet; JSON log -> Logstash (read-only)
+  dmz-vuln:
+    profiles: ["dmzlab"]
+    image: bkimminich/juice-shop@sha256:cea5a4af4aacee498c491491af0408934ec81d004035c0a02ef3e54395e3bf27
+    network_mode: "container:clab-companyxyz-dmz-web"
+    restart: unless-stopped
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    pids_limit: 256
+    mem_limit: 768m
+    tmpfs: ["/tmp:size=64m"]
+
+  dmz-honeypot:
+    profiles: ["dmzlab"]
+    image: cowrie/cowrie@sha256:019726c8deef20729162cda492d9385917b579c9ace6368e47e7566cd2491ba1
+    network_mode: "container:clab-companyxyz-dmz-web"
+    restart: unless-stopped
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    pids_limit: 256
+    mem_limit: 256m
+    tmpfs: ["/tmp:size=16m"]
+    environment:
+      COWRIE_TELNET_ENABLED: "true"
+    volumes:
+      - dmzlab_cowrie_var:/cowrie/cowrie-git/var
+
 volumes:
+  dmzlab_cowrie_var:
   authentik_db_2026:
   cxyz_remote_logs:
   wazuh_api_configuration:

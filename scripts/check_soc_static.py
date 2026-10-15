@@ -118,6 +118,13 @@ logstash = SERVICES.get("logstash", {})
 require(not logstash.get("ports"), "Logstash must not publish synthetic or production ingestion ports")
 require(logstash.get("networks") == ["cxyz_soc_backend"], "Logstash must remain isolated on the private SOC backend")
 require("soc_fixtures:/fixtures" in logstash.get("volumes", []), "Logstash fixture volume is missing")
+require("dmzlab_cowrie_var:/honeypot/cowrie:ro" in logstash.get("volumes", []), "Logstash must read the honeypot log volume read-only")
+for name in ("dmz-vuln", "dmz-honeypot"):
+    lab = SERVICES.get(name, {})
+    require(lab.get("profiles") == ["dmzlab"] and not lab.get("ports"), f"{name} must stay profile-scoped and publish no host port")
+    require(lab.get("network_mode") == "container:clab-companyxyz-dmz-web", f"{name} must join the dmz-web namespace behind fw-dmz")
+    require(lab.get("cap_drop") == ["ALL"] and "no-new-privileges:true" in (lab.get("security_opt") or []), f"{name} must run without capabilities")
+    require(lab.get("networks") is None and not lab.get("privileged"), f"{name} must have no network of its own and not be privileged")
 
 pipeline_dir = ROOT / "soc/logstash/pipelines"
 required_pipeline_files = {
@@ -126,6 +133,7 @@ required_pipeline_files = {
     "30-wazuh.conf",
     "35-wazuh-archives.conf",
     "40-radius.conf",
+    "45-cowrie.conf",
     "50-network-syslog.conf",
     "70-normalize-ecs.conf",
     "90-output.conf",
@@ -144,6 +152,9 @@ for token in (
     "wazuh.archives",
     "firewall.syslog",
     "freeradius.auth",
+    "cowrie.honeypot",
+    "/honeypot/cowrie/log/cowrie/cowrie.json",
+    'remove_field => ["password"]',
     'hosts => ["https://elasticsearch:9200"]',
     "ssl_certificate_authorities",
     "soc-raw-",

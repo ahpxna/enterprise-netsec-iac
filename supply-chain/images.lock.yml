@@ -311,3 +311,33 @@ images:
       kind: multi-platform-index
       source: https://hub.docker.com/layers/hashicorp/terraform/1.15.9
       note: Docker Hub reports this top-level index digest for the multi-platform 1.15.9 tag.
+  juice-shop:
+    intent_ref: bkimminich/juice-shop:v20.3.0
+    pinned_ref: bkimminich/juice-shop@sha256:cea5a4af4aacee498c491491af0408934ec81d004035c0a02ef3e54395e3bf27
+    status: verified
+    scopes:
+      - compose
+    required_platforms:
+      - linux/amd64
+      - linux/arm64
+    verification:
+      level: registry-metadata
+      kind: multi-platform-index
+      source: https://hub.docker.com/r/bkimminich/juice-shop/tags
+      note: Docker Hub registry API returned this OCI image index for tag v20.3.0 with linux/amd64 and linux/arm64
+        children (resolved 2026-10-15). OWASP flagship project; deliberately vulnerable - DMZ lab only.
+  cowrie:
+    intent_ref: cowrie/cowrie:3.1.2
+    pinned_ref: cowrie/cowrie@sha256:019726c8deef20729162cda492d9385917b579c9ace6368e47e7566cd2491ba1
+    status: verified
+    scopes:
+      - compose
+    required_platforms:
+      - linux/amd64
+      - linux/arm64
+    verification:
+      level: registry-metadata
+      kind: multi-platform-index
+      source: https://hub.docker.com/r/cowrie/cowrie/tags
+      note: Docker Hub registry API returned this OCI image index for tag 3.1.2 with linux/amd64 and linux/arm64
+        children (resolved 2026-10-15). SSH/Telnet honeypot - DMZ lab only.
