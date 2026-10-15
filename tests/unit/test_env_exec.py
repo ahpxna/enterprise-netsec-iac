@@ -48,3 +48,25 @@ def test_yaml_duplicate_mapping_keys_are_rejected():
     errors = duplicate_key_errors(document)
 
     assert any("duplicate mapping key 'apiVersion'" in error for error in errors)
+
+
+def test_inline_comments_are_dropped_like_docker_compose_but_hashes_inside_values_survive(tmp_path: pathlib.Path):
+    env_file = tmp_path / ".env"
+    env_file.write_text(
+        "A=path-a            # explanation\n"
+        "B=\n"
+        "C=   # nothing here\n"
+        "D='quoted # kept'   # trailing\n"
+        'E="x#y"\n'
+        "F=abc#def\n"
+        "G=$6$salt$hash\n"
+    )
+    parsed = parse_dotenv(env_file)
+    assert parsed == {"A": "path-a", "B": "", "C": "", "D": "quoted # kept", "E": "x#y", "F": "abc#def",
+                      "G": "$6$salt$hash"}
+
+
+def test_the_shipped_example_parses_to_clean_values():
+    parsed = parse_dotenv(ROOT / ".env.example")
+    assert parsed["SOC_PATH"] == "path-a" and parsed["SOC_POLICY"] == "default" and parsed["SOC_MODE"] == ""
+    assert all("  #" not in value for value in parsed.values())

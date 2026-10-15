@@ -37,6 +37,8 @@ FIXTURE_DATASETS = {
     "wazuh.json": "wazuh.alerts",
 }
 AUDIT_STATES = ("REQUESTED", "APPLIED", "VERIFIED", "EXPIRED")
+# nftables table that holds soc_blocklist on each Path A firewall (see clab/configs/fw-*.nft)
+FIREWALL_TABLES = {"fw-core": "cxyz", "fw-dmz": "dmz"}
 PROTECTED_TARGET = "172.16.50.1"          # server1: DNS/RADIUS/NTP, in every shipped policy
 REQUIRED_BENCHMARK_METRICS = (
     "precision", "recall", "f1", "pr_auc", "false_positives_per_hour", "mttd_seconds", "p95_inference_ms",
@@ -285,9 +287,9 @@ class DockerLab:
         if self._blocklist_probe is not None:
             return self._blocklist_probe()
         found: dict[str, set[str]] = {}
-        for firewall in ("fw-core", "fw-dmz"):
+        for firewall, table in FIREWALL_TABLES.items():
             result = subprocess.run(
-                ["docker", "exec", f"clab-companyxyz-{firewall}", "nft", "list", "set", "inet", "cxyz", "soc_blocklist"],
+                ["docker", "exec", f"clab-companyxyz-{firewall}", "nft", "list", "set", "inet", table, "soc_blocklist"],
                 capture_output=True, text=True, timeout=30, check=False)
             if result.returncode != 0:
                 raise LabNotReady(f"cannot read soc_blocklist on {firewall}: {result.stderr.strip()[:200]}")

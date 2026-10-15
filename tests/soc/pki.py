@@ -30,6 +30,11 @@ def make_ca(directory: Path, name: str = "test-ca"):
             .public_key(key.public_key()).serial_number(x509.random_serial_number())
             .not_valid_before(now - timedelta(minutes=5)).not_valid_after(now + timedelta(days=1))
             .add_extension(x509.BasicConstraints(ca=True, path_length=None), critical=True)
+            # strict X.509 (Python >= 3.13 default, `openssl -x509_strict`) requires keyUsage on a CA and key identifiers
+            .add_extension(x509.KeyUsage(digital_signature=False, content_commitment=False, key_encipherment=False,
+                                         data_encipherment=False, key_agreement=False, key_cert_sign=True, crl_sign=True,
+                                         encipher_only=False, decipher_only=False), critical=True)
+            .add_extension(x509.SubjectKeyIdentifier.from_public_key(key.public_key()), critical=False)
             .sign(key, hashes.SHA256()))
     _write(directory / name, key, cert)
     return key, cert, directory / f"{name}.crt"
@@ -53,7 +58,13 @@ def issue(directory: Path, ca_key, ca_cert, common_name: str, *, server: bool, c
     builder = (x509.CertificateBuilder().subject_name(_name(common_name)).issuer_name(ca_cert.subject)
                .public_key(key.public_key()).serial_number(x509.random_serial_number())
                .not_valid_before(now - timedelta(minutes=5)).not_valid_after(now + timedelta(days=1))
-               .add_extension(x509.ExtendedKeyUsage(usages), critical=False))
+               .add_extension(x509.ExtendedKeyUsage(usages), critical=False)
+               .add_extension(x509.BasicConstraints(ca=False, path_length=None), critical=True)
+               .add_extension(x509.KeyUsage(digital_signature=True, content_commitment=False, key_encipherment=False,
+                                            data_encipherment=False, key_agreement=True, key_cert_sign=False, crl_sign=False,
+                                            encipher_only=False, decipher_only=False), critical=True)
+               .add_extension(x509.SubjectKeyIdentifier.from_public_key(key.public_key()), critical=False)
+               .add_extension(x509.AuthorityKeyIdentifier.from_issuer_public_key(ca_cert.public_key()), critical=False))
     if sans:
         builder = builder.add_extension(x509.SubjectAlternativeName(sans), critical=False)
     cert = builder.sign(ca_key, hashes.SHA256())

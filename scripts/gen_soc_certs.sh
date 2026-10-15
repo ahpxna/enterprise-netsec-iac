@@ -6,7 +6,7 @@ set -euo pipefail
 umask 077
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-CERT_DIR="$ROOT/soc/certs"
+CERT_DIR="${SOC_CERT_DIR:-$ROOT/soc/certs}"   # override only for tests
 mkdir -p "$CERT_DIR"
 
 cert_valid() {
@@ -19,6 +19,11 @@ cert_signed_by() {
   [ -f "$cert" ] && openssl verify -CAfile "$CERT_DIR/$ca.crt" "$cert" >/dev/null 2>&1
 }
 
+cert_strict_ok() {
+  local cert="$1" ca="$2"
+  [ -f "$cert" ] && openssl verify -x509_strict -CAfile "$CERT_DIR/$ca.crt" "$cert" >/dev/null 2>&1
+}
+
 cert_has_dns_san() {
   local cert="$1" dns="$2"
   [ -f "$cert" ] || return 1
@@ -26,11 +31,25 @@ cert_has_dns_san() {
     | tr ',' '\n' | grep -Eq "^[[:space:]]*DNS:${dns//./\\.}[[:space:]]*$"
 }
 
+# A CA must carry keyUsage keyCertSign (and SKI/AKI): strict X.509 verification - the default of
+# Python >= 3.13 and of `openssl verify -x509_strict` - rejects a CA without keyUsage.
+ca_is_strict_ok() {
+  local cert="$1"
+  [ -f "$cert" ] && openssl x509 -in "$cert" -noout -ext keyUsage 2>/dev/null | grep -q "Certificate Sign"
+}
+
 ensure_ca() {
   local name="$1" subject="$2"
-  if [ ! -f "$CERT_DIR/$name.key" ] || ! cert_valid "$CERT_DIR/$name.crt"; then
+  if [ ! -f "$CERT_DIR/$name.key" ] || ! cert_valid "$CERT_DIR/$name.crt" || ! ca_is_strict_ok "$CERT_DIR/$name.crt"; then
+    if [ -f "$CERT_DIR/$name.crt" ] && ! ca_is_strict_ok "$CERT_DIR/$name.crt"; then
+      echo "  rotating $subject: the existing CA lacks keyUsage keyCertSign (strict TLS clients reject it);" \
+           "every certificate it signed is reissued - restart the SOC services afterwards"
+    fi
     openssl req -x509 -newkey rsa:3072 -nodes -days 825 -sha256 \
       -subj "/CN=$subject" \
+      -addext "basicConstraints=critical,CA:TRUE" \
+      -addext "keyUsage=critical,keyCertSign,cRLSign" \
+      -addext "subjectKeyIdentifier=hash" \
       -keyout "$CERT_DIR/$name.key" -out "$CERT_DIR/$name.crt" >/dev/null 2>&1
     echo "  generated $subject"
   fi
@@ -42,17 +61,20 @@ issue_leaf() {
   if [ ! -f "$CERT_DIR/$name.key" ] \
       || ! cert_valid "$CERT_DIR/$name.crt" \
       || ! cert_signed_by "$CERT_DIR/$name.crt" "$ca" \
-      || ! cert_has_dns_san "$CERT_DIR/$name.crt" "$name"; then
+      || ! cert_has_dns_san "$CERT_DIR/$name.crt" "$name" \
+      || ! cert_strict_ok "$CERT_DIR/$name.crt" "$ca"; then
     openssl req -newkey rsa:3072 -nodes -subj "/CN=$name" \
       -keyout "$CERT_DIR/$name.key" -out "$CERT_DIR/$name.csr" >/dev/null 2>&1
     openssl x509 -req -days 397 -sha256 \
       -in "$CERT_DIR/$name.csr" -CA "$CERT_DIR/$ca.crt" \
       -CAkey "$CERT_DIR/$ca.key" -CAcreateserial \
       -extfile <(printf '%s\n' \
-        'basicConstraints=CA:FALSE' \
-        'keyUsage=digitalSignature,keyEncipherment' \
+        'basicConstraints=critical,CA:FALSE' \
+        'keyUsage=critical,digitalSignature,keyEncipherment' \
         "extendedKeyUsage=$usage" \
-        "subjectAltName=$san") \
+        "subjectAltName=$san" \
+        'subjectKeyIdentifier=hash' \
+        'authorityKeyIdentifier=keyid,issuer') \
       -out "$CERT_DIR/$name.crt" >/dev/null 2>&1
     rm -f "$CERT_DIR/$name.csr"
     echo "  generated/renewed SOC certificate for $name"

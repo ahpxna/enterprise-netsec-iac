@@ -120,6 +120,10 @@ def test_blocklists_parse_nft_elements_and_an_empty_set(script):
     script.queue("table inet cxyz {\n\tset soc_blocklist {\n\t\ttype ipv4_addr\n\t\tflags timeout\n\t}\n}\n")
     assert DockerLab().blocklists() == {"fw-core": {"203.0.113.9", "198.51.100.4"}, "fw-dmz": set()}
     assert script.calls[0][0][:3] == ["docker", "exec", "clab-companyxyz-fw-core"]
+    # each firewall's soc_blocklist lives in its own nftables table (clab/configs/fw-*.nft)
+    assert script.calls[0][0][-3:] == ["inet", "cxyz", "soc_blocklist"]
+    assert script.calls[1][0][:3] == ["docker", "exec", "clab-companyxyz-fw-dmz"]
+    assert script.calls[1][0][-3:] == ["inet", "dmz", "soc_blocklist"]
     script.queue("", returncode=1, stderr="No such container")
     with pytest.raises(LabNotReady, match="soc_blocklist"):
         DockerLab().blocklists()
@@ -161,3 +165,9 @@ def test_deployed_digest_is_read_from_the_ignored_env_file(tmp_path):
     (tmp_path / ".env").write_text('OTHER=1\nSOC_AI_METADATA_SHA256="%s"\n' % ("a" * 64))
     assert DockerLab(root=tmp_path).deployed_metadata_digest() == "a" * 64
     assert DockerLab(root=tmp_path / "missing").deployed_metadata_digest() is None
+
+
+def test_firewall_table_names_match_the_shipped_nftables_configs():
+    for firewall, table in soc_live.FIREWALL_TABLES.items():
+        config = (ROOT / f"clab/configs/{firewall}.nft").read_text()
+        assert f"table inet {table} {{" in config and "set soc_blocklist " in config
