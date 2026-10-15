@@ -862,3 +862,99 @@ requires `make audit`; Path C requires `make k8s-smoke`; and Path B requires the
 12-node `vm-configure`/idempotency/`vm-audit` sequence. Wazuh PKI identity
 changes require the explicit rotation/reissue runbook instead of a verification
 bypass.
+
+---
+
+## INC-070 — SOC/AI closed-loop completion (Paths A, B and C)
+
+**Status:** source/static verified and covered by offline tests; **no runtime evidence.** Every SOC control is
+`UNVERIFIED` until `make soc-ai-validate` / `make vm-audit` / `make k8s-smoke` run on lab hosts.
+
+### Assurance gaps closed
+
+- **BUG-070-A — nothing ran the loop.** Added the continuous feature worker, ES-pull enrichment outbox, mTLS inference
+  API (Isolation Forest and LSTM), decision runner and orchestrator service with durable journal, recovery, TTL sweep and
+  audit export. *Static + offline tested.*
+- **BUG-070-B — externally supplied evaluation metrics could justify promotion.** Evaluation is now bound to the exact
+  artifact, dataset, labels and vectors (`evaluation-binding-v1`); thresholds are selected on validation only; promotion
+  re-derives every claim against a reviewed policy; a five-detector comparison can be carried into the registry.
+- **BUG-070-C — shared-key command authentication.** Replaced by Ed25519 (decision runner signs; orchestrator verifies).
+- **BUG-070-D — revert could remove a pre-existing block.** The ownership ledger records intent before the side effect and
+  removes an entry only for the last owner of an address the response plane added.
+- **BUG-070-E — containment had no firewall-side expiry.** nftables elements carry a timeout; VyOS relies on the TTL sweep
+  and Day-2 refuses to persist an active containment.
+- **BUG-070-F — containment sets and agent surface.** `soc_blocklist` sets with early drops in the nftables and VyOS configs;
+  a three-operation mTLS enforcement agent on the management network only; Wazuh isolation verified by a FIM marker.
+- **BUG-070-G — Kubernetes had no SOC workloads.** Path C gained Elasticsearch, Kibana, Logstash sidecars and one Deployment
+  per service with per-workload Secrets and NetworkPolicies; manifests are validated strictly against the Kubernetes 1.30
+  schemas in CI.
+- **BUG-070-H — planned controls had no verifier.** Fourteen controls became evidence-backed with a shared live verifier
+  library, an in-process lab that proves the verifiers' logic, and profile scoping (`applicable_profiles`).
+
+### Limits recorded, not hidden
+
+- RESP-04 and the network-fidelity gate (OPNsense HA, Core SPAN, VLAN 30/40/50/99) are **not implemented**; the OPNsense
+  backend is contract-tested only.
+- No model was trained on real telemetry; synthetic metrics are unit-test artifacts.
+- Docker image builds, the VyOS/Wazuh API contracts, Logstash on real input and the Kubernetes runtime were not exercised.
+- `test_ai_cannot_bypass_decision_orchestrator_boundary` used to fail when a macOS `.DS_Store` existed under `ai/` (it read every
+  file as UTF-8 text). It now skips that one OS-metadata name and decodes other files leniently; no other file is exempt, and a
+  planted forbidden token is still caught.
+- Live scenarios use documentation-range addresses and tagged fixtures; the injected anomaly stands in for model output.
+
+---
+
+## INC-071 — One-command Linux runner, network explorer, strict-TLS PKI fix
+
+**Status:** source/static verified and offline-tested; the Linux, Docker and containerlab stages of the runner are **unverified** until
+run on a Linux host.
+
+- **BUG-071-A — the SOC CAs lacked `keyUsage`.** `scripts/gen_soc_certs.sh` produced CAs without `keyUsage keyCertSign`, which strict X.509
+  verification rejects (`openssl verify -x509_strict`: "CA cert does not include key usage extension"; the default of Python >= 3.13).
+  Found by the first real run of the new runner in a fresh Python 3.13 environment (two mutual-TLS tests failed). The services' Debian image
+  ships Python 3.11, so nothing was broken at runtime, but any host-side or newer-Python client would have been. Fixed for the three CAs and
+  all leaves (critical `basicConstraints`/`keyUsage`, SKI/AKI); an existing legacy CA is detected and rotated (with every certificate it signed)
+  on the next `make secrets`, with an explicit message to restart the SOC services. The test PKI got the same extensions.
+- **BUG-071-B — wrong nftables table for fw-dmz in the live verifier.** `DockerLab.blocklists()` queried `inet cxyz` on both firewalls; fw-dmz's
+  set lives in `inet dmz`. The live RESP controls would have ended in `ERROR`. Fixed and tied to the shipped configs by a test.
+- **BUG-071-C — `.env.example` inline comments.** `env_exec.parse_dotenv` kept `# ...` comments as part of the value
+  (`SOC_PATH='path-a   # ...'`, `SOC_MODE='# empty ...'`), unlike Docker Compose. It now strips comments exactly as Compose does, and the
+  example keeps comments on their own lines.
+- **New:** `scripts/try-on-linux.sh` / `scripts/try_linux.py` (install, build, run, test with stage-level failure analysis),
+  `scripts/netviz.py` (read-only GNS3-style explorer derived from the sources of truth), `scripts/demo_registry.py` (DEMO approved model from
+  synthetic data), `docs/LINUX-QUICKSTART.md`.
+
+---
+
+## INC-072 — DMZ deception lab (vulnerable web application + honeypot)
+
+**Status:** source/static verified and offline-tested; **never run** (no Docker daemon or Linux host was available).
+
+- Added compose profile `dmzlab`: OWASP Juice Shop (`dmz-vuln`) and Cowrie (`dmz-honeypot`), both pinned by digest in `supply-chain/images.lock.yml`,
+  joined to the network namespace of the containerlab `dmz-web` node (no network of their own, no published port, no capabilities, honeypot read-only).
+  This keeps the single-source intent and Path B untouched; the DMZ stays one /29 behind fw-dmz.
+- `clab/configs/fw-dmz.nft`: two new rules open only tcp/3000 and tcp/2222-2223 to the web host, for NEW connections, counted and logged
+  (`CXYZ-DMZLAB-VULN/-HONEYPOT`), placed after the pivot deny and before the egress accept; a test pins that order and that nothing else opens.
+- Logstash: pipeline `45-cowrie.conf` reads the honeypot JSON log from a read-only volume; the ECS branch maps it to dataset `cowrie.honeypot`
+  and drops attacker-supplied passwords before indexing.
+- `make dmzlab-up|down|status|attack`, the runner stages `dmzlab-up`/`dmzlab-verify` (reachable through fw-dmz, counted, logged, unable to pivot) and
+  the network explorer (shared-namespace links, ports, IP plan, SOC flow) cover it.
+- Open: a honeypot hit is not yet an independent signal for the decision engine; Path B has no equivalent; the shared-namespace design must be restarted
+  after `make net`; Cowrie's environment-variable options and read-only root filesystem are unverified against the real image.
+
+---
+
+## INC-073 — Honeypot interaction as a corroborating signal; CI green again
+
+**Status:** offline-tested (decision runner, engine, policy, schemas); live behaviour unverified.
+
+- New independent signal type `honeypot` (policy vocabulary, engine, `correlation-decision-event-v1` kind `honeypot_interaction`,
+  `response-request-v1`). The decision runner reads `cowrie.honeypot` events of the anomalous source from `soc-alerts-*` and folds them into
+  one signal (worst severity, count). `COR-001` accepts it with `min_severity: 5` in every shipped policy; a static check enforces the floor.
+- **BUG-073-A — the routed transit was containable.** `10.255.0.0/16` (router/firewall transit, and the NATed source of all campus traffic
+  toward the DMZ) was not a protected network, so a corroborated anomaly on fw-core's outside address could have blocked a whole zone.
+  It is now protected in every policy and statically enforced.
+- **CI:** `ansible-lint` failed on `no-handler` (`wazuh_agent` refreshed the apt index with `when: changed`; now a handler flushed before the
+  install). `gitleaks` reported five findings in history, all reviewed false positives (`curl --user name:${VAR}` variable references, Ed25519 key
+  IDs, the `Ed25519PrivateKey` type name); `.gitleaks.toml` allowlists exactly those secret shapes and was checked to still report real-looking
+  credentials in the same contexts.

@@ -1,0 +1,37 @@
+# Path C (Kubernetes security plane over the Path A fabric). Names files and
+# endpoints only - credentials are mounted from the cxyz-soc-* Secrets.
+#
+# Endpoint isolation (the `wazuh:` section) is intentionally absent: the Wazuh API
+# certificate carries the Compose name `wazuh.manager`, not the in-cluster Service
+# name `wazuh-manager`, so it cannot be verified here. Reissue the Wazuh PKI with the
+# in-cluster SAN (docs/PKI-ROTATION.md) before adding the section; until then
+# isolate_host fails closed with BACKEND_NOT_CONFIGURED.
+schema_version: response-service-v1
+mode: observe
+state_dir: /var/lib/soc/response
+policy_file: /etc/soc/policy.yaml
+verify_keys_dir: /run/soc/keys
+tick_seconds: 10
+elasticsearch:
+  url: https://elasticsearch:9200
+  ca: /run/soc/ca.crt
+  api_key_file: /run/soc/es.cred
+listen:
+  host: toward-elasticsearch
+  port: 8443
+  cert: /run/soc/tls.crt
+  key: /run/soc/tls.key
+  client_ca: /run/soc/decision-ca.crt
+firewall:
+  backend: nftables
+  peers:
+    - name: fw-core
+      url: https://10.1.1.20:9443
+      ca: /run/soc/ca.crt
+      client_cert: /run/soc/client.crt
+      client_key: /run/soc/client.key
+    - name: fw-dmz
+      url: https://10.1.1.30:9443
+      ca: /run/soc/ca.crt
+      client_cert: /run/soc/client.crt
+      client_key: /run/soc/client.key

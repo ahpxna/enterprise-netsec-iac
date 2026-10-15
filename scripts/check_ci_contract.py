@@ -45,6 +45,8 @@ shared_checks = {
     "Path B intent invariants": "python scripts/check_path_b_intent.py",
     "security regression invariants": "python scripts/security_static_checks.py",
     "container image lock": "python scripts/check_image_lock.py",
+    "SOC ingestion security invariants": "python scripts/check_soc_static.py",
+    "SOC AI/response plane invariants": "python scripts/check_soc_ai_static.py",
     "CI contract guard": "python scripts/check_ci_contract.py",
     "compliance wiring": "python compliance/check_wiring.py",
     "YAML syntax including custom tags": "python scripts/check_yaml_syntax.py",
@@ -71,6 +73,20 @@ for label, token in {
     if token not in WORKFLOW:
         fail(f"GitHub Actions lost {label}")
 
+# Phase-1 SOC contracts must run in the same local and CI gates as the existing
+# evidence tests. This blocks later ingestion/model work from weakening the
+# agreed trust boundaries or response policy.
+soc_contract_local = "python -m pytest tests/unit tests/soc -q"
+soc_contract_ci = "pytest tests/unit tests/soc -q"
+if soc_contract_local not in lint_body:
+    fail("make lint must run SOC architecture/schema contracts")
+if soc_contract_local not in (ROOT / "scripts/dev_check.sh").read_text():
+    fail("scripts/dev_check.sh must run SOC architecture/schema contracts")
+if soc_contract_ci not in WORKFLOW:
+    fail("GitHub Actions must run SOC architecture/schema contracts")
+if "push: { branches: [main, soc-ai] }" not in WORKFLOW:
+    fail("netdevops-ci must validate direct pushes to the soc-ai integration branch")
+
 # CI-only infrastructure-independent gates. These intentionally remain in CI
 # rather than being required by this script on developer machines.
 ci_tokens = {
@@ -89,6 +105,10 @@ ci_tokens = {
     "server1 deterministic image build": "docker build --pull=false -t cxyz/server1:ci docker/server1",
     "syslog relay deterministic image build": "docker build --pull=false -t cxyz/syslog-relay:ci docker/syslog-relay",
     "WireGuard peer fixture Compose render": "--profile vpn-test",
+    "SOC Compose render": "--profile soc",
+    "SOC AI Compose render": "--profile soc-ai",
+    "SOC service image build": "docker build --pull=false -f docker/soc-python/Dockerfile -t cxyz/soc-python:ci .",
+    "LSTM family CPU torch job": "https://download.pytorch.org/whl/cpu",
 }
 for label, token in ci_tokens.items():
     if token not in WORKFLOW:

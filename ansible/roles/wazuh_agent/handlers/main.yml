@@ -1,4 +1,11 @@
 ---
-- name: Restart rsyslog
-  ansible.builtin.service: { name: rsyslog, state: restarted }
-  failed_when: false
+- name: Restart Wazuh agent
+  ansible.builtin.service:
+    name: wazuh-agent
+    state: restarted
+  listen: restart wazuh-agent
+
+- name: Refresh the apt package index
+  ansible.builtin.apt:
+    update_cache: true
+  listen: refresh apt cache

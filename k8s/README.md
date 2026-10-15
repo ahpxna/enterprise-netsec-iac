@@ -31,7 +31,7 @@ Generate local credentials/PKI and Kubernetes runtime material:
 ```bash
 make secrets
 make wazuh-config
-make k8s-runtime-secrets
+make k8s-runtime-secrets            # `make secrets` already generated the SOC PKI and decision signing key
 make k8s-runtime-config
 ```
 
@@ -40,6 +40,12 @@ make k8s-runtime-config
 - `k8s/runtime-config.yaml` contains only non-secret operator settings derived
   from `.env` (`ORG_DOMAIN`, WireGuard port/endpoint/peer count), the Traefik
   file-provider routing configuration, and the matching WireGuard policy.
+- `k8s/runtime-secrets.yaml` also carries the nine `cxyz-soc-*` Secrets: shared service
+  passwords, the SOC CA certificate, Elasticsearch/Kibana TLS, and one Secret **per workload**
+  (inference API, feature, enrichment, decision, response). Only `cxyz-soc-decision` holds the
+  Ed25519 signing key; `cxyz-soc-response` holds the public key only.
+- `k8s/runtime-config.yaml` additionally carries `cxyz-soc-ai-settings`
+  (`SOC_AI_METADATA_SHA256` - the independently approved model digest - and `SOC_GIT_SHA`).
 - Both files are gitignored. Do not replace them with committed plaintext
   Secrets or hard-coded environment-specific manifests.
 
@@ -79,6 +85,35 @@ redirect. It then iterates **every** Suricata DaemonSet pod, requires the stable
 node-bound Wazuh agent identity to be enrolled, injects a unique synthetic EVE
 marker, and requires each marker to reach Wazuh manager alerts. It is
 intentionally not part of PR CI because it needs a real cluster/CNI.
+
+## SOC analytics, AI and response (Path C)
+
+`50-soc-elasticsearch.yaml`, `51-soc-kibana.yaml` and `52-soc-ai.yaml` add Elasticsearch (StatefulSet),
+Kibana, the bootstrap/setup Jobs, a Logstash sidecar on the Wazuh manager and on every Suricata pod,
+and one Deployment per AI/response service (`soc-ai-api`, `soc-feature-worker`, `soc-enrichment-worker`,
+`soc-decision`, `soc-response`). All use the single `cxyz/soc-python:local` image, run read-only as uid
+10001 without capabilities, mount only their own Secret, and have their own NetworkPolicy; only
+`soc-response` may reach the firewall management network (`10.1.1.0/24`, ports 9443/443). State services use
+`Recreate` with one replica because SQLite has exactly one owner.
+
+```bash
+make secrets wazuh-config
+make k8s-soc-image K8S_IMAGE_LOADER="kind load docker-image"   # or minikube image load; empty = already on the nodes
+make k8s-up
+# promote a model (ai/training/README.md), set SOC_AI_METADATA_SHA256 and SOC_GIT_SHA in .env, then:
+make k8s-runtime-config && kubectl apply -f k8s/runtime-config.yaml
+make k8s-soc-model                # one-shot loader Pod (k8s/loaders/, not in the kustomization)
+kubectl -n cxyz-security rollout restart deployment/soc-ai-api
+make k8s-smoke
+```
+
+`make k8s-soc-model` copies the approved registry into the `soc-model-registry` PVC and re-runs the full
+provenance check **inside the cluster** against the independently supplied digest; the long-running API mounts
+the volume read-only and fails closed (503) without it. Both response services ship in `mode: observe`. Endpoint
+isolation is deliberately not configured here: the Wazuh API certificate carries the Compose name `wazuh.manager`,
+so `isolate_host` fails closed (`BACKEND_NOT_CONFIGURED`) until the PKI is reissued with the in-cluster name
+(`docs/PKI-ROTATION.md`). `python scripts/check_k8s_schema.py` validates the rendered manifests strictly against the
+Kubernetes v1.30 API schemas offline (no cluster); it is part of CI and `make lint`.
 
 ## Access
 
@@ -123,6 +158,7 @@ cluster.
   Internet HTTPS. Path C does not claim fresh vulnerability-feed parity until a
   reviewed egress/offline-feed design is live-proven.
 
-A successful static render is **not** Path C runtime evidence. Treat Path C as
-source-validated until `make k8s-smoke` and the relevant live security controls
-pass on the target cluster.
+A successful static render and schema validation are **not** Path C runtime evidence.
+Treat Path C as source-validated until `make k8s-smoke` and the relevant live security
+controls pass on the target cluster. Images have not been built or run, and the PVC, CNI
+NetworkPolicy and Pod Security behaviour of the SOC workloads is unobserved.

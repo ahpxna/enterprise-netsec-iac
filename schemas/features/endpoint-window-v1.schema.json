@@ -1,0 +1,71 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://companyxyz.test/schemas/features/endpoint-window-v1.schema.json",
+  "title": "CompanyXYZ endpoint-window-v1 feature vector",
+  "description": "Closed, deterministic five-minute endpoint feature contract. It is not interchangeable with network-window-v1. Definitions: process_count counts process-category records per host; rare_process_count counts process records whose name is in the declared rare set or absent from the declared benign process baseline; fim_change_count counts file-category (syscheck) records; failed_login_count counts authentication-category failures; account/privilege counts match account-management and privilege-escalation action text.",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "feature_schema",
+    "feature_schema_sha256",
+    "vector_id",
+    "entity_type",
+    "entity",
+    "window_start",
+    "window_end",
+    "window_duration",
+    "source_event_count",
+    "source_event_set_sha256",
+    "generator_git_sha",
+    "generated_at",
+    "features"
+  ],
+  "properties": {
+    "schema_version": {"const": "endpoint-window-v1"},
+    "feature_schema": {"const": "endpoint-window-v1"},
+    "feature_schema_sha256": {"$ref": "#/$defs/sha256"},
+    "vector_id": {"type": "string", "minLength": 1, "maxLength": 256},
+    "entity_type": {"const": "host"},
+    "entity": {"type": "string", "minLength": 1, "maxLength": 255},
+    "window_start": {"type": "string", "format": "date-time"},
+    "window_end": {"type": "string", "format": "date-time"},
+    "window_duration": {"const": "5m"},
+    "source_event_count": {"type": "integer", "minimum": 1},
+    "source_event_set_sha256": {"$ref": "#/$defs/sha256"},
+    "generator_git_sha": {"$ref": "#/$defs/gitSha"},
+    "generated_at": {"type": "string", "format": "date-time"},
+    "features": {
+      "type": "object",
+      "required": [
+        "process_count",
+        "rare_process_count",
+        "powershell_count",
+        "failed_login_count",
+        "fim_change_count",
+        "account_change_count",
+        "privilege_change_count"
+      ],
+      "properties": {
+        "process_count": {"type": "integer", "minimum": 0},
+        "rare_process_count": {"type": "integer", "minimum": 0},
+        "powershell_count": {"type": "integer", "minimum": 0},
+        "failed_login_count": {"type": "integer", "minimum": 0},
+        "fim_change_count": {"type": "integer", "minimum": 0},
+        "account_change_count": {"type": "integer", "minimum": 0},
+        "privilege_change_count": {"type": "integer", "minimum": 0}
+      },
+      "additionalProperties": false
+    }
+  },
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^[A-Fa-f0-9]{64}$"
+    },
+    "gitSha": {
+      "type": "string",
+      "pattern": "^[A-Fa-f0-9]{7,64}$"
+    }
+  },
+  "additionalProperties": false
+}

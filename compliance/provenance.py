@@ -14,7 +14,7 @@ import sys
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 FALLBACK_EXCLUDES = {
-    ".git", ".pytest_cache", "__pycache__", ".terraform", "evidence",
+    ".git", ".pytest_cache", "__pycache__", ".terraform", "evidence", ".venv", "logs", ".cxyz-state",
     "clab/runtime-configs", "terraform/vyos-fabric/runtime-configs",
     "docker/ids/logs", "wireguard/config",
 }

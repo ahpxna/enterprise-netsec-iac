@@ -3,3 +3,4 @@ ansible-lint==26.8.0
 pytest==9.1.1
 PyYAML==6.0.3
 yamllint==1.38.0
+kubernetes-validate==1.36.0

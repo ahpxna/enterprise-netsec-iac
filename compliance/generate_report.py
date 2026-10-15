@@ -14,6 +14,7 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+from compliance.evidence import applies_to_profile
 from compliance.provenance import current_provenance
 VALID_RESULTS = {"PASS", "FAIL", "ERROR"}
 REQUIRED_FIELDS = {
@@ -154,7 +155,9 @@ def main() -> int:
     parser.add_argument("--profile", choices=("path-a", "path-b"), default="path-a")
     args = parser.parse_args()
 
-    controls = yaml.safe_load((ROOT / "compliance" / "controls.yaml").read_text())["controls"]
+    catalog = yaml.safe_load((ROOT / "compliance" / "controls.yaml").read_text())["controls"]
+    controls = [control for control in catalog if applies_to_profile(control, args.profile)]
+    not_applicable = [control["id"] for control in catalog if control not in controls]
     default_root = ROOT / "evidence" / "runs"
     run = args.run or latest_run(default_root)
     if run is not None and not run.is_absolute():
@@ -188,11 +191,14 @@ def main() -> int:
         "Path A evidence can never substitute for Path B evidence.", "",
         f"**Summary:** {counts['PASS']} passed · {counts['FAIL']} failed · "
         f"{counts['ERROR']} error · {counts['UNVERIFIED']} unverified "
-        f"(of {len(controls)} controls)", "",
+        f"(of {len(controls)} controls applicable to this profile)", "",
         "| Control | Framework | Severity | Verified by | Status | Evidence |",
         "|---------|-----------|----------|-------------|--------|----------|",
         *rows,
     ]
+    if not_applicable:
+        md.extend(["", f"Not applicable to `{args.profile}` (the path physically lacks the subject; "
+                       f"verified on the other profile only): {', '.join(not_applicable)}"])
     if artifact_errors:
         md.extend(["", "## Invalid artifacts", ""])
         md.extend(f"- {error}" for error in artifact_errors)

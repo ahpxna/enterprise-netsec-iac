@@ -1,0 +1,43 @@
+{
+  "index_patterns": ["soc-raw-*"],
+  "priority": 600,
+  "version": 1,
+  "_meta": {
+    "schema": "soc-raw-v1",
+    "description": "Append-only source payloads captured before parsing or enrichment"
+  },
+  "template": {
+    "settings": {
+      "number_of_shards": 1,
+      "number_of_replicas": 0,
+      "index.lifecycle.name": "soc-raw-14d",
+      "index.blocks.read_only_allow_delete": false
+    },
+    "mappings": {
+      "dynamic": true,
+      "properties": {
+        "@timestamp": {"type": "date"},
+        "event": {
+          "properties": {
+            "id": {"type": "keyword"},
+            "dataset": {"type": "keyword"},
+            "original": {"type": "wildcard"}
+          }
+        },
+        "observer": {
+          "properties": {
+            "name": {"type": "keyword"},
+            "type": {"type": "keyword"}
+          }
+        },
+        "cxyz": {
+          "properties": {
+            "schema_version": {"type": "keyword"},
+            "sensor_zone": {"type": "keyword"},
+            "ingestion_id": {"type": "keyword"}
+          }
+        }
+      }
+    }
+  }
+}

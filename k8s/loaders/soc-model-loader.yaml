@@ -1,0 +1,43 @@
+# One-shot loader for the approved model registry (`make k8s-soc-model`). Deliberately NOT
+# part of kustomization.yaml: it is created, used and deleted by the Makefile target, and
+# the long-running soc-ai-api only ever mounts the registry read-only. Hosts no network
+# listener and has no Service; `kubectl exec` is the only way in.
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: soc-model-loader
+  namespace: cxyz-security
+  labels: { app: soc-model-loader }
+spec:
+  automountServiceAccountToken: false
+  restartPolicy: Never
+  securityContext: { fsGroup: 10001 }
+  affinity:
+    podAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - weight: 100
+          podAffinityTerm:
+            labelSelector: { matchLabels: { app: soc-ai-api } }
+            topologyKey: kubernetes.io/hostname
+  containers:
+    - name: loader
+      image: cxyz/soc-python:local
+      imagePullPolicy: IfNotPresent
+      command: ["sleep", "900"]
+      securityContext:
+        allowPrivilegeEscalation: false
+        readOnlyRootFilesystem: true
+        runAsNonRoot: true
+        runAsUser: 10001
+        capabilities: { drop: ["ALL"] }
+        seccompProfile: { type: RuntimeDefault }
+      volumeMounts:
+        - { name: tmp, mountPath: /tmp }
+        - { name: models, mountPath: /models/active }
+      resources:
+        requests: { cpu: "50m", memory: "64Mi" }
+        limits: { cpu: "500m", memory: "256Mi" }
+  volumes:
+    - { name: tmp, emptyDir: { medium: Memory, sizeLimit: 16Mi } }
+    - { name: models, persistentVolumeClaim: { claimName: soc-model-registry } }

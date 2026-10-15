@@ -20,12 +20,12 @@ def bf() -> Session:
     return session
 
 
-def reachability(bf: Session, destination_port: int, protocol: str = "UDP"):
+def reachability(bf: Session, destination_port: int, protocol: str = "UDP", destination: str = "172.16.50.1"):
     return bf.q.reachability(
         pathConstraints={"startLocation": "@enter(dist1[Ethernet1])"},
         headers=HeaderConstraints(
             srcIps="192.168.10.1",
-            dstIps="172.16.50.1",
+            dstIps=destination,
             dstPorts=str(destination_port),
             ipProtocols=protocol,
         ),
@@ -67,3 +67,10 @@ def test_snapshot_has_no_parse_or_reference_errors(bf):
 
     undefined = bf.q.undefinedReferences().answer().frame()
     assert undefined.empty, f"Undefined references:\n{undefined.to_string(index=False)}"
+
+
+@pytest.mark.parametrize("port", [1514, 1515])
+def test_wazuh_agent_channel_reaches_only_the_manager(bf, port):
+    """Agent telemetry/enrollment is permitted to the manager and to no other DC host."""
+    assert not reachability(bf, port, "TCP", destination="172.16.50.10").empty
+    assert reachability(bf, port, "TCP", destination="172.16.50.1").empty

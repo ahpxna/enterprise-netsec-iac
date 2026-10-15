@@ -1,0 +1,115 @@
+# Kibana (HTTPS, ClusterIP; reach it with `kubectl port-forward svc/kibana 5602:5601`) and
+# the one-shot job that imports the version-controlled dashboards with a temporary
+# management identity and then revokes that identity.
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: kibana, namespace: cxyz-security }
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: kibana } }
+  template:
+    metadata: { labels: { app: kibana } }
+    spec:
+      automountServiceAccountToken: false
+      containers:
+        - name: kibana
+          image: docker.elastic.co/kibana/kibana@sha256:cb4056251fb4116bbfe4de272284fd3d3f43159ef7a5ffe7c18b64d21ceafb12
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: { drop: ["ALL"] }
+            seccompProfile: { type: RuntimeDefault }
+          env:
+            - { name: ELASTICSEARCH_HOSTS, value: "https://elasticsearch:9200" }
+            - { name: ELASTICSEARCH_USERNAME, value: kibana_system }
+            - name: ELASTICSEARCH_PASSWORD
+              valueFrom: { secretKeyRef: { name: cxyz-soc-passwords, key: KIBANA_SYSTEM_PASSWORD } }
+            - { name: ELASTICSEARCH_SSL_CERTIFICATEAUTHORITIES, value: /usr/share/kibana/config/certs/ca.crt }
+            - { name: ELASTICSEARCH_SSL_VERIFICATIONMODE, value: full }
+            - { name: SERVER_SSL_ENABLED, value: "true" }
+            - { name: SERVER_SSL_CERTIFICATE, value: /usr/share/kibana/config/certs/kibana.crt }
+            - { name: SERVER_SSL_KEY, value: /usr/share/kibana/config/certs/kibana.key }
+            - name: XPACK_SECURITY_ENCRYPTIONKEY
+              valueFrom: { secretKeyRef: { name: cxyz-soc-passwords, key: KIBANA_SECURITY_ENCRYPTION_KEY } }
+            - name: XPACK_ENCRYPTEDSAVEDOBJECTS_ENCRYPTIONKEY
+              valueFrom: { secretKeyRef: { name: cxyz-soc-passwords, key: KIBANA_SAVED_OBJECTS_ENCRYPTION_KEY } }
+            - name: XPACK_REPORTING_ENCRYPTIONKEY
+              valueFrom: { secretKeyRef: { name: cxyz-soc-passwords, key: KIBANA_REPORTING_ENCRYPTION_KEY } }
+            - { name: TELEMETRY_ENABLED, value: "false" }
+          ports: [{ containerPort: 5601 }]
+          startupProbe:
+            tcpSocket: { port: 5601 }
+            periodSeconds: 10
+            failureThreshold: 60
+          readinessProbe:
+            tcpSocket: { port: 5601 }
+            periodSeconds: 10
+            failureThreshold: 6
+          livenessProbe:
+            tcpSocket: { port: 5601 }
+            periodSeconds: 20
+            failureThreshold: 6
+          volumeMounts:
+            - { name: tls, mountPath: /usr/share/kibana/config/certs, readOnly: true }
+            - { name: data, mountPath: /usr/share/kibana/data }
+          resources:
+            requests: { cpu: "250m", memory: "768Mi" }
+            limits: { cpu: "1", memory: "1536Mi" }
+      volumes:
+        - name: tls
+          secret: { secretName: cxyz-soc-kibana-tls, defaultMode: 0444 }
+        - { name: data, emptyDir: {} }
+---
+apiVersion: v1
+kind: Service
+metadata: { name: kibana, namespace: cxyz-security }
+spec:
+  selector: { app: kibana }
+  ports: [{ port: 5601, targetPort: 5601 }]
+---
+apiVersion: batch/v1
+kind: Job
+metadata: { name: soc-kibana-setup, namespace: cxyz-security }
+spec:
+  backoffLimit: 40
+  template:
+    metadata: { labels: { app: soc-kibana-setup } }
+    spec:
+      restartPolicy: OnFailure
+      automountServiceAccountToken: false
+      # Import first (temporary kibana_admin identity), then revoke that identity.
+      initContainers:
+        - name: import
+          image: docker.elastic.co/elasticsearch/elasticsearch@sha256:cb637acad8808664b7c57455a2b2ee87e30b3cab210f3ccc423ff6bcc305e0b9
+          command: ["bash", "/setup/bootstrap-kibana.sh"]
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: { drop: ["ALL"] }
+            seccompProfile: { type: RuntimeDefault }
+          env:
+            - name: KIBANA_BOOTSTRAP_PASSWORD
+              valueFrom: { secretKeyRef: { name: cxyz-soc-passwords, key: KIBANA_BOOTSTRAP_PASSWORD } }
+          volumeMounts:
+            - { name: ca, mountPath: /certs, readOnly: true }
+            - { name: kibana-scripts, mountPath: /setup, readOnly: true }
+            - { name: saved-objects, mountPath: /setup/saved-objects, readOnly: true }
+      containers:
+        - name: revoke
+          image: docker.elastic.co/elasticsearch/elasticsearch@sha256:cb637acad8808664b7c57455a2b2ee87e30b3cab210f3ccc423ff6bcc305e0b9
+          command: ["bash", "/setup/revoke-kibana-bootstrap.sh"]
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: { drop: ["ALL"] }
+            seccompProfile: { type: RuntimeDefault }
+          env:
+            - name: ELASTIC_PASSWORD
+              valueFrom: { secretKeyRef: { name: cxyz-soc-passwords, key: ELASTIC_PASSWORD } }
+          volumeMounts:
+            - { name: ca, mountPath: /certs, readOnly: true }
+            - { name: es-scripts, mountPath: /setup, readOnly: true }
+      volumes:
+        - name: ca
+          secret: { secretName: cxyz-soc-ca }
+        - { name: kibana-scripts, configMap: { name: cxyz-soc-kibana-scripts } }
+        - { name: saved-objects, configMap: { name: cxyz-soc-kibana-objects } }
+        - { name: es-scripts, configMap: { name: cxyz-soc-es-scripts } }

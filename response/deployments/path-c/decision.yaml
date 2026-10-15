@@ -1,0 +1,23 @@
+# Decision runner. `observe` records what the engine would request as an analyst
+# alert and sends nothing; `enforce` additionally delivers signed commands.
+schema_version: decision-service-v1
+mode: observe
+state_dir: /var/lib/soc/decision
+policy_file: /etc/soc/policy.yaml
+signing_key_file: /run/soc/signing.key
+signing_key_id: decision-key-1
+poll_seconds: 15
+min_score: 0.90
+elasticsearch:
+  url: https://elasticsearch:9200
+  ca: /run/soc/ca.crt
+  api_key_file: /run/soc/es.cred
+orchestrator:
+  url: https://soc-response:8443
+  ca: /run/soc/ca.crt
+  client_cert: /run/soc/client.crt
+  client_key: /run/soc/client.key
+# Destinations whose targeting by a source IP counts as "protected-asset context".
+protected_assets:
+  - 172.16.50.1
+  - 172.16.50.10

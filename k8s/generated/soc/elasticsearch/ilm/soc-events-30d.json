@@ -1,0 +1,9 @@
+{
+  "policy": {
+    "_meta": {"owner": "cxyz-soc", "purpose": "normalized telemetry retention"},
+    "phases": {
+      "hot": {"actions": {"set_priority": {"priority": 100}}},
+      "delete": {"min_age": "30d", "actions": {"delete": {}}}
+    }
+  }
+}

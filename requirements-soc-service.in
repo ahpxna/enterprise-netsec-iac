@@ -1,0 +1,10 @@
+# Runtime dependencies of the SOC service image (feature/enrichment/decision/
+# orchestrator/inference). Compiled with hashes into requirements-soc-service.lock.
+fastapi==0.115.12
+uvicorn==0.34.2
+scikit-learn==1.6.1
+numpy==2.2.6
+joblib==1.5.1
+jsonschema==4.24.0
+PyYAML==6.0.3
+cryptography==50.0.2

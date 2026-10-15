@@ -66,6 +66,33 @@ def management_forward_guards(node: dict, management_subnet: str) -> list[str]:
     return commands
 
 
+# Firewall node -> nftables table whose SOC containment set the enforcement agent manages.
+ENFORCER_TABLES = {"fw-core": "cxyz", "fw-dmz": "dmz"}
+ENFORCER_PORT = 9443
+
+
+def enforcer_binds(name: str) -> list[str]:
+    """Public certificate, this node's own key, the CA certificate, and the agent source."""
+
+    return [
+        "../docker/enforcer/nft_enforcer.py:/opt/cxyz/nft_enforcer.py:ro",
+        f"../soc/certs/enforcer-{name}.crt:/etc/cxyz/enforcer/tls.crt:ro",
+        f"../soc/certs/enforcer-{name}.key:/etc/cxyz/enforcer/tls.key:ro",
+        "../soc/certs/ca.crt:/etc/cxyz/enforcer/ca.crt:ro",
+    ]
+
+
+def enforcer_command(name: str, mgmt_ip: str) -> str:
+    return (
+        "sh -c 'nohup python3 /opt/cxyz/nft_enforcer.py "
+        f"--listen {mgmt_ip} --port {ENFORCER_PORT} "
+        "--cert /etc/cxyz/enforcer/tls.crt --key /etc/cxyz/enforcer/tls.key "
+        "--client-ca /etc/cxyz/enforcer/ca.crt --allowed-client soc-response "
+        f"--table {ENFORCER_TABLES[name]} --set soc_blocklist "
+        ">/var/log/cxyz-enforcer.log 2>&1 &'"
+    )
+
+
 def node_definition(name: str, node: dict, management_subnet: str) -> dict:
     role = node["role"]
     rendered: dict = {
@@ -93,6 +120,7 @@ def node_definition(name: str, node: dict, management_subnet: str) -> dict:
         rendered["image"] = TOOLS_IMAGE
         rendered["binds"] = [
             f"configs/{name}.nft:/etc/nftables/policy.nft:ro",
+            *enforcer_binds(name),
         ]
         rendered["exec"] = [
             "apk add --no-cache python3 rsyslog rsyslog-tls nftables",
@@ -100,6 +128,7 @@ def node_definition(name: str, node: dict, management_subnet: str) -> dict:
             "sysctl -w net.ipv4.ip_forward=1",
             *shell_commands(node),
             "nft -f /etc/nftables/policy.nft",
+            enforcer_command(name, node["mgmt_ip"]),
         ]
     else:
         if name == "server1":

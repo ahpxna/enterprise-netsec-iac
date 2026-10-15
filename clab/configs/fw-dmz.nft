@@ -10,17 +10,33 @@ flush ruleset
 table inet dmz {
     set web { type ipv4_addr; elements = { 195.1.1.161 } }
     counter dmz_pivot_drop { }
+    counter dmzlab_vuln_hit { }
+    counter dmzlab_honeypot_hit { }
     counter forward_default_drop { }
+    counter soc_block_drop { }
+
+    # SOC containment sets (see fw-core.nft); timeouts are mandatory.
+    set soc_blocklist  { type ipv4_addr; flags timeout; }
+    set soc_blocklist6 { type ipv6_addr; flags timeout; }
 
     chain inbound {
         type filter hook input priority 0; policy drop;
         ct state established,related accept
         iif "lo" accept
+        # Enforcement agent: mutual-TLS API on the out-of-band management plane only.
+        iifname "eth0" ip saddr 10.1.1.0/24 tcp dport 9443 accept
         log prefix "CXYZ-FWDMZ-IN-DROP " flags all counter drop
     }
 
     chain forward {
         type filter hook forward priority 0; policy drop;
+
+        # SOC containment first: it also cuts already-established flows.
+        ip saddr @soc_blocklist counter name soc_block_drop log prefix "CXYZ-SOC-BLOCK " flags all drop
+        ip daddr @soc_blocklist counter name soc_block_drop log prefix "CXYZ-SOC-BLOCK " flags all drop
+        ip6 saddr @soc_blocklist6 counter name soc_block_drop log prefix "CXYZ-SOC-BLOCK " flags all drop
+        ip6 daddr @soc_blocklist6 counter name soc_block_drop log prefix "CXYZ-SOC-BLOCK " flags all drop
+
         ct state established,related accept
         # Specific pivot deny must precede broad DMZ egress.
         iifname "eth2" oifname "eth1" ip saddr @web \
@@ -32,6 +48,14 @@ table inet dmz {
             tcp dport { 80, 443 } accept
         # edge -> web host: DNS
         iifname "eth1" oifname "eth2" ip daddr @web udp dport 53 accept
+        # DMZ deception lab (compose profile dmzlab): a deliberately vulnerable app (tcp/3000) and a
+        # honeypot (tcp/2222 ssh, tcp/2223 telnet) share the web host's identity. Every NEW connection is
+        # counted and logged so the SIEM sees each probe; the pivot deny above still stops any of them
+        # from reaching internal zones, and established flows are accepted earlier in this chain.
+        iifname "eth1" oifname "eth2" ip daddr @web tcp dport 3000 ct state new \
+            counter name dmzlab_vuln_hit log prefix "CXYZ-DMZLAB-VULN " flags all accept
+        iifname "eth1" oifname "eth2" ip daddr @web tcp dport { 2222, 2223 } ct state new \
+            counter name dmzlab_honeypot_hit log prefix "CXYZ-DMZLAB-HONEYPOT " flags all accept
         # DMZ egress to non-internal destinations.
         iifname "eth2" oifname "eth1" ip saddr @web accept
         counter name forward_default_drop \

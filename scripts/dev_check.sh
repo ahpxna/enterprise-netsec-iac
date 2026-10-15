@@ -26,18 +26,21 @@ python scripts/check_vyos_boot.py
 python scripts/check_path_b_intent.py
 python scripts/security_static_checks.py
 python scripts/check_image_lock.py
+python scripts/check_soc_static.py
+python scripts/check_soc_ai_static.py
 python scripts/check_ci_contract.py
 python scripts/check_yaml_syntax.py
-python -m compileall -q scripts compliance tests
+python -m compileall -q scripts compliance tests ai response soc
 find scripts clab/configs -type f -name '*.sh' -print0 | xargs -0 -n1 bash -n
 python compliance/check_wiring.py
-python -m pytest tests/unit -q
+python -m pytest tests/unit tests/soc -q
 
 echo "==> Docker Compose / YAML / Ansible / Kubernetes render"
-docker compose --env-file .env.example --profile siem --profile ids --profile ztna --profile dmz --profile vpn-test config --quiet
+docker compose --env-file .env.example --profile siem --profile ids --profile ztna --profile dmz --profile vpn-test --profile soc --profile soc-ai --profile dmzlab config --quiet
 yamllint .
 ( cd ansible && ansible-lint )
 kubectl kustomize k8s/ >/tmp/cxyz-k8s-rendered.yaml
+python scripts/check_k8s_schema.py
 
 echo "==> Terraform fmt/validate in Linux containers (no host libvirt/KVM required)"
 TF_IMAGE="${TF_IMAGE:-hashicorp/terraform@sha256:fd5debae63188975d6febc6aa5bd1a982a588f55e4a4ddb7de28be923f250456}"

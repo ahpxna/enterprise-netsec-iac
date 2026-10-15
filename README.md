@@ -1,10 +1,11 @@
 # CompanyXYZ-NG — Enterprise Network Security as Code
 
-CompanyXYZ-NG is a reproducible enterprise network-security lab built from
-open-source infrastructure components. The repository combines a three-tier
-routed fabric, DMZ isolation, dual-ISP edge routing, centralized logging,
-intrusion detection, zero-trust access, infrastructure provisioning,
-configuration management, and evidence-backed compliance checks.
+CompanyXYZ-NG is a reproducible automated SOC and AI-assisted detection and
+response research platform. Network-security IaC remains its foundation for
+isolation, realistic telemetry, controlled attack scenarios, and evidence.
+The repository combines a three-tier routed fabric, DMZ isolation, dual-ISP
+edge routing, centralized detection, zero-trust access, infrastructure
+provisioning, configuration management, and evidence-backed compliance checks.
 
 The default fabric uses containerlab, FRRouting, and nftables. The security
 plane uses Wazuh, Suricata, Traefik, Authentik, and WireGuard. Terraform and
@@ -43,6 +44,12 @@ cluster.
 
 ## Quick start
 
+**Fastest way to try everything on a Linux machine - one command** (installs dependencies, builds, runs, tests, and pinpoints
+any failure): `./scripts/try-on-linux.sh` (or `make try-linux`; `--quick` skips the containerlab fabric). It also starts a
+GNS3-style, clickable network explorer at <http://127.0.0.1:8088> (`make netviz`). See
+[docs/LINUX-QUICKSTART.md](docs/LINUX-QUICKSTART.md). The step-by-step lifecycle follows.
+
+
 Prerequisites for the default path are Docker, Docker Compose, containerlab,
 Ansible Core, Terraform, and Python 3.11 or newer. The historical FRR 9.1.0
 container used by live Path A is pinned as a `linux/amd64` single-platform
@@ -66,6 +73,12 @@ The lifecycle is:
 3. `make up` starts the routed fabric and security services.
 4. `make configure` applies CIS-aligned Ansible roles.
 5. `make audit` runs policy tests, live validation, attack replay, and report generation.
+
+The SOC analytics profile is additive and can be started independently with
+`make soc-up`. It serves TLS-only Kibana on `https://127.0.0.1:5602`, keeps
+Elasticsearch private, and normalizes Suricata, Wazuh, firewall, RADIUS, and
+network-device telemetry. See [soc/README.md](soc/README.md) and the
+[SOC runbook](soc/RUNBOOK.md).
 
 `TIME-01` is intentionally host-scoped: configure the Linux host chrony service
 from `host/chrony-cxyz.sources.example` (or an equivalent NTS policy) so the
@@ -118,7 +131,9 @@ The logical design contains:
 - WireGuard remote-access transport with an end-to-end peer-to-DC fixture.
 
 The full topology and data flows are documented in
-[ARCHITECTURE.md](ARCHITECTURE.md).
+[ARCHITECTURE.md](ARCHITECTURE.md). The accepted SOC analytics, AI, correlation,
+and response boundaries are documented in
+[SOC-AI-ARCHITECTURE.md](docs/SOC-AI-ARCHITECTURE.md).
 
 ## Evidence model
 
@@ -149,10 +164,15 @@ version control.
 ├── ansible/                  # hardening and network/service configuration
 ├── docker/                   # SIEM, IDS, and zero-trust configuration
 ├── k8s/                      # Kubernetes security-plane alternative
+├── soc/                      # Logstash, Elasticsearch, and Kibana analytics plane
+├── ai/                       # features, training, models, inference, and evaluation
+├── response/                 # policy engine, orchestrator, and privileged adapters
+├── schemas/                  # versioned event, feature, and response contracts
 ├── compliance/               # controls, mappings, and report generation
 ├── tests/
 │   ├── validation/           # live checks that emit evidence
-│   └── batfish/              # offline policy tests used in CI
+│   ├── batfish/              # offline policy tests used in CI
+│   └── soc/                  # SOC architecture/schema contract gates
 ├── scripts/                  # deployment, secret, URL, and attack utilities
 ├── evidence/                 # generated evidence and reports; gitignored
 └── .github/workflows/        # NetDevOps CI
@@ -176,13 +196,15 @@ failover while collecting SIEM-visible evidence.
 ## Technical references
 
 - [Architecture](ARCHITECTURE.md)
+- [SOC/AI closed-loop architecture](docs/SOC-AI-ARCHITECTURE.md)
+- [Try it on Linux with one command](docs/LINUX-QUICKSTART.md)
+- [Frozen NetSec baseline](docs/NETSEC-BASELINE.md)
 - [VyOS VM fabric](terraform/vyos-fabric/README.md)
 - [Kubernetes security plane](k8s/README.md)
 - [Authentik lifecycle migration](docs/AUTHENTIK-UPGRADE.md)
 - [PKI rotation](docs/PKI-ROTATION.md)
 - [Security implementation ledger](docs/SECURITY-IMPLEMENTATION-LEDGER.md)
 - [Control-to-test mapping](compliance/mappings/cyb-to-repo.md)
-- [Security implementation ledger](docs/SECURITY-IMPLEMENTATION-LEDGER.md)
 - [Container image supply-chain policy](docs/IMAGE-SUPPLY-CHAIN.md)
 
 Container image selection is tracked in `supply-chain/images.lock.yml`.

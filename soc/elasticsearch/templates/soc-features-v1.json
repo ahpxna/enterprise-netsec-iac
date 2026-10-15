@@ -1,0 +1,58 @@
+{
+  "index_patterns": ["soc-features-*"],
+  "priority": 600,
+  "version": 2,
+  "_meta": {
+    "schemas": ["network-window-v1", "endpoint-window-v1"],
+    "description": "Closed, deterministic feature vectors. The features object is the explicit union of the two versioned feature contracts."
+  },
+  "template": {
+    "settings": {
+      "number_of_shards": 1,
+      "number_of_replicas": 0,
+      "index.lifecycle.name": "soc-features-30d"
+    },
+    "mappings": {
+      "dynamic": "strict",
+      "properties": {
+        "schema_version": {"type": "keyword"},
+        "feature_schema": {"type": "keyword"},
+        "feature_schema_sha256": {"type": "keyword"},
+        "vector_id": {"type": "keyword"},
+        "entity_type": {"type": "keyword"},
+        "entity": {"type": "keyword"},
+        "window_start": {"type": "date"},
+        "window_end": {"type": "date"},
+        "window_duration": {"type": "keyword"},
+        "source_event_count": {"type": "long"},
+        "source_event_set_sha256": {"type": "keyword"},
+        "generator_git_sha": {"type": "keyword"},
+        "generated_at": {"type": "date"},
+        "features": {
+          "type": "object",
+          "dynamic": "strict",
+          "properties": {
+            "connection_count": {"type": "long"},
+            "unique_dst_ip": {"type": "long"},
+            "unique_dst_port": {"type": "long"},
+            "bytes_out": {"type": "long"},
+            "bytes_in": {"type": "long"},
+            "blocked_ratio": {"type": "double"},
+            "dns_query_count": {"type": "long"},
+            "unique_domain_count": {"type": "long"},
+            "tls_count": {"type": "long"},
+            "suricata_alert_count": {"type": "long"},
+            "failed_auth_count": {"type": "long"},
+            "process_count": {"type": "long"},
+            "rare_process_count": {"type": "long"},
+            "powershell_count": {"type": "long"},
+            "failed_login_count": {"type": "long"},
+            "fim_change_count": {"type": "long"},
+            "account_change_count": {"type": "long"},
+            "privilege_change_count": {"type": "long"}
+          }
+        }
+      }
+    }
+  }
+}

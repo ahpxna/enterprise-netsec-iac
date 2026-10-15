@@ -1,0 +1,34 @@
+# Path B (Terraform/libvirt + VyOS 1.4). Containment is the SOC_BLOCKLIST
+# address-group on both VyOS firewalls (HTTPS API on the OOB management plane);
+# endpoint isolation uses the Wazuh manager API. No secrets in this file.
+schema_version: response-service-v1
+mode: observe
+state_dir: /var/lib/soc/response
+policy_file: /etc/soc/policy.yaml
+verify_keys_dir: /run/soc/keys
+tick_seconds: 10
+elasticsearch:
+  url: https://elasticsearch:9200
+  ca: /run/soc/ca.crt
+  api_key_file: /run/soc/es.key
+listen:
+  host: toward-elasticsearch
+  port: 8443
+  cert: /run/soc/tls.crt
+  key: /run/soc/tls.key
+  client_ca: /run/soc/decision-ca.crt
+firewall:
+  backend: vyos
+  peers:
+    - name: fw-core
+      url: https://10.1.1.20
+      ca: /run/soc/ca.crt
+      api_key_file: /run/soc/vyos-api.key
+    - name: fw-dmz
+      url: https://10.1.1.30
+      ca: /run/soc/ca.crt
+      api_key_file: /run/soc/vyos-api.key
+wazuh:
+  url: https://wazuh.manager:55000
+  ca: /run/soc/wazuh-ca.crt
+  credentials_file: /run/soc/wazuh-response.cred

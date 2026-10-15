@@ -1,0 +1,5 @@
+# Optional: the LSTM autoencoder model family (training, evaluation and serving).
+# CPU PyTorch is sufficient: the model is tiny and inference is one small batch.
+-r requirements-soc-ai.txt
+torch==2.14.1
+safetensors==0.8.0

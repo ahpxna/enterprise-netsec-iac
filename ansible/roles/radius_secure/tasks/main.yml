@@ -36,6 +36,27 @@
     mode: "0640"
   notify: restart freeradius
 
+- name: Send RADIUS service logs through the authenticated syslog path
+  ansible.builtin.replace:
+    path: /etc/freeradius/3.0/radiusd.conf
+    regexp: "(?m)^([ \\t]*)destination[ \\t]*=[ \\t]*[^#\\n]+"
+    replace: "\\1destination = syslog"
+  notify: restart freeradius
+
+- name: Log RADIUS authentication outcomes
+  ansible.builtin.replace:
+    path: /etc/freeradius/3.0/radiusd.conf
+    regexp: "(?m)^([ \\t]*)auth[ \\t]*=[ \\t]*[^#\\n]+"
+    replace: "\\1auth = yes"
+  notify: restart freeradius
+
+- name: Keep successful and failed passwords out of RADIUS logs
+  ansible.builtin.replace:
+    path: /etc/freeradius/3.0/radiusd.conf
+    regexp: "(?m)^([ \\t]*)(auth_badpass|auth_goodpass)[ \\t]*=[ \\t]*[^#\\n]+"
+    replace: "\\1\\2 = no"
+  notify: restart freeradius
+
 - name: Scan active RADIUS user store for a cleartext password attribute
   ansible.builtin.command:
     argv:

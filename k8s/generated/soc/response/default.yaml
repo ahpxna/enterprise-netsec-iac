@@ -1,0 +1,91 @@
+# Versioned policy input for the Decision Engine and Response Orchestrator.
+#
+# This file contains no endpoint URLs, credential references, shell fragments,
+# or mutable firewall-rule definitions.  Every action remains constrained by
+# the adapter selected in code: OPNsense SOC_BLOCKLIST or controlled Wazuh
+# isolate/restore only.
+schema_version: response-policy-set-v1
+
+defaults:
+  protections:
+    # An explicit auto-containment allowlist.  Address and network entries are
+    # rejected before any privileged adapter call.
+    allowlisted_ips: []
+    allowlisted_networks: []
+
+    # Current OOB management plane.  Future VLAN 99 / SOC ranges must be added
+    # before enabling any automatic response on those environments.
+    # server1 currently hosts DNS and FreeRADIUS and must never be blocked by
+    # an automatic response. Add NTP/DNS/RADIUS/SOC addresses here as the lab
+    # gains independent service nodes.
+    protected_ips:
+      - 172.16.50.1    # server1: DNS, RADIUS, NTP
+      - 172.16.50.10   # Wazuh manager
+      - 172.16.50.11   # mTLS syslog relay
+      - 172.16.50.12   # WireGuard gateway
+      - 172.16.50.253  # DC bridge gateway
+      - 172.16.50.254  # fw-core DC interface
+    protected_networks:
+      - 10.1.1.0/24
+      # Routed transit between edge, firewalls, core and distribution. Campus traffic is NATed to fw-core's
+      # outside address, so a block here would cut a whole zone, never contain one host.
+      - 10.255.0.0/16
+    protected_hosts:
+      - elasticsearch
+      - kibana
+      - logstash
+      - wazuh-manager
+      - soc-orchestrator
+      - soc-decision-engine
+
+    # Private employee/DC addresses may be candidates only when they are not
+    # in protected_networks. Set true for an Internet-only containment policy.
+    block_private_ip_targets: false
+
+    # Fail closed: Wazuh isolation is unavailable until an operator explicitly
+    # enrolls controlled endpoint identities here.
+    allowed_isolation_hosts: []
+
+  # Caps accepted automatic requests, not analyst alerts. Runtime deployment
+  # must replace the in-memory limiter with a shared durable limiter.
+  rate_limit:
+    max_actions: 5
+    window_seconds: 300
+  dedup_seconds: 900
+  command_valid_for_seconds: 300
+  # Old or excessively future-dated evidence remains alert-only.
+  evidence_max_age_seconds: 900
+
+policies:
+  - id: COR-001
+    version: "1.0.0"
+    enabled: true
+    action: block_ip
+    ttl_seconds: 900
+    when:
+      ai_score_gte: 0.90
+      require_any:
+        - type: suricata
+          min_severity: 2
+        - type: wazuh
+          min_severity: 10
+        - type: authentication
+          min_count: 20
+        - type: threat_intel
+        - type: protected_asset
+        # DMZ honeypot (Cowrie): a login attempt or worse; a bare connection (severity 3) is not enough
+        - type: honeypot
+          min_severity: 5
+
+  - id: COR-002
+    version: "1.0.0"
+    enabled: true
+    action: isolate_host
+    ttl_seconds: 900
+    when:
+      ai_score_gte: 0.90
+      require_any:
+        - type: wazuh
+          min_severity: 12
+        - type: threat_intel
+        - type: protected_asset

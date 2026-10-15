@@ -5,6 +5,15 @@
 # verified_by is the Path A executable proof; verified_by_path_b is the
 # independent real-NOS proof. generate_report.py --profile selects the right
 # mapping and refuses to substitute Path A evidence for Path B.
+#
+# `applicable_profiles` (optional) scopes a control to the profile(s) whose lab
+# physically contains its subject. A scoped-out profile carries no verifier and is
+# reported as not applicable, never as passed.
+#
+# planned_controls are deliberately outside the evidence-backed `controls`
+# list: each names a control whose subject does not exist in any current lab path, so
+# it must never appear as PASS/FAIL/UNVERIFIED in a compliance report. Everything
+# else in the SOC plane is an evidence-backed control above (LOG/AI/COR/RESP/SOC).
 # =====================================================================
 
 controls:
@@ -170,3 +179,236 @@ controls:
     implemented_by_path_b:
       - docker-compose.yml#traefik
       - docker/zero-trust-gateway/dynamic.yml
+  - id: LOG-01
+    framework:
+      - NIST-800-92
+      - NIST-800-53r5-AU-3
+      - ISO-27002-8.15
+    ref: multi-source ingestion provenance
+    objective: Multi-source SOC ingestion accounts for Suricata, Wazuh, firewall, and RADIUS events, each carrying source-authentication provenance.
+    implemented_by:
+      - soc/logstash/pipelines
+      - docker-compose.yml#logstash
+    verified_by: test_soc_ai.py::test_log01_multi_source_ingestion
+    severity: high
+    verified_by_path_b: path_b_audit.py::test_log01
+    implemented_by_path_b:
+      - soc/logstash/pipelines
+      - docker-compose.yml#logstash
+  - id: LOG-02
+    framework:
+      - NIST-800-92
+      - NIST-800-53r5-AU-9
+      - ISO-27002-8.15
+    ref: ECS normalization with raw integrity
+    objective: Source payloads normalize to the versioned ECS contract while the raw event is preserved byte-for-byte.
+    implemented_by:
+      - soc/logstash/pipelines/70-normalize-ecs.conf
+      - schemas/ecs/soc-event.schema.json
+    verified_by: test_soc_ai.py::test_log02_ecs_normalization_preserves_raw
+    severity: high
+    verified_by_path_b: path_b_audit.py::test_log02
+    implemented_by_path_b:
+      - soc/logstash/pipelines/70-normalize-ecs.conf
+      - schemas/ecs/soc-event.schema.json
+  - id: LOG-03
+    framework:
+      - NIST-800-53r5-AU-5
+      - NIST-800-92
+      - ISO-27002-8.15
+    ref: ingestion failure accountability
+    objective: >-
+      Ingestion failure is observable and lossless; malformed events reach the dead-letter stream
+      and an Elasticsearch outage is absorbed by the persistent queue.
+    implemented_by:
+      - soc/logstash/config/logstash.yml
+      - soc/logstash/pipelines/90-output.conf
+    verified_by: test_soc_ai.py::test_log03_ingestion_failure_is_accounted
+    severity: high
+    verified_by_path_b: path_b_audit.py::test_log03
+    implemented_by_path_b:
+      - soc/logstash/config/logstash.yml
+      - soc/logstash/pipelines/90-output.conf
+  - id: AI-01
+    framework:
+      - NIST-AI-RMF-MEASURE
+      - NIST-800-53r5-SI-4
+    ref: feature-to-inference path
+    objective: Real telemetry becomes a versioned feature vector and a schema-valid soc-ai anomaly event with model identity and latency.
+    implemented_by:
+      - soc/workers/features.py
+      - soc/workers/enrichment.py
+      - ai/api/main.py
+    verified_by: test_soc_ai.py::test_ai01_feature_to_inference_event
+    severity: high
+    verified_by_path_b: path_b_audit.py::test_ai01
+    implemented_by_path_b:
+      - soc/workers/features.py
+      - soc/workers/enrichment.py
+      - ai/api/main.py
+  - id: AI-02
+    framework:
+      - NIST-AI-RMF-GOVERN
+      - NIST-800-53r5-SA-10
+    ref: model provenance and approval
+    objective: >-
+      The served model is the independently approved registry, whose provenance records dataset,
+      feature schema, artifact hash, Git SHA, seed, hyperparameters and threshold.
+    implemented_by:
+      - ai/models/isolation_forest.py
+      - ai/training/promote.py
+      - schemas/events/model-provenance-v1.schema.json
+    verified_by: test_soc_ai.py::test_ai02_model_provenance_is_bound_to_serving
+    severity: high
+    verified_by_path_b: path_b_audit.py::test_ai02
+    implemented_by_path_b:
+      - ai/models/isolation_forest.py
+      - ai/training/promote.py
+      - schemas/events/model-provenance-v1.schema.json
+  - id: AI-03
+    framework:
+      - NIST-AI-RMF-MEASURE
+      - NIST-800-53r5-SI-10
+    ref: inference input contract
+    objective: Inference rejects mismatched or unknown feature schemas with no score and no automatic mapping.
+    implemented_by:
+      - ai/api/main.py
+      - ai/features/contracts.py
+    verified_by: test_soc_ai.py::test_ai03_schema_mismatch_is_rejected
+    severity: moderate
+    verified_by_path_b: path_b_audit.py::test_ai03
+    implemented_by_path_b:
+      - ai/api/main.py
+      - ai/features/contracts.py
+  - id: AI-04
+    framework:
+      - NIST-AI-RMF-MEASURE
+    ref: detector evaluation protocol
+    objective: Static, Isolation Forest, LSTM and hybrid detectors are compared on temporal splits with non-accuracy metrics.
+    implemented_by:
+      - ai/evaluation/compare.py
+      - ai/evaluation/benchmark.py
+      - ai/training/promote.py
+    verified_by: test_soc_ai.py::test_ai04_five_detector_comparison_is_carried
+    severity: moderate
+    verified_by_path_b: path_b_audit.py::test_ai04
+    implemented_by_path_b:
+      - ai/evaluation/compare.py
+      - ai/evaluation/benchmark.py
+      - ai/training/promote.py
+  - id: COR-01
+    framework:
+      - NIST-800-53r5-SI-4
+      - NIST-AI-RMF-MANAGE
+    ref: corroboration before containment
+    objective: A score alone cannot authorize containment; automatic eligibility requires an independent corroborating signal.
+    implemented_by:
+      - response/decision.py
+      - response/service/decision_runner.py
+    verified_by: test_soc_ai.py::test_cor01_anomaly_alone_never_requests_containment
+    severity: high
+    verified_by_path_b: path_b_audit.py::test_cor01
+    implemented_by_path_b:
+      - response/decision.py
+      - response/service/decision_runner.py
+  - id: RESP-01
+    framework:
+      - NIST-800-53r5-IR-4
+      - NIST-800-53r5-SC-7
+    ref: scoped firewall containment
+    objective: >-
+      The orchestrator adds a target to the scoped SOC_BLOCKLIST on every firewall peer,
+      independently verifies it, and audits REQUESTED, APPLIED and VERIFIED.
+    implemented_by:
+      - response/orchestrator/engine.py
+      - response/transports/nftables.py
+      - docker/enforcer/nft_enforcer.py
+      - clab/configs/fw-core.nft
+    verified_by: test_soc_ai.py::test_resp01_firewall_containment_is_applied_and_verified
+    severity: high
+    verified_by_path_b: path_b_audit.py::test_resp01
+    implemented_by_path_b:
+      - response/orchestrator/engine.py
+      - response/transports/vyos.py
+      - ansible/roles/vyos_response_api
+      - terraform/vyos-fabric/configs/fw-core.boot
+  - id: RESP-02
+    framework:
+      - NIST-800-53r5-IR-4
+    ref: endpoint isolation
+    objective: Endpoint containment invokes only the allowlisted Wazuh Active Response action and the endpoint is restored after the TTL.
+    applicable_profiles:
+      - path-b
+    severity: high
+    verified_by_path_b: path_b_audit.py::test_resp02
+    implemented_by_path_b:
+      - response/adapters/wazuh.py
+      - response/transports/wazuh_api.py
+      - docker/wazuh/active-response/cxyz_endpoint_isolation.py
+      - ansible/roles/wazuh_agent
+  - id: RESP-03
+    framework:
+      - NIST-800-53r5-IR-4
+      - NIST-800-53r5-AU-9
+    ref: containment safeguards
+    objective: Protected targets are never blocked, eligible targets recover after the TTL, the rate limit holds, and the audit trail is append-only.
+    implemented_by:
+      - response/policy.py
+      - response/policies/default.yaml
+      - response/orchestrator/engine.py
+    verified_by: test_soc_ai.py::test_resp03_safeguards_ttl_rate_limit_and_audit
+    severity: high
+    verified_by_path_b: path_b_audit.py::test_resp03
+    implemented_by_path_b:
+      - response/policy.py
+      - response/policies/default.yaml
+      - response/orchestrator/engine.py
+  - id: SOC-01
+    framework:
+      - NIST-800-53r5-AU-6
+      - NIST-800-53r5-SI-4
+    ref: analyst dashboards
+    objective: SOC, network/NIDS, AI and response dashboards show a controlled attack trace using only non-secret data views.
+    implemented_by:
+      - soc/kibana/saved-objects/soc-overview.ndjson
+    verified_by: test_soc_ai.py::test_soc01_dashboards_show_the_attack_trace
+    severity: moderate
+    verified_by_path_b: path_b_audit.py::test_soc01
+    implemented_by_path_b:
+      - soc/kibana/saved-objects/soc-overview.ndjson
+  - id: SOC-02
+    framework:
+      - NIST-800-53r5-IR-5
+    ref: detection and containment timing
+    objective: MTTD and containment time are derived from stored, causally ordered event and response records of one controlled scenario.
+    implemented_by:
+      - response/service/runner.py
+      - soc/elasticsearch/templates/soc-response-v1.json
+    verified_by: test_soc_ai.py::test_soc02_timing_is_derived_from_immutable_records
+    severity: moderate
+    verified_by_path_b: path_b_audit.py::test_soc02
+    implemented_by_path_b:
+      - response/service/runner.py
+      - soc/elasticsearch/templates/soc-response-v1.json
+  - id: SOC-03
+    framework:
+      - NIST-800-53r5-AU-10
+      - NIST-800-53r5-AU-12
+    ref: response audit chain
+    objective: One queryable chain links source alert, anomaly, policy decision, action, verification and expiry.
+    implemented_by:
+      - response/orchestrator/audit.py
+      - response/schemas/response-audit-event-v1.schema.json
+    verified_by: test_soc_ai.py::test_soc03_audit_chain_links_alert_to_rollback
+    severity: high
+    verified_by_path_b: path_b_audit.py::test_soc03
+    implemented_by_path_b:
+      - response/orchestrator/audit.py
+      - response/schemas/response-audit-event-v1.schema.json
+
+planned_controls:
+  - id: RESP-04
+    status: planned
+    objective: OPNsense HA containment remains effective across CARP failover through explicit A/B apply and verify.
+    evidence_required: Block survives forced failover and expires on both peers.
+    blocker: Needs a real OPNsense HA pair (CARP). The lab fabric is nftables (Path A) and VyOS (Path B); the OPNsense backend is contract-tested only.

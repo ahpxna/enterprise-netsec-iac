@@ -24,6 +24,9 @@ firewall {
         syn-cookies enable
     }
     group {
+        /* SOC containment set. The response orchestrator adds/removes ONE address at a time via the
+         * VyOS API; 192.0.2.1 (TEST-NET-1, never routed) keeps the group non-empty so it always commits. */
+        address-group SOC_BLOCKLIST { address 192.0.2.1 }
         network-group MGMT_VLAN { network 192.168.40.0/24 }
         network-group USER_VLANS {
             network 192.168.10.0/24
@@ -35,6 +38,20 @@ firewall {
         network-group INFRA_NET { network 10.255.0.0/16 }
     }
     ipv4 {
+        prerouting {
+            raw {
+                rule 10 {
+                    action drop
+                    description "SOC containment: blocked source (pre-conntrack, also cuts established flows)"
+                    source { group { address-group SOC_BLOCKLIST } }
+                }
+                rule 11 {
+                    action drop
+                    description "SOC containment: blocked destination (pre-conntrack)"
+                    destination { group { address-group SOC_BLOCKLIST } }
+                }
+            }
+        }
         forward {
             filter {
                 default-action drop
@@ -67,6 +84,14 @@ firewall {
                     source { group { network-group USER_VLANS } }
                     destination { group { network-group DC_NET }; port 53,123 }
                     protocol udp
+                }
+                rule 35 {
+                    action accept
+                    description "Wazuh agent telemetry and enrollment from campus workstations"
+                    inbound-interface { name eth1 }
+                    source { group { network-group CLIENT_VLANS } }
+                    destination { address 172.16.50.10; port 1514,1515 }
+                    protocol tcp
                 }
                 rule 40 {
                     action accept
@@ -131,6 +156,14 @@ firewall {
                     description "Management ICMP diagnostics"
                     inbound-interface { name eth3 }
                     protocol icmp
+                }
+                rule 40 {
+                    action accept
+                    description "SOC response HTTPS API from the trusted libvirt host (NAT of the orchestrator)"
+                    inbound-interface { name eth3 }
+                    source { address 10.1.1.1/32 }
+                    destination { port 443 }
+                    protocol tcp
                 }
             }
         }

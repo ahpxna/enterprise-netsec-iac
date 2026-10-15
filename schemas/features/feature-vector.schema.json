@@ -1,0 +1,11 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://companyxyz.test/schemas/features/feature-vector.schema.json",
+  "title": "CompanyXYZ feature-vector contract entrypoint",
+  "description": "Compatibility entrypoint only. A vector must conform to exactly one closed, versioned feature schema; callers must never mix network and endpoint feature semantics.",
+  "type": "object",
+  "oneOf": [
+    {"$ref": "network-window-v1.schema.json"},
+    {"$ref": "endpoint-window-v1.schema.json"}
+  ]
+}

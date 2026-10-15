@@ -1,0 +1,278 @@
+# SOC AI and response planes on Kubernetes (Path C). One Deployment per service, each with
+# its own Secret and PVC; none shares credentials with another. The cxyz/soc-python image
+# must be present on the nodes (`make k8s-soc-image`). The model registry PVC is populated
+# by `make k8s-soc-model` with an APPROVED registry; the matching metadata digest is
+# supplied in the cxyz-soc-ai-settings ConfigMap (rendered from .env), independently of
+# the PVC contents. Both response services default to observe mode.
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata: { name: soc-model-registry, namespace: cxyz-security }
+spec:
+  accessModes: ["ReadWriteOnce"]
+  resources: { requests: { storage: 1Gi } }
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata: { name: soc-state-feature, namespace: cxyz-security }
+spec:
+  accessModes: ["ReadWriteOnce"]
+  resources: { requests: { storage: 1Gi } }
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata: { name: soc-state-enrichment, namespace: cxyz-security }
+spec:
+  accessModes: ["ReadWriteOnce"]
+  resources: { requests: { storage: 2Gi } }
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata: { name: soc-state-decision, namespace: cxyz-security }
+spec:
+  accessModes: ["ReadWriteOnce"]
+  resources: { requests: { storage: 1Gi } }
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata: { name: soc-state-response, namespace: cxyz-security }
+spec:
+  accessModes: ["ReadWriteOnce"]
+  resources: { requests: { storage: 1Gi } }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: soc-ai-api, namespace: cxyz-security }
+spec:
+  replicas: 1
+  strategy: { type: Recreate }  # SQLite state has exactly one owner
+  selector: { matchLabels: { app: soc-ai-api } }
+  template:
+    metadata: { labels: { app: soc-ai-api } }
+    spec:
+      automountServiceAccountToken: false
+      securityContext: { fsGroup: 10001 }
+      containers:
+        - name: soc-ai-api
+          image: cxyz/soc-python:local
+          imagePullPolicy: IfNotPresent
+          command: ["python", "-m", "ai.api.serve"]
+          securityContext: { allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, runAsNonRoot: true, runAsUser: 10001, capabilities: { drop: ["ALL"] }, seccompProfile: { type: RuntimeDefault } }
+          env:
+            - { name: SOC_AI_MODEL_DIR, value: /models/active }
+            - { name: SOC_AI_BIND, value: container-address }
+            - { name: SOC_AI_SERVER_CERT, value: /run/soc/tls.crt }
+            - { name: SOC_AI_SERVER_KEY, value: /run/soc/tls.key }
+            - { name: SOC_AI_CLIENT_CA, value: /run/soc/client-ca.crt }
+            - { name: SOC_AI_METADATA_SHA256, valueFrom: { configMapKeyRef: { name: cxyz-soc-ai-settings, key: SOC_AI_METADATA_SHA256 } } }
+          ports: [{ containerPort: 8443 }]
+          startupProbe:
+            tcpSocket: { port: 8443 }
+            periodSeconds: 10
+            failureThreshold: 30
+          readinessProbe:
+            tcpSocket: { port: 8443 }
+            periodSeconds: 10
+            failureThreshold: 6
+          livenessProbe:
+            tcpSocket: { port: 8443 }
+            periodSeconds: 20
+            failureThreshold: 6
+          volumeMounts:
+            - { name: tmp, mountPath: /tmp }
+            - { name: credentials, mountPath: /run/soc, readOnly: true }
+            - { name: models, mountPath: /models/active, readOnly: true }
+          resources:
+            requests: { cpu: "100m", memory: "256Mi" }
+            limits: { cpu: "1", memory: "1Gi" }
+      volumes:
+        - { name: tmp, emptyDir: { medium: Memory, sizeLimit: 16Mi } }
+        - { name: credentials, secret: { secretName: cxyz-soc-ai-api, defaultMode: 0440 } }
+        - { name: models, persistentVolumeClaim: { claimName: soc-model-registry, readOnly: true } }
+---
+apiVersion: v1
+kind: Service
+metadata: { name: soc-ai-api, namespace: cxyz-security }
+spec:
+  selector: { app: soc-ai-api }
+  ports: [{ port: 8443, targetPort: 8443 }]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: soc-feature-worker, namespace: cxyz-security }
+spec:
+  replicas: 1
+  strategy: { type: Recreate }  # SQLite state has exactly one owner
+  selector: { matchLabels: { app: soc-feature-worker } }
+  template:
+    metadata: { labels: { app: soc-feature-worker } }
+    spec:
+      automountServiceAccountToken: false
+      securityContext: { fsGroup: 10001 }
+      containers:
+        - name: soc-feature-worker
+          image: cxyz/soc-python:local
+          imagePullPolicy: IfNotPresent
+          command: ["python", "-m", "soc.workers.features", "--state", "/var/lib/soc/features/state.sqlite", "run", "--loop", "--interval", "60"]
+          securityContext: { allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, runAsNonRoot: true, runAsUser: 10001, capabilities: { drop: ["ALL"] }, seccompProfile: { type: RuntimeDefault } }
+          env:
+            - { name: SOC_ES_URL, value: "https://elasticsearch:9200" }
+            - { name: SOC_ES_CA, value: /run/soc/ca.crt }
+            - { name: SOC_ES_API_KEY_FILE, value: /run/soc/es.cred }
+            - { name: SOC_GIT_SHA, valueFrom: { configMapKeyRef: { name: cxyz-soc-ai-settings, key: SOC_GIT_SHA } } }
+          volumeMounts:
+            - { name: tmp, mountPath: /tmp }
+            - { name: credentials, mountPath: /run/soc, readOnly: true }
+            - { name: state, mountPath: /var/lib/soc }
+          resources:
+            requests: { cpu: "100m", memory: "256Mi" }
+            limits: { cpu: "1", memory: "1Gi" }
+      volumes:
+        - { name: tmp, emptyDir: { medium: Memory, sizeLimit: 16Mi } }
+        - { name: credentials, secret: { secretName: cxyz-soc-feature, defaultMode: 0440 } }
+        - { name: state, persistentVolumeClaim: { claimName: soc-state-feature } }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: soc-enrichment-worker, namespace: cxyz-security }
+spec:
+  replicas: 1
+  strategy: { type: Recreate }  # SQLite state has exactly one owner
+  selector: { matchLabels: { app: soc-enrichment-worker } }
+  template:
+    metadata: { labels: { app: soc-enrichment-worker } }
+    spec:
+      automountServiceAccountToken: false
+      securityContext: { fsGroup: 10001 }
+      containers:
+        - name: soc-enrichment-worker
+          image: cxyz/soc-python:local
+          imagePullPolicy: IfNotPresent
+          command: ["python", "-m", "soc.workers.enrichment", "--outbox", "/var/lib/soc/enrichment/outbox.sqlite", "serve", "--interval", "30"]
+          securityContext: { allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, runAsNonRoot: true, runAsUser: 10001, capabilities: { drop: ["ALL"] }, seccompProfile: { type: RuntimeDefault } }
+          env:
+            - { name: SOC_ES_URL, value: "https://elasticsearch:9200" }
+            - { name: SOC_ES_CA, value: /run/soc/ca.crt }
+            - { name: SOC_ES_API_KEY_FILE, value: /run/soc/es.cred }
+            - { name: SOC_AI_URL, value: "https://soc-ai-api:8443" }
+            - { name: SOC_AI_CA, value: /run/soc/ca.crt }
+            - { name: SOC_AI_CLIENT_CERT, value: /run/soc/client.crt }
+            - { name: SOC_AI_CLIENT_KEY, value: /run/soc/client.key }
+            - { name: SOC_AI_METADATA_SHA256, valueFrom: { configMapKeyRef: { name: cxyz-soc-ai-settings, key: SOC_AI_METADATA_SHA256 } } }
+          volumeMounts:
+            - { name: tmp, mountPath: /tmp }
+            - { name: credentials, mountPath: /run/soc, readOnly: true }
+            - { name: state, mountPath: /var/lib/soc }
+          resources:
+            requests: { cpu: "100m", memory: "256Mi" }
+            limits: { cpu: "1", memory: "1Gi" }
+      volumes:
+        - { name: tmp, emptyDir: { medium: Memory, sizeLimit: 16Mi } }
+        - { name: credentials, secret: { secretName: cxyz-soc-enrichment, defaultMode: 0440 } }
+        - { name: state, persistentVolumeClaim: { claimName: soc-state-enrichment } }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: soc-decision, namespace: cxyz-security }
+spec:
+  replicas: 1
+  strategy: { type: Recreate }  # SQLite state has exactly one owner
+  selector: { matchLabels: { app: soc-decision } }
+  template:
+    metadata: { labels: { app: soc-decision } }
+    spec:
+      automountServiceAccountToken: false
+      securityContext: { fsGroup: 10001 }
+      containers:
+        - name: soc-decision
+          image: cxyz/soc-python:local
+          imagePullPolicy: IfNotPresent
+          command: ["python", "-m", "response.service", "decision", "--config", "/etc/soc/decision.yaml"]
+          securityContext: { allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, runAsNonRoot: true, runAsUser: 10001, capabilities: { drop: ["ALL"] }, seccompProfile: { type: RuntimeDefault } }
+          volumeMounts:
+            - { name: tmp, mountPath: /tmp }
+            - { name: credentials, mountPath: /run/soc, readOnly: true }
+            - { name: state, mountPath: /var/lib/soc }
+            - { name: config, mountPath: /etc/soc/decision.yaml, subPath: decision.yaml, readOnly: true }
+            - { name: config, mountPath: /etc/soc/policy.yaml, subPath: policy.yaml, readOnly: true }
+          resources:
+            requests: { cpu: "100m", memory: "256Mi" }
+            limits: { cpu: "1", memory: "1Gi" }
+      volumes:
+        - { name: tmp, emptyDir: { medium: Memory, sizeLimit: 16Mi } }
+        - { name: credentials, secret: { secretName: cxyz-soc-decision, defaultMode: 0440 } }
+        - { name: state, persistentVolumeClaim: { claimName: soc-state-decision } }
+        - name: config
+          projected:
+            sources:
+              - configMap: { name: cxyz-soc-response-config, items: [{ key: decision.yaml, path: decision.yaml }] }
+              - configMap: { name: cxyz-soc-response-config, items: [{ key: policy.yaml, path: policy.yaml }] }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: soc-response, namespace: cxyz-security }
+spec:
+  replicas: 1
+  strategy: { type: Recreate }  # SQLite state has exactly one owner
+  selector: { matchLabels: { app: soc-response } }
+  template:
+    metadata: { labels: { app: soc-response } }
+    spec:
+      automountServiceAccountToken: false
+      securityContext: { fsGroup: 10001 }
+      containers:
+        - name: soc-response
+          image: cxyz/soc-python:local
+          imagePullPolicy: IfNotPresent
+          command: ["python", "-m", "response.service", "orchestrator", "--config", "/etc/soc/response.yaml"]
+          securityContext: { allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, runAsNonRoot: true, runAsUser: 10001, capabilities: { drop: ["ALL"] }, seccompProfile: { type: RuntimeDefault } }
+          ports: [{ containerPort: 8443 }]
+          startupProbe:
+            tcpSocket: { port: 8443 }
+            periodSeconds: 10
+            failureThreshold: 30
+          readinessProbe:
+            tcpSocket: { port: 8443 }
+            periodSeconds: 10
+            failureThreshold: 6
+          livenessProbe:
+            tcpSocket: { port: 8443 }
+            periodSeconds: 20
+            failureThreshold: 6
+          volumeMounts:
+            - { name: tmp, mountPath: /tmp }
+            - { name: credentials, mountPath: /run/soc, readOnly: true }
+            - { name: state, mountPath: /var/lib/soc }
+            - { name: config, mountPath: /etc/soc/response.yaml, subPath: response.yaml, readOnly: true }
+            - { name: config, mountPath: /etc/soc/policy.yaml, subPath: policy.yaml, readOnly: true }
+          resources:
+            requests: { cpu: "100m", memory: "256Mi" }
+            limits: { cpu: "1", memory: "1Gi" }
+      volumes:
+        - { name: tmp, emptyDir: { medium: Memory, sizeLimit: 16Mi } }
+        - name: credentials
+          secret:
+            secretName: cxyz-soc-response
+            defaultMode: 0440
+            items:
+              - { key: ca.crt, path: ca.crt }
+              - { key: tls.crt, path: tls.crt }
+              - { key: tls.key, path: tls.key }
+              - { key: client.crt, path: client.crt }
+              - { key: client.key, path: client.key }
+              - { key: decision-ca.crt, path: decision-ca.crt }
+              - { key: es.cred, path: es.cred }
+              - { key: decision-key-1.pub, path: keys/decision-key-1.pub }
+        - { name: state, persistentVolumeClaim: { claimName: soc-state-response } }
+        - name: config
+          projected:
+            sources:
+              - configMap: { name: cxyz-soc-response-config, items: [{ key: response.yaml, path: response.yaml }] }
+              - configMap: { name: cxyz-soc-response-config, items: [{ key: policy.yaml, path: policy.yaml }] }
+---
+apiVersion: v1
+kind: Service
+metadata: { name: soc-response, namespace: cxyz-security }
+spec:
+  selector: { app: soc-response }
+  ports: [{ port: 8443, targetPort: 8443 }]

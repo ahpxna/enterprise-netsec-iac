@@ -1,0 +1,29 @@
+{
+  "cluster": [],
+  "indices": [
+    {
+      "names": [
+        "soc-network-*",
+        "soc-endpoint-*",
+        "soc-auth-*",
+        "soc-alerts-*",
+        "soc-ai-*"
+      ],
+      "privileges": [
+        "read",
+        "view_index_metadata"
+      ]
+    },
+    {
+      "names": [
+        "soc-response-*"
+      ],
+      "privileges": [
+        "auto_configure",
+        "create_index",
+        "create_doc",
+        "view_index_metadata"
+      ]
+    }
+  ]
+}

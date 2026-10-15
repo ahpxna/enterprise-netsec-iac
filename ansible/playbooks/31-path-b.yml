@@ -12,6 +12,13 @@
       when: inventory_hostname not in ['isp1', 'isp2']
       tags: [logging, siem]
 
+- name: Enable the constrained SOC response API on the Path B firewalls
+  hosts: vyos_firewalls
+  gather_facts: false
+  roles:
+    - role: vyos_response_api
+      tags: [response, siem]
+
 - name: Harden Path B Linux endpoints
   hosts: linux_nodes
   gather_facts: true
@@ -54,6 +61,13 @@
       tags: [time]
     - role: syslog_tls
       tags: [logging]
+
+- name: Enroll Path B workstations in Wazuh with the SOC isolation Active Response
+  hosts: clients
+  gather_facts: true
+  roles:
+    - role: wazuh_agent
+      tags: [response, siem]
 
 - name: Configure the real Path B DMZ endpoint
   hosts: dmz_hosts

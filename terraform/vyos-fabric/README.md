@@ -97,7 +97,22 @@ make vm-audit
   `mode = "none"` creates addressless isolated Layer-2 networks. This avoids
   DHCP validation and prevents the host bridge from consuming either VyOS
   endpoint address. Inspect the plan via `terraform output data_plane_link_plan`.
-- `make vm-audit` now contains a Path-B-specific 13-control live audit,
+- `make vm-audit` now contains a Path-B-specific live audit (the 13 network controls plus the
+  14 SOC controls, which temporarily enable lab enforcement),
   including a real libvirt suspend/resume VRRP failover measurement. It does
   **not** reuse the Containerlab `docker exec` validation backend. These checks
   remain UNVERIFIED until they pass on the actual KVM/libvirt host.
+
+## SOC response API (containment on VyOS)
+
+`ansible/roles/vyos_response_api` enables the VyOS HTTPS API on `fw-core` and `fw-dmz` for **one** purpose: adding and
+removing a single address in the `SOC_BLOCKLIST` address-group that the generated boot configs already reference in
+early drop rules (`SOC containment: blocked source`). The listener binds the out-of-band management address, uses a
+leaf certificate signed by the SOC CA (SAN = management IP), and authenticates with `VYOS_API_KEY` from the ignored
+`.env`; the boot configs themselves never embed the API.
+
+Known limits: the orchestrator never saves the running config, so a firewall reboot clears active containment (safe,
+not persistent); `vyos_edge` Day-2 refuses to run while a containment entry exists, because `save` would make it
+permanent; VyOS address-groups have no per-element timeout, so expiry rests on the orchestrator's TTL sweep (unlike the
+nftables backstop); the API contract against a real VyOS 1.4 image is **unverified** until `make vm-audit` has run.
+Endpoint containment on this path isolates `pc1` only (`allowed_isolation_hosts`), through the `wazuh_agent` role.

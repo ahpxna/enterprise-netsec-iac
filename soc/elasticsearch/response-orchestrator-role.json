@@ -1,0 +1,17 @@
+{
+  "cluster": [],
+  "indices": [
+    {
+      "names": [
+        "soc-response-*"
+      ],
+      "privileges": [
+        "auto_configure",
+        "create_index",
+        "create_doc",
+        "read",
+        "view_index_metadata"
+      ]
+    }
+  ]
+}

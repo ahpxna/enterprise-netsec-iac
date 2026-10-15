@@ -1,13 +1,94 @@
 ---
-# Point each network device's logging at the SIEM collector.
-- name: Configure remote syslog target on the device (via rsyslog if present)
-  ansible.builtin.copy:
-    dest: /etc/rsyslog.d/70-cxyz-siem.conf
-    mode: "0644"
-    content: |
-      *.* @@172.16.50.10:1514
-  failed_when: false
-  notify: restart rsyslog
+# Enrolls a Linux workstation with the authenticated Wazuh agent channel and installs
+# the two fixed CompanyXYZ isolation Active Responses. The agent reports FIM events for
+# the isolation marker directory, which is the read-only proof the orchestrator uses.
+- name: Fail closed without enrollment material
+  ansible.builtin.assert:
+    that:
+      - wazuh_agent_registration_password | length >= 32
+      - not wazuh_agent_registration_password.startswith('CHANGE_ME')
+    fail_msg: "Run make secrets first: WAZUH_REGISTRATION_PASSWORD is missing or weak."
+  no_log: true
 
-- name: (handler defined in syslog_tls) reload logging
-  ansible.builtin.meta: noop
+- name: Install prerequisites for the Wazuh package repository
+  ansible.builtin.package:
+    name: [gnupg, apt-transport-https, nftables]
+    state: present
+
+- name: Download the Wazuh signing key
+  ansible.builtin.get_url:
+    url: "{{ wazuh_agent_repo_key_url }}"
+    dest: /usr/share/keyrings/wazuh.asc
+    mode: "0644"
+
+- name: Verify the signing key fingerprint
+  ansible.builtin.command: gpg --show-keys --with-colons /usr/share/keyrings/wazuh.asc
+  register: wazuh_agent_key_info
+  changed_when: false
+  failed_when: wazuh_agent_gpg_fingerprint not in wazuh_agent_key_info.stdout
+
+- name: Configure the Wazuh apt repository
+  ansible.builtin.copy:
+    dest: /etc/apt/sources.list.d/wazuh.list
+    mode: "0644"
+    content: "deb [signed-by=/usr/share/keyrings/wazuh.asc] https://packages.wazuh.com/4.x/apt/ stable main\n"
+  notify: refresh apt cache
+
+- name: Refresh the package index now if the repository changed (the agent install below needs it)
+  ansible.builtin.meta: flush_handlers
+
+- name: Install the pinned Wazuh agent, enrolled by name with the registration password
+  ansible.builtin.apt:
+    name: "wazuh-agent={{ wazuh_agent_version }}-1"
+    state: present
+    allow_downgrade: false
+  environment:
+    WAZUH_MANAGER: "{{ wazuh_agent_manager }}"
+    WAZUH_AGENT_NAME: "{{ inventory_hostname }}"
+    WAZUH_REGISTRATION_PASSWORD: "{{ wazuh_agent_registration_password }}"
+  no_log: true
+
+- name: Hold the agent at the reviewed version
+  ansible.builtin.dpkg_selections:
+    name: wazuh-agent
+    selection: hold
+
+- name: Create the isolation marker directory
+  ansible.builtin.file:
+    path: /var/ossec/var/cxyz-isolation
+    state: directory
+    owner: root
+    group: wazuh
+    mode: "0700"
+
+- name: Watch the isolation marker directory with real-time FIM
+  ansible.builtin.lineinfile:
+    path: /var/ossec/etc/ossec.conf
+    insertbefore: '^\s*</syscheck>'
+    line: '    <directories realtime="yes" check_all="yes">/var/ossec/var/cxyz-isolation</directories>'
+    firstmatch: true
+    regexp: 'cxyz-isolation</directories>'
+  notify: restart wazuh-agent
+
+- name: Install the two fixed isolation Active Response scripts
+  ansible.builtin.copy:
+    src: "{{ wazuh_agent_repo_root }}/docker/wazuh/active-response/cxyz_endpoint_isolation.py"
+    dest: "/var/ossec/active-response/bin/{{ item }}"
+    owner: root
+    group: wazuh
+    mode: "0750"
+  loop: [cxyz-isolate-endpoint, cxyz-restore-endpoint]
+
+- name: Declare which addresses stay reachable during isolation
+  ansible.builtin.template:
+    src: cxyz-isolation.json.j2
+    dest: /var/ossec/etc/cxyz-isolation.json
+    owner: root
+    group: wazuh
+    mode: "0640"
+
+- name: Enable and start the agent
+  ansible.builtin.service:
+    name: wazuh-agent
+    state: started
+    enabled: true

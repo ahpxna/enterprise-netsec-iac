@@ -1,0 +1,10 @@
+# Pinned runtime dependencies for the source-only SOC AI plane. A future
+# container image must lock this file's digest in model provenance.
+fastapi==0.115.12
+uvicorn==0.34.2
+scikit-learn==1.6.1
+numpy==2.2.6
+joblib==1.5.1
+jsonschema==4.24.0
+PyYAML==6.0.3
+cryptography==50.0.2

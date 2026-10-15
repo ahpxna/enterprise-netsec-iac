@@ -44,6 +44,13 @@ docs/*
 !docs/PKI-ROTATION.md
 !docs/IMAGE-SUPPLY-CHAIN.md
 !docs/SECURITY-IMPLEMENTATION-LEDGER.md
+!docs/NETSEC-BASELINE.md
+!docs/SOC-AI-ARCHITECTURE.md
+!docs/LINUX-QUICKSTART.md
+!docs/adr/
+docs/adr/*
+!docs/adr/0006-soc-ai-closed-loop-architecture.md
+!docs/adr/0007-soc-ai-runtime-and-live-validation.md
 
 # ---- Python / tooling ----
 __pycache__/
@@ -57,7 +64,25 @@ terraform/vyos-fabric/bootstrap.auto.tfvars.json
 terraform/vyos-fabric/routing.auto.tfvars.json
 terraform/vyos-fabric/runtime-configs/
 .cxyz-state/
+# one-command runner logs and reports
+logs/
 wireguard/probe/
 docker/zero-trust-gateway/certs/
+soc/certs/
+soc/runtime/
+# Dataset manifests and model provenance are source; raw telemetry, derived
+# datasets, and binary model artifacts are operator/research outputs.
+datasets/raw/
+datasets/processed/
+datasets/replays/
+ai/registry/artifacts/
+ai/registry/*.joblib
+ai/registry/*.pkl
+ai/registry/*.onnx
+ai/registry/*.pt
+ai/registry/**/*.joblib
+ai/registry/**/*.pkl
+ai/registry/**/*.onnx
+ai/registry/**/*.pt
 k8s/runtime-secrets.yaml
 k8s/runtime-config.yaml

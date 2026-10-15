@@ -1,0 +1,91 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://companyxyz.test/schemas/events/anomaly-event-v1.schema.json",
+  "title": "CompanyXYZ AI anomaly event v1",
+  "description": "A newly-created scored event. It references a feature vector and never mutates or replaces a raw telemetry document.",
+  "type": "object",
+  "required": ["@timestamp", "schema_version", "event", "observer", "feature_vector", "ai"],
+  "properties": {
+    "@timestamp": {"type": "string", "format": "date-time"},
+    "schema_version": {"const": "anomaly-event-v1"},
+    "event": {
+      "type": "object",
+      "required": ["id", "kind", "category", "dataset"],
+      "properties": {
+        "id": {"type": "string", "minLength": 1},
+        "kind": {"const": "event"},
+        "category": {
+          "type": "array",
+          "minItems": 1,
+          "contains": {"const": "anomaly_detection"}
+        },
+        "dataset": {"const": "soc.ai.anomaly"}
+      },
+      "additionalProperties": false
+    },
+    "observer": {
+      "type": "object",
+      "required": ["name", "type"],
+      "properties": {
+        "name": {"type": "string", "minLength": 1},
+        "type": {"const": "ai_inference"}
+      },
+      "additionalProperties": false
+    },
+    "feature_vector": {
+      "type": "object",
+      "required": [
+        "id",
+        "feature_schema",
+        "feature_schema_sha256",
+        "entity_type",
+        "entity",
+        "window_start",
+        "window_end",
+        "source_event_set_sha256"
+      ],
+      "properties": {
+        "id": {"type": "string", "minLength": 1},
+        "feature_schema": {"enum": ["network-window-v1", "endpoint-window-v1"]},
+        "feature_schema_sha256": {"$ref": "#/$defs/sha256"},
+        "entity_type": {"enum": ["src_ip", "host"]},
+        "entity": {"type": "string", "minLength": 1},
+        "window_start": {"type": "string", "format": "date-time"},
+        "window_end": {"type": "string", "format": "date-time"},
+        "source_event_set_sha256": {"$ref": "#/$defs/sha256"}
+      },
+      "additionalProperties": false
+    },
+    "ai": {
+      "type": "object",
+      "required": [
+        "model_id",
+        "algorithm",
+        "model_sha256",
+        "model_metadata_sha256",
+        "score",
+        "threshold",
+        "is_anomaly",
+        "inference_ms"
+      ],
+      "properties": {
+        "model_id": {"type": "string", "minLength": 1},
+        "algorithm": {"enum": ["IsolationForest", "LSTMAutoencoder"]},
+        "model_sha256": {"$ref": "#/$defs/sha256"},
+        "model_metadata_sha256": {"$ref": "#/$defs/sha256"},
+        "score": {"type": "number", "minimum": 0, "maximum": 1},
+        "threshold": {"type": "number", "minimum": 0, "maximum": 1},
+        "is_anomaly": {"type": "boolean"},
+        "inference_ms": {"type": "number", "minimum": 0}
+      },
+      "additionalProperties": false
+    }
+  },
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^[A-Fa-f0-9]{64}$"
+    }
+  },
+  "additionalProperties": false
+}

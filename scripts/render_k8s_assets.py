@@ -28,6 +28,29 @@ MAPPINGS = {
 }
 
 
+def _tree(source_dir: str, pattern: str, dest_dir: str) -> dict[pathlib.Path, pathlib.Path]:
+    return {
+        path: ROOT / "k8s/generated" / dest_dir / path.name
+        for path in sorted((ROOT / source_dir).glob(pattern))
+    }
+
+
+# SOC analytics/AI/response assets mirrored byte-for-byte for Kustomize.
+MAPPINGS.update(_tree("soc/logstash/pipelines", "*.conf", "soc/logstash/pipelines"))
+MAPPINGS.update(_tree("soc/logstash/config", "*.yml", "soc/logstash/config"))
+MAPPINGS.update(_tree("soc/elasticsearch", "*.json", "soc/elasticsearch/roles"))
+MAPPINGS.update(_tree("soc/elasticsearch/ilm", "*.json", "soc/elasticsearch/ilm"))
+MAPPINGS.update(_tree("soc/elasticsearch/templates", "*.json", "soc/elasticsearch/templates"))
+MAPPINGS[ROOT / "soc/elasticsearch/bootstrap-elastic.sh"] = ROOT / "k8s/generated/soc/elasticsearch/scripts/bootstrap-elastic.sh"
+MAPPINGS[ROOT / "soc/elasticsearch/revoke-kibana-bootstrap.sh"] = ROOT / "k8s/generated/soc/elasticsearch/scripts/revoke-kibana-bootstrap.sh"
+MAPPINGS[ROOT / "soc/kibana/bootstrap-kibana.sh"] = ROOT / "k8s/generated/soc/kibana/bootstrap-kibana.sh"
+MAPPINGS[ROOT / "soc/kibana/saved-objects/soc-overview.ndjson"] = ROOT / "k8s/generated/soc/kibana/soc-overview.ndjson"
+# Path C runs the shipped default policy only; the lab-* overlays are Compose-lab artifacts.
+MAPPINGS[ROOT / "response/policies/default.yaml"] = ROOT / "k8s/generated/soc/response/default.yaml"
+MAPPINGS[ROOT / "response/deployments/path-c/response.yaml"] = ROOT / "k8s/generated/soc/response/response.yaml"
+MAPPINGS[ROOT / "response/deployments/path-c/decision.yaml"] = ROOT / "k8s/generated/soc/response/decision.yaml"
+
+
 def rendered_content(source: pathlib.Path) -> bytes:
     content = source.read_bytes()
     if source.name == "ossec.conf":

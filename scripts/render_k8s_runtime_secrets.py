@@ -61,6 +61,53 @@ def main() -> int:
         if missing:
             raise ValueError(f"runtime secret values are missing/uninitialized: {', '.join(missing)}")
 
+        soc_required = (
+            "ELASTIC_PASSWORD", "KIBANA_SYSTEM_PASSWORD", "KIBANA_BOOTSTRAP_PASSWORD", "LOGSTASH_PASSWORD",
+            "KIBANA_SECURITY_ENCRYPTION_KEY", "KIBANA_SAVED_OBJECTS_ENCRYPTION_KEY",
+            "KIBANA_REPORTING_ENCRYPTION_KEY", "SOC_FEATURE_PASSWORD", "SOC_AI_WRITER_PASSWORD",
+            "SOC_DECISION_PASSWORD", "SOC_RESPONSE_PASSWORD",
+        )
+        soc_missing = [key for key in soc_required if not env.get(key) or env[key].startswith("CHANGE_ME")]
+        if soc_missing:
+            raise ValueError(f"SOC secret values are missing/uninitialized: {', '.join(soc_missing)}")
+        soc = ROOT / "soc/certs"
+
+        def soc_file(name: str) -> str:
+            return b64(soc / name)
+
+        def text(value: str) -> str:
+            return base64.b64encode(value.encode()).decode()
+
+        soc_documents = [
+            secret("cxyz-soc-passwords", {key: text(env[key]) for key in soc_required}),
+            secret("cxyz-soc-ca", {"ca.crt": soc_file("ca.crt")}),
+            secret("cxyz-soc-elasticsearch-tls", {
+                "ca.crt": soc_file("ca.crt"), "elasticsearch.crt": soc_file("elasticsearch.crt"),
+                "elasticsearch.key": soc_file("elasticsearch.key")}),
+            secret("cxyz-soc-kibana-tls", {
+                "ca.crt": soc_file("ca.crt"), "kibana.crt": soc_file("kibana.crt"),
+                "kibana.key": soc_file("kibana.key")}),
+            secret("cxyz-soc-ai-api", {
+                "tls.crt": soc_file("soc-ai-api.crt"), "tls.key": soc_file("soc-ai-api.key"),
+                "client-ca.crt": soc_file("ai-client-ca.crt")}),
+            secret("cxyz-soc-feature", {
+                "ca.crt": soc_file("ca.crt"), "es.cred": text("cxyz_feature:" + env["SOC_FEATURE_PASSWORD"])}),
+            secret("cxyz-soc-enrichment", {
+                "ca.crt": soc_file("ca.crt"), "client.crt": soc_file("soc-enrichment.crt"),
+                "client.key": soc_file("soc-enrichment.key"),
+                "es.cred": text("cxyz_ai_writer:" + env["SOC_AI_WRITER_PASSWORD"])}),
+            secret("cxyz-soc-decision", {
+                "ca.crt": soc_file("ca.crt"), "signing.key": soc_file("decision/decision-key-1.key"),
+                "client.crt": soc_file("soc-decision.crt"), "client.key": soc_file("soc-decision.key"),
+                "es.cred": text("cxyz_decision:" + env["SOC_DECISION_PASSWORD"])}),
+            secret("cxyz-soc-response", {
+                "ca.crt": soc_file("ca.crt"), "tls.crt": soc_file("soc-response.crt"),
+                "tls.key": soc_file("soc-response.key"), "client.crt": soc_file("soc-response.crt"),
+                "client.key": soc_file("soc-response.key"), "decision-ca.crt": soc_file("decision-ca.crt"),
+                "decision-key-1.pub": soc_file("decision/decision-key-1.pub"),
+                "es.cred": text("cxyz_response:" + env["SOC_RESPONSE_PASSWORD"])}),
+        ]
+
         cert_dir = ROOT / "docker/wazuh/certs"
         ztna_dir = ROOT / "docker/zero-trust-gateway/certs"
         docs = [
@@ -103,6 +150,7 @@ def main() -> int:
         print(str(exc), file=sys.stderr)
         return 1
 
+    docs.extend(soc_documents)
     OUT.write_text(yaml.safe_dump_all(docs, sort_keys=False, explicit_start=True))
     OUT.chmod(0o600)
     print(f"rendered ignored Path C runtime secrets: {OUT.relative_to(ROOT)}")

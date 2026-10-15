@@ -15,7 +15,28 @@
     <match>CXYZ-FWCORE-FWD-DROP</match>
     <description>Prohibited internal scan: repeated user->DC drops (DET-01)</description>
     <mitre><id>T1046</id></mitre>
-    <group>attack,recon,</group>
+    <group>attack,recon,  <!-- SOC containment: traffic that matched the SOC_BLOCKLIST set (nftables, Path A). -->
+  <rule id="100206" level="6">
+    <if_sid>100200</if_sid>
+    <match>CXYZ-SOC-BLOCK</match>
+    <description>SOC containment drop: traffic matched the SOC_BLOCKLIST set</description>
+    <group>soc_containment,</group>
+  </rule>
+
+  <!-- Endpoint isolation Active Response outcome lines (agent active-responses.log). -->
+  <rule id="100207" level="8">
+    <match>cxyz-isolation: isolated op=</match>
+    <description>SOC endpoint isolation applied by the Wazuh Active Response</description>
+    <group>soc_containment,</group>
+  </rule>
+
+  <rule id="100208" level="6">
+    <match>cxyz-isolation: restored op=</match>
+    <description>SOC endpoint isolation removed by the Wazuh Active Response</description>
+    <group>soc_containment,</group>
+  </rule>
+
+</group>
   </rule>
 
   <rule id="100202" level="12">
@@ -23,13 +44,55 @@
     <match>CXYZ-FWDMZ-PIVOT-DROP</match>
     <description>DMZ attempting to pivot inward (SEG-02 violation attempt)</description>
     <mitre><id>T1210</id></mitre>
-    <group>attack,lateral_movement,</group>
+    <group>attack,lateral_movement,  <!-- SOC containment: traffic that matched the SOC_BLOCKLIST set (nftables, Path A). -->
+  <rule id="100206" level="6">
+    <if_sid>100200</if_sid>
+    <match>CXYZ-SOC-BLOCK</match>
+    <description>SOC containment drop: traffic matched the SOC_BLOCKLIST set</description>
+    <group>soc_containment,</group>
+  </rule>
+
+  <!-- Endpoint isolation Active Response outcome lines (agent active-responses.log). -->
+  <rule id="100207" level="8">
+    <match>cxyz-isolation: isolated op=</match>
+    <description>SOC endpoint isolation applied by the Wazuh Active Response</description>
+    <group>soc_containment,</group>
+  </rule>
+
+  <rule id="100208" level="6">
+    <match>cxyz-isolation: restored op=</match>
+    <description>SOC endpoint isolation removed by the Wazuh Active Response</description>
+    <group>soc_containment,</group>
+  </rule>
+
+</group>
   </rule>
 
   <rule id="100203" level="3">
     <match>CXYZ-DET02-TLS-MARKER</match>
     <description>Authenticated TLS syslog transport marker received (DET-02)</description>
-    <group>syslog,</group>
+    <group>syslog,  <!-- SOC containment: traffic that matched the SOC_BLOCKLIST set (nftables, Path A). -->
+  <rule id="100206" level="6">
+    <if_sid>100200</if_sid>
+    <match>CXYZ-SOC-BLOCK</match>
+    <description>SOC containment drop: traffic matched the SOC_BLOCKLIST set</description>
+    <group>soc_containment,</group>
+  </rule>
+
+  <!-- Endpoint isolation Active Response outcome lines (agent active-responses.log). -->
+  <rule id="100207" level="8">
+    <match>cxyz-isolation: isolated op=</match>
+    <description>SOC endpoint isolation applied by the Wazuh Active Response</description>
+    <group>soc_containment,</group>
+  </rule>
+
+  <rule id="100208" level="6">
+    <match>cxyz-isolation: restored op=</match>
+    <description>SOC endpoint isolation removed by the Wazuh Active Response</description>
+    <group>soc_containment,</group>
+  </rule>
+
+</group>
   </rule>
   <!-- Path B VyOS uses the native nftables firewall logger rather than the
        custom Path A nft prefix. Correlate the denied validation scan by its
@@ -38,13 +101,76 @@
     <regex>SRC=192\.168\.10\.1 DST=172\.16\.50\.1</regex>
     <description>Path B prohibited user-to-DC scan denied by VyOS fw-core (DET-01)</description>
     <mitre><id>T1046</id></mitre>
-    <group>attack,recon,path_b,</group>
+    <group>attack,recon,path_b,  <!-- SOC containment: traffic that matched the SOC_BLOCKLIST set (nftables, Path A). -->
+  <rule id="100206" level="6">
+    <if_sid>100200</if_sid>
+    <match>CXYZ-SOC-BLOCK</match>
+    <description>SOC containment drop: traffic matched the SOC_BLOCKLIST set</description>
+    <group>soc_containment,</group>
+  </rule>
+
+  <!-- Endpoint isolation Active Response outcome lines (agent active-responses.log). -->
+  <rule id="100207" level="8">
+    <match>cxyz-isolation: isolated op=</match>
+    <description>SOC endpoint isolation applied by the Wazuh Active Response</description>
+    <group>soc_containment,</group>
+  </rule>
+
+  <rule id="100208" level="6">
+    <match>cxyz-isolation: restored op=</match>
+    <description>SOC endpoint isolation removed by the Wazuh Active Response</description>
+    <group>soc_containment,</group>
+  </rule>
+
+</group>
   </rule>
 
   <rule id="100205" level="5">
     <match>CXYZ-K8S-SURICATA-MARKER-</match>
     <description>Path C synthetic Suricata EVE pipeline checkpoint</description>
-    <group>suricata,path_c,smoke,</group>
+    <group>suricata,path_c,smoke,  <!-- SOC containment: traffic that matched the SOC_BLOCKLIST set (nftables, Path A). -->
+  <rule id="100206" level="6">
+    <if_sid>100200</if_sid>
+    <match>CXYZ-SOC-BLOCK</match>
+    <description>SOC containment drop: traffic matched the SOC_BLOCKLIST set</description>
+    <group>soc_containment,</group>
+  </rule>
+
+  <!-- Endpoint isolation Active Response outcome lines (agent active-responses.log). -->
+  <rule id="100207" level="8">
+    <match>cxyz-isolation: isolated op=</match>
+    <description>SOC endpoint isolation applied by the Wazuh Active Response</description>
+    <group>soc_containment,</group>
+  </rule>
+
+  <rule id="100208" level="6">
+    <match>cxyz-isolation: restored op=</match>
+    <description>SOC endpoint isolation removed by the Wazuh Active Response</description>
+    <group>soc_containment,</group>
+  </rule>
+
+</group>
+  </rule>
+
+  <!-- SOC containment: traffic that matched the SOC_BLOCKLIST set (nftables, Path A). -->
+  <rule id="100206" level="6">
+    <if_sid>100200</if_sid>
+    <match>CXYZ-SOC-BLOCK</match>
+    <description>SOC containment drop: traffic matched the SOC_BLOCKLIST set</description>
+    <group>soc_containment,</group>
+  </rule>
+
+  <!-- Endpoint isolation Active Response outcome lines (agent active-responses.log). -->
+  <rule id="100207" level="8">
+    <match>cxyz-isolation: isolated op=</match>
+    <description>SOC endpoint isolation applied by the Wazuh Active Response</description>
+    <group>soc_containment,</group>
+  </rule>
+
+  <rule id="100208" level="6">
+    <match>cxyz-isolation: restored op=</match>
+    <description>SOC endpoint isolation removed by the Wazuh Active Response</description>
+    <group>soc_containment,</group>
   </rule>
 
 </group>

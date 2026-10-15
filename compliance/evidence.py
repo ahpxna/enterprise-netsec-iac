@@ -12,6 +12,22 @@ import yaml
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 
 
+PROFILES = ("path-a", "path-b")
+
+
+def applies_to_profile(control: dict, profile: str) -> bool:
+    """A control may be scoped (``applicable_profiles``) where one path physically lacks its subject.
+
+    Scoping is explicit and closed: unknown profile names are a configuration error, and a
+    scoped-out profile must carry no verifier, so "not applicable" can never hide a failing test.
+    """
+
+    profiles = control.get("applicable_profiles", PROFILES)
+    if not isinstance(profiles, (list, tuple)) or not profiles or not set(profiles) <= set(PROFILES):
+        raise ValueError(f"{control.get('id')}: applicable_profiles must be a non-empty subset of {PROFILES}")
+    return profile in profiles
+
+
 def verified_test_suffix(verified_by: str) -> str:
     filename, test_name = verified_by.split("::", 1)
     return f"/{filename}::{test_name}"

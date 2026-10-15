@@ -111,6 +111,22 @@ tls:
 """
 
 
+def ai_settings() -> dict[str, str]:
+    """Non-secret AI settings: the independently approved model digest and Git revision."""
+
+    values = parse_dotenv(ENV) if ENV.is_file() else {}
+    digest = values.get("SOC_AI_METADATA_SHA256", "").strip()
+    if digest and not re.fullmatch(r"[a-f0-9]{64}", digest):
+        raise ValueError("SOC_AI_METADATA_SHA256 must be empty or a lowercase SHA-256")
+    git_sha = values.get("SOC_GIT_SHA", "").strip()
+    if not re.fullmatch(r"[a-fA-F0-9]{7,64}", git_sha) or set(git_sha) == {"0"}:
+        import subprocess
+
+        git_sha = subprocess.run(["git", "rev-parse", "HEAD"], cwd=ROOT, capture_output=True,
+                                 text=True, check=False).stdout.strip() or "0000000"
+    return {"SOC_AI_METADATA_SHA256": digest, "SOC_GIT_SHA": git_sha}
+
+
 def documents(values: dict[str, str]) -> list[dict]:
     return [
         {
@@ -118,6 +134,12 @@ def documents(values: dict[str, str]) -> list[dict]:
             "kind": "ConfigMap",
             "metadata": {"name": "cxyz-runtime-settings", "namespace": "cxyz-security"},
             "data": values,
+        },
+        {
+            "apiVersion": "v1",
+            "kind": "ConfigMap",
+            "metadata": {"name": "cxyz-soc-ai-settings", "namespace": "cxyz-security"},
+            "data": ai_settings(),
         },
         {
             "apiVersion": "v1",

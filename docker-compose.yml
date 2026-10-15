@@ -9,6 +9,15 @@
 ---
 name: cxyz-security
 
+x-soc-service: &soc-service
+  image: cxyz/soc-python:local
+  restart: unless-stopped
+  read_only: true
+  cap_drop: [ALL]
+  security_opt: ["no-new-privileges:true"]
+  tmpfs: ["/tmp:size=16m,mode=1777"]
+  user: "10001:10001"
+
 networks:
   # Created by scripts/ensure_dc_network.sh. Containerlab attaches fw-core and
   # server1 to the same backing Linux bridge, so this is one real DC segment.
@@ -29,6 +38,16 @@ networks:
   cxyz_dmz_backend:
     driver: bridge
     internal: true
+  cxyz_soc_front:
+    driver: bridge
+  cxyz_soc_backend:
+    driver: bridge
+    internal: true
+  # Egress-capable network used ONLY by the response orchestrator to reach firewall
+  # management endpoints that live outside Docker (Path B). Path A additionally
+  # attaches it to the containerlab management bridge (docker-compose.path-a.yml).
+  cxyz_response_egress:
+    driver: bridge
 
 services:
   syslog-relay:
@@ -140,6 +159,331 @@ services:
       - ./docker/ids/rules:/var/lib/suricata/rules:ro
       - ./docker/ids/logs:/var/log/suricata
     command: ["-i", "any", "-v"]
+
+  # -------------------- SOC analytics plane ------------------------
+  soc-cert-init:
+    profiles: ["soc"]
+    image: docker.elastic.co/elasticsearch/elasticsearch@sha256:cb637acad8808664b7c57455a2b2ee87e30b3cab210f3ccc423ff6bcc305e0b9
+    user: "0"
+    command:
+      - bash
+      - -ec
+      - >-
+        install -o 1000 -g 0 -m 0644 /source/ca.crt /ca/ca.crt;
+        install -o 1000 -g 0 -m 0644 /source/ca.crt /es/ca.crt;
+        install -o 1000 -g 0 -m 0644 /source/elasticsearch.crt /es/elasticsearch.crt;
+        install -o 1000 -g 0 -m 0640 /source/elasticsearch.key /es/elasticsearch.key;
+        install -o 1000 -g 0 -m 0644 /source/ca.crt /kibana/ca.crt;
+        install -o 1000 -g 0 -m 0644 /source/kibana.crt /kibana/kibana.crt;
+        install -o 1000 -g 0 -m 0640 /source/kibana.key /kibana/kibana.key;
+        install -o 1000 -g 0 -m 0644 /source/ca.crt /logstash/ca.crt;
+        install -o 1000 -g 0 -m 0644 /source/logstash.crt /logstash/logstash.crt;
+        install -o 1000 -g 0 -m 0640 /source/logstash.key /logstash/logstash.key
+    volumes:
+      # Never mount the local CA signing key. The init job receives only the
+      # public CA and the minimum leaf material it must distribute.
+      - ./soc/certs/ca.crt:/source/ca.crt:ro
+      - ./soc/certs/elasticsearch.crt:/source/elasticsearch.crt:ro
+      - ./soc/certs/elasticsearch.key:/source/elasticsearch.key:ro
+      - ./soc/certs/kibana.crt:/source/kibana.crt:ro
+      - ./soc/certs/kibana.key:/source/kibana.key:ro
+      - ./soc/certs/logstash.crt:/source/logstash.crt:ro
+      - ./soc/certs/logstash.key:/source/logstash.key:ro
+      - soc_ca:/ca
+      - elasticsearch_certs:/es
+      - kibana_certs:/kibana
+      - logstash_certs:/logstash
+    networks: [cxyz_soc_backend]
+
+  elasticsearch:
+    profiles: ["soc"]
+    image: docker.elastic.co/elasticsearch/elasticsearch@sha256:cb637acad8808664b7c57455a2b2ee87e30b3cab210f3ccc423ff6bcc305e0b9
+    hostname: elasticsearch
+    restart: unless-stopped
+    depends_on:
+      soc-cert-init: { condition: service_completed_successfully }
+    environment:
+      discovery.type: single-node
+      cluster.name: cxyz-soc
+      node.name: elasticsearch
+      ELASTIC_PASSWORD: ${ELASTIC_PASSWORD:?run make secrets}
+      ES_JAVA_OPTS: -Xms1g -Xmx1g
+      xpack.security.enabled: "true"
+      xpack.security.http.ssl.enabled: "true"
+      xpack.security.http.ssl.key: certs/elasticsearch.key
+      xpack.security.http.ssl.certificate: certs/elasticsearch.crt
+      xpack.security.http.ssl.certificate_authorities: certs/ca.crt
+      xpack.security.transport.ssl.enabled: "true"
+      xpack.security.transport.ssl.verification_mode: certificate
+      xpack.security.transport.ssl.key: certs/elasticsearch.key
+      xpack.security.transport.ssl.certificate: certs/elasticsearch.crt
+      xpack.security.transport.ssl.certificate_authorities: certs/ca.crt
+    ulimits: { memlock: { soft: -1, hard: -1 } }
+    volumes:
+      - elastic_data:/usr/share/elasticsearch/data
+      - elasticsearch_certs:/usr/share/elasticsearch/config/certs:ro
+    healthcheck:
+      test: ["CMD-SHELL", "curl --silent --fail --cacert config/certs/ca.crt --user elastic:$${ELASTIC_PASSWORD} https://localhost:9200/_cluster/health?wait_for_status=yellow >/dev/null"]
+      interval: 10s
+      timeout: 10s
+      retries: 60
+    networks: [cxyz_soc_backend]
+
+  soc-account-setup:
+    profiles: ["soc"]
+    image: docker.elastic.co/elasticsearch/elasticsearch@sha256:cb637acad8808664b7c57455a2b2ee87e30b3cab210f3ccc423ff6bcc305e0b9
+    depends_on:
+      elasticsearch: { condition: service_healthy }
+    environment:
+      ELASTIC_PASSWORD: ${ELASTIC_PASSWORD:?run make secrets}
+      KIBANA_SYSTEM_PASSWORD: ${KIBANA_SYSTEM_PASSWORD:?run make secrets}
+      KIBANA_BOOTSTRAP_PASSWORD: ${KIBANA_BOOTSTRAP_PASSWORD:?run make secrets}
+      LOGSTASH_PASSWORD: ${LOGSTASH_PASSWORD:?run make secrets}
+    command: ["bash", "/setup/bootstrap-elastic.sh"]
+    volumes:
+      - soc_ca:/certs:ro
+      - ./soc/elasticsearch/bootstrap-elastic.sh:/setup/bootstrap-elastic.sh:ro
+      - ./soc/elasticsearch/logstash-writer-role.json:/setup/logstash-writer-role.json:ro
+      - ./soc/elasticsearch/feature-engine-role.json:/setup/feature-engine-role.json:ro
+      - ./soc/elasticsearch/ai-event-writer-role.json:/setup/ai-event-writer-role.json:ro
+      - ./soc/elasticsearch/decision-engine-role.json:/setup/decision-engine-role.json:ro
+      - ./soc/elasticsearch/response-orchestrator-role.json:/setup/response-orchestrator-role.json:ro
+      - ./soc/elasticsearch/ilm:/setup/ilm:ro
+      - ./soc/elasticsearch/templates:/setup/templates:ro
+    networks: [cxyz_soc_backend]
+
+  logstash:
+    profiles: ["soc"]
+    image: docker.elastic.co/logstash/logstash@sha256:04908aea76eb20de8d7bbaf6870db06419c7db3bbc856266c7a11c7db4972345
+    hostname: logstash
+    restart: unless-stopped
+    depends_on:
+      soc-account-setup: { condition: service_completed_successfully }
+    environment:
+      LOGSTASH_PASSWORD: ${LOGSTASH_PASSWORD:?run make secrets}
+    volumes:
+      - ./soc/logstash/config:/usr/share/logstash/config:ro
+      - ./soc/logstash/pipelines:/usr/share/logstash/pipeline:ro
+      - logstash_certs:/usr/share/logstash/certs:ro
+      - logstash_data:/usr/share/logstash/data
+      - ./docker/ids/logs:/var/log/suricata:ro
+      - wazuh_logs:/var/ossec/logs:ro
+      - cxyz_remote_logs:/var/log/cxyz:ro
+      - dmzlab_cowrie_var:/honeypot/cowrie:ro
+      - soc_fixtures:/fixtures
+    healthcheck:
+      test: ["CMD-SHELL", "curl --silent --fail http://localhost:9600/_node/pipelines >/dev/null"]
+      interval: 10s
+      timeout: 10s
+      retries: 60
+    networks: [cxyz_soc_backend]
+
+  kibana:
+    profiles: ["soc"]
+    image: docker.elastic.co/kibana/kibana@sha256:cb4056251fb4116bbfe4de272284fd3d3f43159ef7a5ffe7c18b64d21ceafb12
+    hostname: kibana
+    restart: unless-stopped
+    depends_on:
+      soc-account-setup: { condition: service_completed_successfully }
+    ports: ["127.0.0.1:5602:5601"]
+    environment:
+      ELASTICSEARCH_HOSTS: https://elasticsearch:9200
+      ELASTICSEARCH_USERNAME: kibana_system
+      ELASTICSEARCH_PASSWORD: ${KIBANA_SYSTEM_PASSWORD:?run make secrets}
+      ELASTICSEARCH_SSL_CERTIFICATEAUTHORITIES: /usr/share/kibana/config/certs/ca.crt
+      ELASTICSEARCH_SSL_VERIFICATIONMODE: full
+      SERVER_SSL_ENABLED: "true"
+      SERVER_SSL_CERTIFICATE: /usr/share/kibana/config/certs/kibana.crt
+      SERVER_SSL_KEY: /usr/share/kibana/config/certs/kibana.key
+      XPACK_SECURITY_ENCRYPTIONKEY: ${KIBANA_SECURITY_ENCRYPTION_KEY:?run make secrets}
+      XPACK_ENCRYPTEDSAVEDOBJECTS_ENCRYPTIONKEY: ${KIBANA_SAVED_OBJECTS_ENCRYPTION_KEY:?run make secrets}
+      XPACK_REPORTING_ENCRYPTIONKEY: ${KIBANA_REPORTING_ENCRYPTION_KEY:?run make secrets}
+      TELEMETRY_ENABLED: "false"
+    volumes:
+      - kibana_certs:/usr/share/kibana/config/certs:ro
+      - kibana_data:/usr/share/kibana/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl --silent --fail --cacert config/certs/ca.crt https://localhost:5601/api/status >/dev/null"]
+      interval: 10s
+      timeout: 10s
+      retries: 60
+    networks: [cxyz_soc_front, cxyz_soc_backend]
+
+  soc-kibana-setup:
+    profiles: ["soc"]
+    image: docker.elastic.co/elasticsearch/elasticsearch@sha256:cb637acad8808664b7c57455a2b2ee87e30b3cab210f3ccc423ff6bcc305e0b9
+    depends_on:
+      kibana: { condition: service_healthy }
+    environment:
+      KIBANA_BOOTSTRAP_PASSWORD: ${KIBANA_BOOTSTRAP_PASSWORD:?run make secrets}
+    command: ["bash", "/setup/bootstrap-kibana.sh"]
+    volumes:
+      - soc_ca:/certs:ro
+      - ./soc/kibana/bootstrap-kibana.sh:/setup/bootstrap-kibana.sh:ro
+      - ./soc/kibana/saved-objects:/setup/saved-objects:ro
+    networks: [cxyz_soc_front]
+
+  # The saved-object importer has Kibana management capability only for the
+  # short bootstrap window. This backend-only job revokes it immediately.
+  soc-kibana-bootstrap-revoke:
+    profiles: ["soc"]
+    image: docker.elastic.co/elasticsearch/elasticsearch@sha256:cb637acad8808664b7c57455a2b2ee87e30b3cab210f3ccc423ff6bcc305e0b9
+    environment:
+      ELASTIC_PASSWORD: ${ELASTIC_PASSWORD:?run make secrets}
+    command: ["bash", "/setup/revoke-kibana-bootstrap.sh"]
+    volumes:
+      - soc_ca:/certs:ro
+      - ./soc/elasticsearch/revoke-kibana-bootstrap.sh:/setup/revoke-kibana-bootstrap.sh:ro
+    networks: [cxyz_soc_backend]
+
+  # -------------------- SOC AI and response services ---------------
+  # Profile `soc-ai` (always combined with `soc`). Every service has its own
+  # credential volume; none can read another service's key. Elasticsearch stays
+  # unpublished and the AI inference API holds no Elasticsearch credential at all.
+  soc-service-init:
+    profiles: ["soc-ai"]
+    image: docker.elastic.co/elasticsearch/elasticsearch@sha256:cb637acad8808664b7c57455a2b2ee87e30b3cab210f3ccc423ff6bcc305e0b9
+    user: "0"
+    depends_on:
+      elasticsearch: { condition: service_healthy }
+    environment:
+      ELASTIC_PASSWORD: ${ELASTIC_PASSWORD:?run make secrets}
+      VYOS_API_KEY: ${VYOS_API_KEY:-}
+      WAZUH_RESPONSE_CREDENTIALS: ${WAZUH_RESPONSE_CREDENTIALS:-}
+      OPNSENSE_CREDENTIALS: ${OPNSENSE_CREDENTIALS:-}
+    command: ["bash", "/setup/provision-service-credentials.sh"]
+    volumes:
+      - soc_ca:/certs:ro
+      - ./soc/elasticsearch/provision-service-credentials.sh:/setup/provision-service-credentials.sh:ro
+      - ./soc/elasticsearch/feature-engine-role.json:/setup/feature-engine-role.json:ro
+      - ./soc/elasticsearch/ai-event-writer-role.json:/setup/ai-event-writer-role.json:ro
+      - ./soc/elasticsearch/decision-engine-role.json:/setup/decision-engine-role.json:ro
+      - ./soc/elasticsearch/response-orchestrator-role.json:/setup/response-orchestrator-role.json:ro
+      # Explicit file-level mounts: no CA signing key and no unrelated private key.
+      - ./soc/certs/soc-ai-api.crt:/source/soc-ai-api.crt:ro
+      - ./soc/certs/soc-ai-api.key:/source/soc-ai-api.key:ro
+      - ./soc/certs/ai-client-ca.crt:/source/ai-client-ca.crt:ro
+      - ./soc/certs/soc-enrichment.crt:/source/soc-enrichment.crt:ro
+      - ./soc/certs/soc-enrichment.key:/source/soc-enrichment.key:ro
+      - ./soc/certs/soc-decision.crt:/source/soc-decision.crt:ro
+      - ./soc/certs/soc-decision.key:/source/soc-decision.key:ro
+      - ./soc/certs/decision-ca.crt:/source/decision-ca.crt:ro
+      - ./docker/wazuh/certs/root-ca-manager.pem:/source/wazuh-root-ca.pem:ro
+      - ./soc/certs/soc-response.crt:/source/soc-response.crt:ro
+      - ./soc/certs/soc-response.key:/source/soc-response.key:ro
+      - ./soc/certs/decision/decision-key-1.key:/source/decision-key-1.key:ro
+      - ./soc/certs/decision/decision-key-1.pub:/source/decision-key-1.pub:ro
+      - soc_run_ai_api:/out/ai-api
+      - soc_run_feature:/out/feature
+      - soc_run_enrichment:/out/enrichment
+      - soc_run_decision:/out/decision
+      - soc_run_response:/out/response
+    networks: [cxyz_soc_backend]
+
+  soc-ai-api:
+    <<: *soc-service
+    profiles: ["soc-ai"]
+    hostname: soc-ai-api
+    depends_on:
+      soc-service-init: { condition: service_completed_successfully }
+    environment:
+      SOC_AI_MODEL_DIR: /models/active
+      SOC_AI_METADATA_SHA256: ${SOC_AI_METADATA_SHA256:-}
+      SOC_AI_BIND: container-address
+      SOC_AI_SERVER_CERT: /run/soc/tls.crt
+      SOC_AI_SERVER_KEY: /run/soc/tls.key
+      SOC_AI_CLIENT_CA: /run/soc/client-ca.crt
+    command: ["python", "-m", "ai.api.serve"]
+    volumes:
+      - ./ai/registry/active:/models/active:ro
+      - soc_run_ai_api:/run/soc:ro
+    healthcheck:
+      test: ["CMD", "python", "-c", "import socket;socket.create_connection((socket.gethostbyname(socket.gethostname()),8443),3)"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+    networks: [cxyz_soc_backend]
+
+  soc-feature-worker:
+    <<: *soc-service
+    profiles: ["soc-ai"]
+    hostname: soc-feature-worker
+    depends_on:
+      soc-service-init: { condition: service_completed_successfully }
+    environment:
+      SOC_ES_URL: https://elasticsearch:9200
+      SOC_ES_CA: /run/soc/ca.crt
+      SOC_ES_API_KEY_FILE: /run/soc/es.key
+      SOC_GIT_SHA: ${SOC_GIT_SHA:-0000000}
+    command: ["python", "-m", "soc.workers.features", "--state", "/var/lib/soc/features/state.sqlite", "run", "--loop", "--interval", "60"]
+    volumes:
+      - soc_run_feature:/run/soc:ro
+      - soc_state_feature:/var/lib/soc
+    networks: [cxyz_soc_backend]
+
+  soc-enrichment-worker:
+    <<: *soc-service
+    profiles: ["soc-ai"]
+    hostname: soc-enrichment
+    depends_on:
+      soc-service-init: { condition: service_completed_successfully }
+      soc-ai-api: { condition: service_healthy }
+    environment:
+      SOC_ES_URL: https://elasticsearch:9200
+      SOC_ES_CA: /run/soc/ca.crt
+      SOC_ES_API_KEY_FILE: /run/soc/es.key
+      SOC_AI_URL: https://soc-ai-api:8443
+      SOC_AI_CA: /run/soc/ca.crt
+      SOC_AI_CLIENT_CERT: /run/soc/client.crt
+      SOC_AI_CLIENT_KEY: /run/soc/client.key
+      SOC_AI_METADATA_SHA256: ${SOC_AI_METADATA_SHA256:-}
+    command: ["python", "-m", "soc.workers.enrichment", "--outbox", "/var/lib/soc/enrichment/outbox.sqlite", "serve", "--interval", "30"]
+    volumes:
+      - soc_run_enrichment:/run/soc:ro
+      - soc_state_enrichment:/var/lib/soc
+    networks: [cxyz_soc_backend]
+
+  soc-decision:
+    <<: *soc-service
+    profiles: ["soc-ai"]
+    hostname: soc-decision
+    depends_on:
+      soc-service-init: { condition: service_completed_successfully }
+    command: ["python", "-m", "response.service", "decision", "--config", "/etc/soc/decision.yaml"]
+    environment:
+      SOC_MODE: ${SOC_MODE:-}   # empty keeps the reviewed mode (observe); `enforce` only for validation runs
+    volumes:
+      - ./response/deployments/${SOC_PATH:-path-a}/decision.yaml:/etc/soc/decision.yaml:ro
+      - ./response/policies/${SOC_POLICY:-default}.yaml:/etc/soc/policy.yaml:ro
+      - soc_run_decision:/run/soc:ro
+      - soc_state_decision:/var/lib/soc
+    networks: [cxyz_soc_backend]
+
+  soc-response:
+    <<: *soc-service
+    profiles: ["soc-ai"]
+    hostname: soc-response
+    depends_on:
+      soc-service-init: { condition: service_completed_successfully }
+    command: ["python", "-m", "response.service", "orchestrator", "--config", "/etc/soc/response.yaml"]
+    environment:
+      SOC_MODE: ${SOC_MODE:-}
+    volumes:
+      - ./response/deployments/${SOC_PATH:-path-a}/response.yaml:/etc/soc/response.yaml:ro
+      - ./response/policies/${SOC_POLICY:-default}.yaml:/etc/soc/policy.yaml:ro
+      - soc_run_response:/run/soc:ro
+      - soc_state_response:/var/lib/soc
+    healthcheck:
+      test: ["CMD", "python", "-c", "import socket;socket.create_connection((socket.gethostbyname(socket.gethostname()),8443),3)"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+    # Backend network for ES + intake; egress network to reach firewall management
+    # endpoints; the DC bridge to reach the Wazuh manager API (never published).
+    networks:
+      cxyz_soc_backend: {}
+      cxyz_response_egress: {}
+      cxyz_dc: {}
 
   # -------------------- Zero-Trust gateway -------------------------
   traefik:
@@ -263,7 +607,44 @@ services:
     restart: unless-stopped
     networks: [cxyz_dmz_backend]
 
+  # -------------------- DMZ deception lab (profile dmzlab, Path A) ------------------
+  # A deliberately vulnerable web application and an SSH/Telnet honeypot for generating and
+  # studying hostile traffic. Both JOIN THE NETWORK NAMESPACE of the containerlab `dmz-web` node
+  # (start the fabric first), so they live on the DMZ segment behind fw-dmz with dmz-web's address
+  # 195.1.1.161: every probe crosses fw-dmz (logged, counted, seen by Suricata) and the existing
+  # pivot deny stops any of them from reaching internal zones. They have no network of their own,
+  # publish no host port, run without capabilities and are disposable.
+  #   dmz-vuln      OWASP Juice Shop  tcp/3000         (OWASP flagship; use only here)
+  #   dmz-honeypot  Cowrie            tcp/2222 ssh, tcp/2223 telnet; JSON log -> Logstash (read-only)
+  dmz-vuln:
+    profiles: ["dmzlab"]
+    image: bkimminich/juice-shop@sha256:cea5a4af4aacee498c491491af0408934ec81d004035c0a02ef3e54395e3bf27
+    network_mode: "container:clab-companyxyz-dmz-web"
+    restart: unless-stopped
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    pids_limit: 256
+    mem_limit: 768m
+    tmpfs: ["/tmp:size=64m"]
+
+  dmz-honeypot:
+    profiles: ["dmzlab"]
+    image: cowrie/cowrie@sha256:019726c8deef20729162cda492d9385917b579c9ace6368e47e7566cd2491ba1
+    network_mode: "container:clab-companyxyz-dmz-web"
+    restart: unless-stopped
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    pids_limit: 256
+    mem_limit: 256m
+    tmpfs: ["/tmp:size=16m"]
+    environment:
+      COWRIE_TELNET_ENABLED: "true"
+    volumes:
+      - dmzlab_cowrie_var:/cowrie/cowrie-git/var
+
 volumes:
+  dmzlab_cowrie_var:
   authentik_db_2026:
   cxyz_remote_logs:
   wazuh_api_configuration:
@@ -280,3 +661,20 @@ volumes:
   wazuh_indexer_data:
   wazuh_dashboard_config:
   wazuh_dashboard_custom:
+  elastic_data:
+  soc_ca:
+  elasticsearch_certs:
+  kibana_certs:
+  logstash_certs:
+  logstash_data:
+  soc_fixtures:
+  kibana_data:
+  soc_run_ai_api:
+  soc_run_feature:
+  soc_run_enrichment:
+  soc_run_decision:
+  soc_run_response:
+  soc_state_feature:
+  soc_state_enrichment:
+  soc_state_decision:
+  soc_state_response:

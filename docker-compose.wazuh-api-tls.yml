@@ -1,0 +1,11 @@
+# Opt-in override (needed only for endpoint isolation): serve the Wazuh manager API
+# with the hostname-verified `wazuh.manager` certificate from the reviewed Wazuh PKI
+# instead of the container's anonymous self-signed one, so the response orchestrator
+# can verify it (CA + SAN) instead of disabling verification.
+# Use:  docker compose -f docker-compose.yml -f docker-compose.wazuh-api-tls.yml --profile siem up -d wazuh.manager
+---
+services:
+  wazuh.manager:
+    volumes:
+      - ./docker/wazuh/certs/wazuh.manager.pem:/var/ossec/api/configuration/ssl/server.crt:ro
+      - ./docker/wazuh/certs/wazuh.manager-key.pem:/var/ossec/api/configuration/ssl/server.key:ro

@@ -31,6 +31,13 @@ capture_state_once() {
 }
 
 ensure_return_routes() {
+  # Docker Desktop owns the Linux bridge and forwarding state inside its VM;
+  # macOS has neither Linux net.ipv4.ip_forward nor the `ip` route utility.
+  # The SOC-only Compose profile can still use the external bridge normally.
+  if [[ "$(uname -s)" != "Linux" ]]; then
+    echo "host return routes skipped on $(uname -s); Docker Desktop owns bridge routing"
+    return
+  fi
   capture_state_once
   "${SUDO[@]}" sysctl -w net.ipv4.ip_forward=1 >/dev/null
   "${SUDO[@]}" ip route replace 10.255.0.0/16 via "$firewall_gateway" dev "$bridge_name"

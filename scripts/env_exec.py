@@ -27,11 +27,27 @@ def parse_dotenv(path: pathlib.Path) -> dict[str, str]:
         key = key.strip()
         if not sep or not KEY.fullmatch(key):
             raise ValueError(f"{path}:{lineno}: invalid dotenv assignment")
-        value = value.strip()
-        if len(value) >= 2 and value[0] == value[-1] and value[0] in {"'", '"'}:
-            value = value[1:-1]
-        values[key] = value
+        values[key] = _clean_value(value)
     return values
+
+
+def _clean_value(value: str) -> str:
+    """Unquote a value and drop a trailing ``  # comment`` exactly as Docker Compose does.
+
+    A ``#`` only starts a comment when whitespace precedes it, so passwords and crypt(3)
+    hashes containing ``#``/``$`` without leading whitespace are preserved.
+    """
+
+    if re.match(r"\s+#", value):            # `KEY=   # only a comment` is an empty value
+        return ""
+    value = value.strip()
+    if value[:1] in {"'", '"'}:
+        closing = value.find(value[0], 1)
+        if closing != -1:
+            return value[1:closing]
+        return value
+    comment = re.search(r"\s#", value)
+    return value[: comment.start()].rstrip() if comment else value
 
 
 def main() -> int:

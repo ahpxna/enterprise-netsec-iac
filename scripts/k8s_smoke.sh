@@ -23,14 +23,23 @@ rollout() {
 for workload in \
   statefulset/wazuh-indexer deployment/wazuh-manager deployment/wazuh-dashboard \
   statefulset/authentik-postgres deployment/authentik-server \
-  deployment/authentik-worker deployment/traefik deployment/wireguard daemonset/suricata; do
+  deployment/authentik-worker deployment/traefik deployment/wireguard daemonset/suricata \
+  statefulset/elasticsearch deployment/kibana deployment/soc-ai-api deployment/soc-feature-worker \
+  deployment/soc-enrichment-worker deployment/soc-decision deployment/soc-response; do
   rollout "$workload"
+done
+
+echo "==> SOC bootstrap/setup Jobs completed"
+for job in soc-elastic-bootstrap soc-kibana-setup; do
+  kubectl -n "$ns" wait --for=condition=complete "job/$job" --timeout="$timeout"
 done
 
 echo "==> required NetworkPolicies"
 for policy in default-deny allow-cluster-dns traefik-ingress-egress wireguard-vpn \
   authentik-server authentik-worker authentik-postgres \
-  wazuh-indexer wazuh-manager wazuh-dashboard suricata-wazuh-agent ztna-demo-app; do
+  wazuh-indexer wazuh-manager wazuh-dashboard suricata-wazuh-agent ztna-demo-app \
+  elasticsearch kibana soc-elastic-bootstrap soc-kibana-setup soc-ai-api soc-feature-worker \
+  soc-enrichment-worker soc-decision soc-response; do
   kubectl -n "$ns" get networkpolicy "$policy" >/dev/null
 done
 
@@ -85,6 +94,23 @@ kill "$pf_pid" 2>/dev/null || true
 wait "$pf_pid" 2>/dev/null || true
 trap - EXIT
 rm -f "$pf_log" "$headers"
+
+# Automatic response must stay in observe mode unless an operator deliberately changed it.
+echo "==> SOC response plane defaults to observe mode"
+for config in response.yaml decision.yaml; do
+  kubectl -n "$ns" get configmap cxyz-soc-response-config -o "jsonpath={.data.${config//./\\.}}" \
+    | grep -Eq '^mode: observe$' \
+    || echo "WARNING: ${config} is not in observe mode (enforcement is enabled)" >&2
+done
+
+echo "==> SOC AI approved-model digest is configured"
+digest="$(kubectl -n "$ns" get configmap cxyz-soc-ai-settings -o jsonpath='{.data.SOC_AI_METADATA_SHA256}')"
+[[ "$digest" =~ ^[a-f0-9]{64}$ ]] || { echo "SOC_AI_METADATA_SHA256 is not set in cxyz-soc-ai-settings (make k8s-soc-model, then re-render)" >&2; exit 1; }
+
+echo "==> Elasticsearch refuses anonymous requests over TLS"
+kubectl -n "$ns" exec elasticsearch-0 -- sh -c \
+  'curl -sS --cacert /usr/share/elasticsearch/config/certs/ca.crt -o /dev/null -w "%{http_code}" https://localhost:9200' \
+  | grep -Eq '^401$' || { echo "Elasticsearch did not require authentication" >&2; exit 1; }
 
 mapfile -t suricata_pods < <(
   kubectl -n "$ns" get pods -l app=suricata \

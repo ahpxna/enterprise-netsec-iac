@@ -1,0 +1,49 @@
+# Synthetic metadata-only example. Replace every placeholder digest before use.
+schema_version: dataset-manifest-v1
+dataset_id: soc-lab-2026-001
+created_at: "2026-09-01T00:00:00Z"
+time_range:
+  start: "2026-08-01T00:00:00Z"
+  end: "2026-08-07T23:59:59Z"
+sources:
+  - suricata
+  - wazuh
+  - opnsense
+  - radius
+feature_schema: network-window-v1
+feature_schema_sha256: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+sha256: "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789"
+git_sha: "0123456789abcdef0123456789abcdef01234567"
+raw_data_committed: false
+raw_data_location_class: external_evidence
+label_source:
+  method: scenario_time_window
+  protocol_version: soc-labeling-v1
+  sha256: "fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210"
+split:
+  strategy: temporal_session_isolated
+  session_assignment_sha256: "1111111111111111111111111111111111111111111111111111111111111111"
+  train:
+    start: "2026-08-01T00:00:00Z"
+    end: "2026-08-05T23:59:59Z"
+    vector_count: 1
+    session_ids_sha256: "2222222222222222222222222222222222222222222222222222222222222222"
+    label_profile: benign_biased
+  validation:
+    start: "2026-08-06T00:00:00Z"
+    end: "2026-08-06T23:59:59Z"
+    vector_count: 1
+    session_ids_sha256: "3333333333333333333333333333333333333333333333333333333333333333"
+    label_profile: mixed
+  test:
+    start: "2026-08-07T00:00:00Z"
+    end: "2026-08-07T23:59:59Z"
+    vector_count: 1
+    session_ids_sha256: "4444444444444444444444444444444444444444444444444444444444444444"
+    label_profile: held_out_attack
+provenance:
+  normalization_schema_sha256: "5555555555555555555555555555555555555555555555555555555555555555"
+  collector_config_sha256: "6666666666666666666666666666666666666666666666666666666666666666"
+  source_manifest_sha256: "7777777777777777777777777777777777777777777777777777777777777777"
+  feature_engine_git_sha: "0123456789abcdef0123456789abcdef01234567"
+  generated_by: soc-feature-export-v1
