@@ -40,9 +40,18 @@ def resolve(test_id: str) -> tuple[pathlib.Path | None, str, str | None]:
 
 problems: list[str] = []
 seen: dict[tuple[str, str], str] = {}
+PROFILES = ("path-a", "path-b")
 for control in controls:
+    scoped = control.get("applicable_profiles", list(PROFILES))
+    if not isinstance(scoped, list) or not scoped or not set(scoped) <= set(PROFILES):
+        problems.append(f"{control['id']}: applicable_profiles must be a non-empty subset of {list(PROFILES)}")
+        continue
     for profile, field in (("path-a", "verified_by"), ("path-b", "verified_by_path_b")):
         test_id = control.get(field)
+        if profile not in scoped:
+            if test_id:
+                problems.append(f"{control['id']}[{profile}]: {field} is set but the control is not applicable to {profile}")
+            continue
         if not test_id:
             problems.append(f"{control['id']}[{profile}]: missing {field}")
             continue
@@ -64,4 +73,6 @@ if problems:
     print("\n".join(f"  - {problem}" for problem in problems))
     sys.exit(1)
 
-print(f"OK: all {len(controls)} controls map one-to-one to executable Path A and Path B proofs.")
+scoped_out = sum(len(control.get("applicable_profiles", PROFILES)) < 2 for control in controls)
+print(f"OK: all {len(controls)} controls map one-to-one to executable proofs on every applicable profile"
+      f" ({scoped_out} scoped to a single profile).")

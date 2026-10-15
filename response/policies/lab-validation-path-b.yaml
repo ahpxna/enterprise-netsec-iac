@@ -1,0 +1,93 @@
+# VALIDATION-ONLY overlay of lab-path-b.yaml (SOC_POLICY=lab-validation-path-b with
+# SOC_MODE=enforce, see `make soc-ai-validate-up`). Identical safeguards; the only change is
+# the shortest TTL the schema allows (60 s) so live containment-expiry evidence takes about
+# a minute instead of fifteen. Never use it for standing operation.
+# Path B lab overlay of default.yaml: identical safeguards, plus ONE explicitly
+# enrolled isolation target (pc1, the untrusted user workstation, which runs a
+# Wazuh agent with the CompanyXYZ isolation Active Response installed by the
+# wazuh_agent role). pc4 (admin station), servers and DMZ stay protected.
+# Versioned policy input for the Decision Engine and Response Orchestrator.
+#
+# This file contains no endpoint URLs, credential references, shell fragments,
+# or mutable firewall-rule definitions.  Every action remains constrained by
+# the adapter selected in code: OPNsense SOC_BLOCKLIST or controlled Wazuh
+# isolate/restore only.
+schema_version: response-policy-set-v1
+
+defaults:
+  protections:
+    # An explicit auto-containment allowlist.  Address and network entries are
+    # rejected before any privileged adapter call.
+    allowlisted_ips: []
+    allowlisted_networks: []
+
+    # Current OOB management plane.  Future VLAN 99 / SOC ranges must be added
+    # before enabling any automatic response on those environments.
+    # server1 currently hosts DNS and FreeRADIUS and must never be blocked by
+    # an automatic response. Add NTP/DNS/RADIUS/SOC addresses here as the lab
+    # gains independent service nodes.
+    protected_ips:
+      - 172.16.50.1    # server1: DNS, RADIUS, NTP
+      - 172.16.50.10   # Wazuh manager
+      - 172.16.50.11   # mTLS syslog relay
+      - 172.16.50.12   # WireGuard gateway
+      - 172.16.50.253  # DC bridge gateway
+      - 172.16.50.254  # fw-core DC interface
+    protected_networks:
+      - 10.1.1.0/24
+    protected_hosts:
+      - elasticsearch
+      - kibana
+      - logstash
+      - wazuh-manager
+      - soc-orchestrator
+      - soc-decision-engine
+
+    # Private employee/DC addresses may be candidates only when they are not
+    # in protected_networks. Set true for an Internet-only containment policy.
+    block_private_ip_targets: false
+
+    # Fail closed: only hosts enrolled here can be isolated.
+    allowed_isolation_hosts:
+      - pc1
+
+  # Caps accepted automatic requests, not analyst alerts. Runtime deployment
+  # must replace the in-memory limiter with a shared durable limiter.
+  rate_limit:
+    max_actions: 5
+    window_seconds: 300
+  dedup_seconds: 900
+  command_valid_for_seconds: 300
+  # Old or excessively future-dated evidence remains alert-only.
+  evidence_max_age_seconds: 900
+
+policies:
+  - id: COR-001
+    version: "1.0.0"
+    enabled: true
+    action: block_ip
+    ttl_seconds: 60
+    when:
+      ai_score_gte: 0.90
+      require_any:
+        - type: suricata
+          min_severity: 2
+        - type: wazuh
+          min_severity: 10
+        - type: authentication
+          min_count: 20
+        - type: threat_intel
+        - type: protected_asset
+
+  - id: COR-002
+    version: "1.0.0"
+    enabled: true
+    action: isolate_host
+    ttl_seconds: 60
+    when:
+      ai_score_gte: 0.90
+      require_any:
+        - type: wazuh
+          min_severity: 12
+        - type: threat_intel
+        - type: protected_asset

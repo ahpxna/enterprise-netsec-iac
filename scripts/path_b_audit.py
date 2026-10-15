@@ -29,6 +29,9 @@ if str(ROOT) not in sys.path:
 from compliance.provenance import current_provenance
 from env_exec import parse_dotenv
 
+sys.path.insert(0, str(ROOT / "tests" / "validation"))
+import soc_live  # noqa: E402  (shared LOG/AI/COR/RESP/SOC live verifiers; stdlib-only at import time)
+
 INTENT = yaml.safe_load((ROOT / "intent" / "fabric.yaml").read_text())
 NODES = INTENT["nodes"]
 KNOWN_HOSTS = ROOT / "ansible" / "inventory" / "known_hosts"
@@ -562,6 +565,100 @@ def test_ztna01() -> tuple[str, dict]:
     return "unauthenticated traffic is redirected to Authentik and the former direct backend bypass is closed", observed
 
 
+# ---------------------------------------------------------------------------
+# SOC AI / response controls. The same verifiers as Path A (tests/validation/soc_live.py)
+# run against the Path B fabric: the SOC plane is the same Compose stack, only the firewall
+# backend (VyOS API) and the controlled endpoint (pc1 with the isolation Active Response)
+# differ. Requires `SOC_PATH=path-b make soc-ai-validate-up`.
+# ---------------------------------------------------------------------------
+_SOC_RUN: "soc_live.Run | None" = None
+
+
+def _vyos_blocklists() -> dict[str, set[str]]:
+    members: dict[str, set[str]] = {}
+    for node in ("fw-core", "fw-dmz"):
+        running = normalized_config(config(node))
+        members[node] = set(re.findall(r"address-group SOC_BLOCKLIST address (\S+)", running))
+    return members
+
+
+def _endpoint_reachable(host: str) -> bool:
+    """New TCP connection from the admin station to the endpoint's data-plane SSH port.
+
+    The isolation Active Response drops new flows from every address except the manager,
+    so reachability from pc4 (not an allowed address) is the independent external proof.
+    """
+
+    address = str(NODES[host]["attachments"][0]["address"]).split("/")[0]
+    return tcp_from_linux("pc4", address, 22)
+
+
+def _soc_check(control: str) -> tuple[str, dict]:
+    global _SOC_RUN
+    if _SOC_RUN is None:
+        os.environ.setdefault("SOC_PATH", "path-b")
+        lab = soc_live.DockerLab(environment="path-b", blocklist_probe=_vyos_blocklists,
+                                 endpoint_probe=_endpoint_reachable)
+        _SOC_RUN = soc_live.Run(lab, timeouts=soc_live.Timeouts.from_environment())
+    return soc_live.CHECKS[control](_SOC_RUN)
+
+
+def test_log01() -> tuple[str, dict]:
+    return _soc_check("LOG-01")
+
+
+def test_log02() -> tuple[str, dict]:
+    return _soc_check("LOG-02")
+
+
+def test_log03() -> tuple[str, dict]:
+    return _soc_check("LOG-03")
+
+
+def test_ai01() -> tuple[str, dict]:
+    return _soc_check("AI-01")
+
+
+def test_ai02() -> tuple[str, dict]:
+    return _soc_check("AI-02")
+
+
+def test_ai03() -> tuple[str, dict]:
+    return _soc_check("AI-03")
+
+
+def test_ai04() -> tuple[str, dict]:
+    return _soc_check("AI-04")
+
+
+def test_cor01() -> tuple[str, dict]:
+    return _soc_check("COR-01")
+
+
+def test_resp01() -> tuple[str, dict]:
+    return _soc_check("RESP-01")
+
+
+def test_resp02() -> tuple[str, dict]:
+    return _soc_check("RESP-02")
+
+
+def test_resp03() -> tuple[str, dict]:
+    return _soc_check("RESP-03")
+
+
+def test_soc01() -> tuple[str, dict]:
+    return _soc_check("SOC-01")
+
+
+def test_soc02() -> tuple[str, dict]:
+    return _soc_check("SOC-02")
+
+
+def test_soc03() -> tuple[str, dict]:
+    return _soc_check("SOC-03")
+
+
 CONTROLS: list[tuple[str, Callable[[], tuple[str, dict]]]] = [
     ("RTR-01", test_rtr01),
     ("SEG-01", test_seg01),
@@ -576,6 +673,20 @@ CONTROLS: list[tuple[str, Callable[[], tuple[str, dict]]]] = [
     ("HA-01", test_ha01),
     ("VPN-01", test_vpn01),
     ("ZTNA-01", test_ztna01),
+    ("LOG-01", test_log01),
+    ("LOG-02", test_log02),
+    ("LOG-03", test_log03),
+    ("AI-01", test_ai01),
+    ("AI-02", test_ai02),
+    ("AI-03", test_ai03),
+    ("AI-04", test_ai04),
+    ("COR-01", test_cor01),
+    ("RESP-01", test_resp01),
+    ("RESP-02", test_resp02),
+    ("RESP-03", test_resp03),
+    ("SOC-01", test_soc01),
+    ("SOC-02", test_soc02),
+    ("SOC-03", test_soc03),
 ]
 
 

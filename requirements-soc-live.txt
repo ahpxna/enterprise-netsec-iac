@@ -1,0 +1,5 @@
+# Host-side dependencies of the LIVE SOC verifiers (tests/validation/soc_live.py). The
+# services themselves need nothing here; schema validation of observed documents runs on the host.
+jsonschema==4.24.0
+pytest==9.1.1
+PyYAML==6.0.3

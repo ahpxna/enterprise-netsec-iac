@@ -229,3 +229,41 @@ def test_call_phase_still_requires_explicit_evidence_for_pass():
     assert classify_phase_result(
         phase="call", passed=True, assertion_failure=False, evidence_recorded=False
     ) == "ERROR"
+
+
+def test_profile_scoping_is_closed_and_defaults_to_both_profiles():
+    from compliance.evidence import applies_to_profile
+
+    assert applies_to_profile({"id": "X"}, "path-a") and applies_to_profile({"id": "X"}, "path-b")
+    scoped = {"id": "X", "applicable_profiles": ["path-b"]}
+    assert applies_to_profile(scoped, "path-b") and not applies_to_profile(scoped, "path-a")
+    for bad in ([], ["path-c"], "path-a", None):
+        try:
+            applies_to_profile({"id": "X", "applicable_profiles": bad}, "path-a")
+        except ValueError:
+            continue
+        raise AssertionError(f"accepted invalid applicable_profiles {bad!r}")
+
+
+def test_endpoint_isolation_is_scoped_to_path_b_and_reported_as_not_applicable(tmp_path, monkeypatch):
+    import sys
+
+    import yaml
+
+    from compliance.evidence import applies_to_profile
+
+    root = pathlib.Path(__file__).resolve().parents[2]
+    controls = {c["id"]: c for c in yaml.safe_load((root / "compliance/controls.yaml").read_text())["controls"]}
+    assert controls["RESP-02"]["applicable_profiles"] == ["path-b"] and "verified_by" not in controls["RESP-02"]
+    assert applies_to_profile(controls["RESP-01"], "path-a") and applies_to_profile(controls["RESP-01"], "path-b")
+
+    run_dir = tmp_path / "run"
+    run_dir.mkdir()
+    out = tmp_path / "report.md"
+    monkeypatch.setattr(sys, "argv", ["generate_report", "--profile", "path-a", "--out", str(out), "--run", str(run_dir)])
+    assert report_module.main() == 0
+    text = out.read_text()
+    assert "| RESP-02 |" not in text and "Not applicable to `path-a`" in text and "RESP-02" in text.split("Not applicable")[1]
+    monkeypatch.setattr(sys, "argv", ["generate_report", "--profile", "path-b", "--out", str(out), "--run", str(run_dir)])
+    report_module.main()
+    assert "| RESP-02 |" in out.read_text()
