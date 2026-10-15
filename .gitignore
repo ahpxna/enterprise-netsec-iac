@@ -64,5 +64,21 @@ terraform/vyos-fabric/runtime-configs/
 .cxyz-state/
 wireguard/probe/
 docker/zero-trust-gateway/certs/
+soc/certs/
+soc/runtime/
+# Dataset manifests and model provenance are source; raw telemetry, derived
+# datasets, and binary model artifacts are operator/research outputs.
+datasets/raw/
+datasets/processed/
+datasets/replays/
+ai/registry/artifacts/
+ai/registry/*.joblib
+ai/registry/*.pkl
+ai/registry/*.onnx
+ai/registry/*.pt
+ai/registry/**/*.joblib
+ai/registry/**/*.pkl
+ai/registry/**/*.onnx
+ai/registry/**/*.pt
 k8s/runtime-secrets.yaml
 k8s/runtime-config.yaml

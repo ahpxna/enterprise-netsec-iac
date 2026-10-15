@@ -1,0 +1,69 @@
+{
+  "index_patterns": ["soc-ai-*"],
+  "priority": 600,
+  "version": 2,
+  "_meta": {
+    "schema": "anomaly-event-v1",
+    "description": "AI inference evidence. Each document is a new anomaly event and never a raw-event overwrite."
+  },
+  "template": {
+    "settings": {
+      "number_of_shards": 1,
+      "number_of_replicas": 0,
+      "index.lifecycle.name": "soc-ai-90d"
+    },
+    "mappings": {
+      "dynamic": "strict",
+      "properties": {
+        "@timestamp": {"type": "date"},
+        "schema_version": {"type": "keyword"},
+        "event": {
+          "type": "object",
+          "dynamic": "strict",
+          "properties": {
+            "id": {"type": "keyword"},
+            "kind": {"type": "keyword"},
+            "category": {"type": "keyword"},
+            "dataset": {"type": "keyword"}
+          }
+        },
+        "observer": {
+          "type": "object",
+          "dynamic": "strict",
+          "properties": {
+            "name": {"type": "keyword"},
+            "type": {"type": "keyword"}
+          }
+        },
+        "feature_vector": {
+          "type": "object",
+          "dynamic": "strict",
+          "properties": {
+            "id": {"type": "keyword"},
+            "feature_schema": {"type": "keyword"},
+            "feature_schema_sha256": {"type": "keyword"},
+            "entity_type": {"type": "keyword"},
+            "entity": {"type": "keyword"},
+            "window_start": {"type": "date"},
+            "window_end": {"type": "date"},
+            "source_event_set_sha256": {"type": "keyword"}
+          }
+        },
+        "ai": {
+          "type": "object",
+          "dynamic": "strict",
+          "properties": {
+            "model_id": {"type": "keyword"},
+            "algorithm": {"type": "keyword"},
+            "model_sha256": {"type": "keyword"},
+            "model_metadata_sha256": {"type": "keyword"},
+            "score": {"type": "double"},
+            "threshold": {"type": "double"},
+            "is_anomaly": {"type": "boolean"},
+            "inference_ms": {"type": "double"}
+          }
+        }
+      }
+    }
+  }
+}

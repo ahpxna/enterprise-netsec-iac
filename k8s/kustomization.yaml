@@ -11,6 +11,9 @@ resources:
   - 31-authentik.yaml
   - 32-wireguard.yaml
   - 40-network-policies.yaml
+  - 50-soc-elasticsearch.yaml
+  - 51-soc-kibana.yaml
+  - 52-soc-ai.yaml
 configMapGenerator:
   - name: cxyz-wazuh-decoders
     files:
@@ -33,3 +36,56 @@ configMapGenerator:
       - ossec.conf=generated/ossec.conf
       - opensearch.yml=generated/wazuh-indexer.yml
       - opensearch_dashboards.yml=generated/opensearch_dashboards.yml
+  # --- SOC analytics / AI / response (mirrored from soc/ and response/ by render_k8s_assets.py)
+  - name: cxyz-soc-logstash-config
+    files:
+      - generated/soc/logstash/config/logstash.yml
+      - generated/soc/logstash/config/pipelines.yml
+  - name: cxyz-soc-logstash-pipelines
+    files:
+      - generated/soc/logstash/pipelines/10-opnsense.conf
+      - generated/soc/logstash/pipelines/20-suricata.conf
+      - generated/soc/logstash/pipelines/30-wazuh.conf
+      - generated/soc/logstash/pipelines/35-wazuh-archives.conf
+      - generated/soc/logstash/pipelines/40-radius.conf
+      - generated/soc/logstash/pipelines/50-network-syslog.conf
+      - generated/soc/logstash/pipelines/70-normalize-ecs.conf
+      - generated/soc/logstash/pipelines/90-output.conf
+  - name: cxyz-soc-es-scripts
+    files:
+      - generated/soc/elasticsearch/scripts/bootstrap-elastic.sh
+      - generated/soc/elasticsearch/scripts/revoke-kibana-bootstrap.sh
+  - name: cxyz-soc-es-roles
+    files:
+      - generated/soc/elasticsearch/roles/logstash-writer-role.json
+      - generated/soc/elasticsearch/roles/feature-engine-role.json
+      - generated/soc/elasticsearch/roles/ai-event-writer-role.json
+      - generated/soc/elasticsearch/roles/decision-engine-role.json
+      - generated/soc/elasticsearch/roles/response-orchestrator-role.json
+  - name: cxyz-soc-es-ilm
+    files:
+      - generated/soc/elasticsearch/ilm/soc-ai-90d.json
+      - generated/soc/elasticsearch/ilm/soc-deadletter-14d.json
+      - generated/soc/elasticsearch/ilm/soc-events-30d.json
+      - generated/soc/elasticsearch/ilm/soc-features-30d.json
+      - generated/soc/elasticsearch/ilm/soc-raw-14d.json
+      - generated/soc/elasticsearch/ilm/soc-response-365d.json
+  - name: cxyz-soc-es-templates
+    files:
+      - generated/soc/elasticsearch/templates/soc-ai-v1.json
+      - generated/soc/elasticsearch/templates/soc-deadletter-v1.json
+      - generated/soc/elasticsearch/templates/soc-events-v1.json
+      - generated/soc/elasticsearch/templates/soc-features-v1.json
+      - generated/soc/elasticsearch/templates/soc-raw-v1.json
+      - generated/soc/elasticsearch/templates/soc-response-v1.json
+  - name: cxyz-soc-kibana-scripts
+    files:
+      - generated/soc/kibana/bootstrap-kibana.sh
+  - name: cxyz-soc-kibana-objects
+    files:
+      - generated/soc/kibana/soc-overview.ndjson
+  - name: cxyz-soc-response-config
+    files:
+      - response.yaml=generated/soc/response/response.yaml
+      - decision.yaml=generated/soc/response/decision.yaml
+      - policy.yaml=generated/soc/response/default.yaml

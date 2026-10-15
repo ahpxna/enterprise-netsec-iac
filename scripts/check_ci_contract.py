@@ -45,6 +45,8 @@ shared_checks = {
     "Path B intent invariants": "python scripts/check_path_b_intent.py",
     "security regression invariants": "python scripts/security_static_checks.py",
     "container image lock": "python scripts/check_image_lock.py",
+    "SOC ingestion security invariants": "python scripts/check_soc_static.py",
+    "SOC AI/response plane invariants": "python scripts/check_soc_ai_static.py",
     "CI contract guard": "python scripts/check_ci_contract.py",
     "compliance wiring": "python compliance/check_wiring.py",
     "YAML syntax including custom tags": "python scripts/check_yaml_syntax.py",
@@ -103,6 +105,10 @@ ci_tokens = {
     "server1 deterministic image build": "docker build --pull=false -t cxyz/server1:ci docker/server1",
     "syslog relay deterministic image build": "docker build --pull=false -t cxyz/syslog-relay:ci docker/syslog-relay",
     "WireGuard peer fixture Compose render": "--profile vpn-test",
+    "SOC Compose render": "--profile soc",
+    "SOC AI Compose render": "--profile soc-ai",
+    "SOC service image build": "docker build --pull=false -f docker/soc-python/Dockerfile -t cxyz/soc-python:ci .",
+    "LSTM family CPU torch job": "https://download.pytorch.org/whl/cpu",
 }
 for label, token in ci_tokens.items():
     if token not in WORKFLOW:

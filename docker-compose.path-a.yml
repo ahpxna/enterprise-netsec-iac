@@ -1,0 +1,13 @@
+# Path A override: the orchestrator also joins the containerlab management bridge
+# so it can reach the nftables enforcement agents on fw-core / fw-dmz (10.1.1.20/30).
+# Use:  docker compose -f docker-compose.yml -f docker-compose.path-a.yml --profile soc --profile soc-ai up -d
+---
+networks:
+  cxyz_mgmt:
+    external: true
+    name: cxyz_mgmt
+
+services:
+  soc-response:
+    networks:
+      cxyz_mgmt: {}

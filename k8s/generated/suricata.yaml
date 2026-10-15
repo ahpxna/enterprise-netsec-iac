@@ -19,4 +19,5 @@ outputs:
         - alert
         - dns
         - http
+        - tls
         - flow

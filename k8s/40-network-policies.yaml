@@ -123,6 +123,10 @@ spec:
     - to:
         - podSelector: { matchLabels: { app: wazuh-indexer } }
       ports: [{ protocol: TCP, port: 9200 }]
+    # soc-logstash sidecar -> SOC Elasticsearch
+    - to:
+        - podSelector: { matchLabels: { app: elasticsearch } }
+      ports: [{ protocol: TCP, port: 9200 }]
 ---
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
@@ -153,3 +157,134 @@ spec:
       ports:
         - { protocol: TCP, port: 1514 }
         - { protocol: TCP, port: 1515 }
+    # soc-logstash sidecar -> SOC Elasticsearch
+    - to:
+        - podSelector: { matchLabels: { app: elasticsearch } }
+      ports: [{ protocol: TCP, port: 9200 }]
+# --- SOC analytics / AI / response planes ---
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: { name: elasticsearch, namespace: cxyz-security }
+spec:
+  podSelector: { matchLabels: { app: elasticsearch } }
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector: { matchLabels: { app: wazuh-manager } }
+        - podSelector: { matchLabels: { app: suricata } }
+        - podSelector: { matchLabels: { app: kibana } }
+        - podSelector: { matchLabels: { app: soc-feature-worker } }
+        - podSelector: { matchLabels: { app: soc-enrichment-worker } }
+        - podSelector: { matchLabels: { app: soc-decision } }
+        - podSelector: { matchLabels: { app: soc-response } }
+        - podSelector: { matchLabels: { app: soc-elastic-bootstrap } }
+        - podSelector: { matchLabels: { app: soc-kibana-setup } }
+      ports: [{ protocol: TCP, port: 9200 }]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: { name: kibana, namespace: cxyz-security }
+spec:
+  podSelector: { matchLabels: { app: kibana } }
+  policyTypes: [Ingress, Egress]
+  ingress: []
+  egress:
+    - to:
+        - podSelector: { matchLabels: { app: elasticsearch } }
+      ports: [{ protocol: TCP, port: 9200 }]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: { name: soc-elastic-bootstrap, namespace: cxyz-security }
+spec:
+  podSelector: { matchLabels: { app: soc-elastic-bootstrap } }
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - podSelector: { matchLabels: { app: elasticsearch } }
+      ports: [{ protocol: TCP, port: 9200 }]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: { name: soc-kibana-setup, namespace: cxyz-security }
+spec:
+  podSelector: { matchLabels: { app: soc-kibana-setup } }
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - podSelector: { matchLabels: { app: kibana } }
+      ports: [{ protocol: TCP, port: 5601 }]
+    - to:
+        - podSelector: { matchLabels: { app: elasticsearch } }
+      ports: [{ protocol: TCP, port: 9200 }]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: { name: soc-ai-api, namespace: cxyz-security }
+spec:
+  podSelector: { matchLabels: { app: soc-ai-api } }
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector: { matchLabels: { app: soc-enrichment-worker } }
+      ports: [{ protocol: TCP, port: 8443 }]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: { name: soc-feature-worker, namespace: cxyz-security }
+spec:
+  podSelector: { matchLabels: { app: soc-feature-worker } }
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - podSelector: { matchLabels: { app: elasticsearch } }
+      ports: [{ protocol: TCP, port: 9200 }]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: { name: soc-enrichment-worker, namespace: cxyz-security }
+spec:
+  podSelector: { matchLabels: { app: soc-enrichment-worker } }
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - podSelector: { matchLabels: { app: elasticsearch } }
+      ports: [{ protocol: TCP, port: 9200 }]
+    - to:
+        - podSelector: { matchLabels: { app: soc-ai-api } }
+      ports: [{ protocol: TCP, port: 8443 }]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: { name: soc-decision, namespace: cxyz-security }
+spec:
+  podSelector: { matchLabels: { app: soc-decision } }
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - podSelector: { matchLabels: { app: elasticsearch } }
+      ports: [{ protocol: TCP, port: 9200 }]
+    - to:
+        - podSelector: { matchLabels: { app: soc-response } }
+      ports: [{ protocol: TCP, port: 8443 }]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: { name: soc-response, namespace: cxyz-security }
+spec:
+  podSelector: { matchLabels: { app: soc-response } }
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from:
+        - podSelector: { matchLabels: { app: soc-decision } }
+      ports: [{ protocol: TCP, port: 8443 }]
+  egress:
+    - to:
+        - podSelector: { matchLabels: { app: elasticsearch } }
+      ports: [{ protocol: TCP, port: 9200 }]
+    - to:
+        - ipBlock: { cidr: 10.1.1.0/24 }
+      ports:
+        - { protocol: TCP, port: 9443 }
+        - { protocol: TCP, port: 443 }

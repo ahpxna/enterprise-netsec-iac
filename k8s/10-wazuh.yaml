@@ -115,10 +115,51 @@ spec:
             - { name: registration, mountPath: /var/ossec/etc/authd.pass, subPath: WAZUH_REGISTRATION_PASSWORD, readOnly: true }
             - { name: decoders, mountPath: /var/ossec/etc/decoders/local, readOnly: true }
             - { name: rules, mountPath: /var/ossec/etc/rules/local, readOnly: true }
+            - { name: wazuh-logs, mountPath: /var/ossec/logs }
           resources:
             requests: { cpu: "250m", memory: "1Gi" }
             limits: { cpu: "1", memory: "2Gi" }
+        - name: soc-logstash
+          image: docker.elastic.co/logstash/logstash@sha256:04908aea76eb20de8d7bbaf6870db06419c7db3bbc856266c7a11c7db4972345
+          # The monitoring API must never listen on a node/pod address (the Suricata
+          # DaemonSet uses hostNetwork): loopback only.
+          args: ["--api.http.host=127.0.0.1"]
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: { drop: ["ALL"] }
+            seccompProfile: { type: RuntimeDefault }
+          env:
+            - name: LOGSTASH_PASSWORD
+              valueFrom: { secretKeyRef: { name: cxyz-soc-passwords, key: LOGSTASH_PASSWORD } }
+          startupProbe:
+            exec: { command: ["bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/9600"] }
+            periodSeconds: 10
+            failureThreshold: 60
+          readinessProbe:
+            exec: { command: ["bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/9600"] }
+            periodSeconds: 10
+            failureThreshold: 6
+          livenessProbe:
+            exec: { command: ["bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/9600"] }
+            periodSeconds: 20
+            failureThreshold: 6
+          volumeMounts:
+            - { name: soc-logstash-config, mountPath: /usr/share/logstash/config, readOnly: true }
+            - { name: soc-logstash-pipelines, mountPath: /usr/share/logstash/pipeline, readOnly: true }
+            - { name: soc-ca, mountPath: /usr/share/logstash/certs, readOnly: true }
+            - { name: soc-logstash-data, mountPath: /usr/share/logstash/data }
+            - { name: soc-fixtures, mountPath: /fixtures }
+            - { name: wazuh-logs, mountPath: /var/ossec/logs, readOnly: true }
+          resources:
+            requests: { cpu: "200m", memory: "768Mi" }
+            limits: { cpu: "1", memory: "1536Mi" }
       volumes:
+        - { name: wazuh-logs, emptyDir: {} }
+        - { name: soc-logstash-config, configMap: { name: cxyz-soc-logstash-config } }
+        - { name: soc-logstash-pipelines, configMap: { name: cxyz-soc-logstash-pipelines } }
+        - { name: soc-ca, secret: { secretName: cxyz-soc-ca } }
+        - { name: soc-logstash-data, emptyDir: { sizeLimit: 1Gi } }
+        - { name: soc-fixtures, emptyDir: { sizeLimit: 64Mi } }
         - name: manager-tls
           secret:
             secretName: cxyz-wazuh-tls

@@ -19,7 +19,7 @@ jobs:
         with: { python-version: "3.12" }
 
       - name: Install linters
-        run: python -m pip install -r requirements-ci.txt
+        run: python -m pip install -r requirements-ci.txt -r requirements-soc-test.txt
 
       - name: Install Ansible collections
         run: ansible-galaxy collection install -r ansible/requirements.yml
@@ -34,12 +34,14 @@ jobs:
           python scripts/check_path_b_intent.py
           python scripts/security_static_checks.py
           python scripts/check_image_lock.py
+          python scripts/check_soc_static.py
+          python scripts/check_soc_ai_static.py
           python scripts/check_ci_contract.py
           python scripts/check_yaml_syntax.py
 
       - name: Check Python and Bash syntax
         run: |
-          python -m compileall -q scripts compliance tests
+          python -m compileall -q scripts compliance tests ai response soc
           find scripts clab/configs -type f -name '*.sh' -print0 | xargs -0 -n1 bash -n
 
       - name: Test evidence and SOC architecture contracts
@@ -54,15 +56,21 @@ jobs:
           --profile ztna
           --profile dmz
           --profile vpn-test
+          --profile soc
+          --profile soc-ai
           config --quiet
 
       - name: Build deterministic local service images
         run: |
           docker build --pull=false -t cxyz/server1:ci docker/server1
           docker build --pull=false -t cxyz/syslog-relay:ci docker/syslog-relay
+          docker build --pull=false -f docker/soc-python/Dockerfile -t cxyz/soc-python:ci .
 
       - name: Render Kubernetes manifests with default Kustomize restrictions
         run: kubectl kustomize k8s/ >/tmp/cxyz-k8s-rendered.yaml
+
+      - name: Validate rendered manifests against the Kubernetes API schemas
+        run: python scripts/check_k8s_schema.py
 
       - name: yamllint
         run: yamllint .
@@ -72,6 +80,21 @@ jobs:
 
       - name: Validate controls.yaml <-> tests wiring
         run: python compliance/check_wiring.py
+
+  # --- LSTM autoencoder family (optional dependency set, CPU PyTorch) ---
+  ai-lstm:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with: { python-version: "3.12" }
+      - name: Install CPU PyTorch and the SOC test dependencies
+        run: >-
+          python -m pip install
+          --extra-index-url https://download.pytorch.org/whl/cpu
+          -r requirements-soc-lstm.txt -r requirements-soc-test.txt -r requirements-ci.txt
+      - name: LSTM candidate, promotion and serving lifecycle
+        run: pytest tests/soc/test_lstm_lifecycle.py tests/soc/test_benchmark_comparison.py tests/soc/test_live_checks.py -q
 
   secret-scan:
     runs-on: ubuntu-24.04

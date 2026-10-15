@@ -1,0 +1,63 @@
+{
+  "index_patterns": ["soc-network-*", "soc-endpoint-*", "soc-auth-*", "soc-alerts-*"],
+  "priority": 500,
+  "version": 1,
+  "_meta": {
+    "schema": "soc-event-v1",
+    "description": "Normalized CompanyXYZ SOC events"
+  },
+  "template": {
+    "settings": {
+      "number_of_shards": 1,
+      "number_of_replicas": 0,
+      "index.lifecycle.name": "soc-events-30d",
+      "index.mapping.total_fields.limit": 2000
+    },
+    "mappings": {
+      "dynamic": true,
+      "properties": {
+        "@timestamp": {"type": "date"},
+        "event": {
+          "properties": {
+            "category": {"type": "keyword"},
+            "dataset": {"type": "keyword"},
+            "id": {"type": "keyword"},
+            "kind": {"type": "keyword"},
+            "outcome": {"type": "keyword"},
+            "severity": {"type": "long"}
+          }
+        },
+        "source": {"properties": {"ip": {"type": "ip"}, "port": {"type": "long"}}},
+        "destination": {"properties": {"ip": {"type": "ip"}, "port": {"type": "long"}}},
+        "network": {
+          "properties": {
+            "transport": {"type": "keyword"},
+            "protocol": {"type": "keyword"},
+            "direction": {"type": "keyword"},
+            "bytes": {"type": "long"},
+            "community_id": {"type": "keyword"}
+          }
+        },
+        "log": {"properties": {"source": {"properties": {"address": {"type": "ip"}}}}},
+        "observer": {"properties": {"name": {"type": "keyword"}, "type": {"type": "keyword"}}},
+        "host": {"properties": {"name": {"type": "keyword"}}},
+        "user": {"properties": {"name": {"type": "keyword"}}},
+        "cxyz": {
+          "properties": {
+            "schema_version": {"type": "keyword"},
+            "sensor": {"type": "keyword"},
+            "zone": {"type": "keyword"},
+            "sensor_zone": {"type": "keyword"},
+            "source_zone": {"type": "keyword"},
+            "destination_zone": {"type": "keyword"},
+            "vlan": {"type": "integer"},
+            "asset_role": {"type": "keyword"},
+            "ingestion_id": {"type": "keyword"},
+            "pipeline_version": {"type": "keyword"},
+            "source_authentication": {"type": "keyword"}
+          }
+        }
+      }
+    }
+  }
+}

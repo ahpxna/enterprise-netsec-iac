@@ -1,0 +1,143 @@
+{
+  "index_patterns": ["soc-response-*"],
+  "priority": 600,
+  "version": 3,
+  "_meta": {
+    "schemas": ["correlation-decision-event-v1", "response-audit-event-v1"],
+    "description": "Append-only strict union of policy decisions and immutable response lifecycle evidence. Raw telemetry is intentionally absent."
+  },
+  "template": {
+    "settings": {
+      "number_of_shards": 1,
+      "number_of_replicas": 0,
+      "index.lifecycle.name": "soc-response-365d"
+    },
+    "mappings": {
+      "dynamic": "strict",
+      "properties": {
+        "@timestamp": {"type": "date"},
+        "schema_version": {"type": "keyword"},
+        "event": {
+          "type": "object",
+          "dynamic": "strict",
+          "properties": {
+            "id": {"type": "keyword"},
+            "kind": {"type": "keyword"},
+            "category": {"type": "keyword"},
+            "dataset": {"type": "keyword"}
+          }
+        },
+        "correlation_id": {"type": "keyword"},
+        "target": {
+          "type": "object",
+          "dynamic": "strict",
+          "properties": {
+            "type": {"type": "keyword"},
+            "value": {"type": "keyword"}
+          }
+        },
+        "anomaly": {
+          "type": "object",
+          "dynamic": "strict",
+          "properties": {
+            "event_id": {"type": "keyword"},
+            "model_id": {"type": "keyword"},
+            "score": {"type": "double"},
+            "threshold": {"type": "double"},
+            "is_anomaly": {"type": "boolean"}
+          }
+        },
+        "signals": {
+          "type": "nested",
+          "dynamic": "strict",
+          "properties": {
+            "kind": {"type": "keyword"},
+            "reference": {"type": "keyword"},
+            "observed_at": {"type": "date"},
+            "confidence": {"type": "double"}
+          }
+        },
+        "policy": {
+          "type": "object",
+          "dynamic": "strict",
+          "properties": {
+            "id": {"type": "keyword"},
+            "version": {"type": "keyword"},
+            "sha256": {"type": "keyword"}
+          }
+        },
+        "decision": {
+          "type": "object",
+          "dynamic": "strict",
+          "properties": {
+            "outcome": {"type": "keyword"},
+            "action": {"type": "keyword"},
+            "automatic_response_eligible": {"type": "boolean"},
+            "response_request_id": {"type": "keyword"},
+            "confidence": {"type": "double"},
+            "reason": {"type": "keyword", "ignore_above": 2048}
+          }
+        },
+        "audit_event_id": {"type": "keyword"},
+        "response_id": {"type": "keyword"},
+        "transition_number": {"type": "long"},
+        "decision_event_id": {"type": "keyword"},
+        "policy_id": {"type": "keyword"},
+        "idempotency_key": {"type": "keyword"},
+        "action": {"type": "keyword"},
+        "adapter": {"type": "keyword"},
+        "state": {"type": "keyword"},
+        "previous_state": {"type": "keyword"},
+        "ttl_seconds": {"type": "integer"},
+        "expires_at": {"type": "date"},
+        "allowlist_checked": {"type": "boolean"},
+        "rollback_required": {"type": "boolean"},
+        "action_intent": {
+          "type": "object",
+          "dynamic": "strict",
+          "properties": {
+            "operation": {"type": "keyword"},
+            "started_at": {"type": "date"},
+            "adapter_reference": {"type": "keyword"}
+          }
+        },
+        "application": {
+          "type": "object",
+          "dynamic": "strict",
+          "properties": {
+            "applied_at": {"type": "date"},
+            "adapter_reference": {"type": "keyword"}
+          }
+        },
+        "verification": {
+          "type": "object",
+          "dynamic": "strict",
+          "properties": {
+            "verified": {"type": "boolean"},
+            "verified_at": {"type": "date"},
+            "evidence_refs": {"type": "keyword"},
+            "verification_latency_ms": {"type": "double"}
+          }
+        },
+        "rollback": {
+          "type": "object",
+          "dynamic": "strict",
+          "properties": {
+            "completed_at": {"type": "date"},
+            "cause": {"type": "keyword"},
+            "evidence_refs": {"type": "keyword"}
+          }
+        },
+        "failure": {
+          "type": "object",
+          "dynamic": "strict",
+          "properties": {
+            "code": {"type": "keyword"},
+            "message": {"type": "keyword", "ignore_above": 2048},
+            "failed_at": {"type": "date"}
+          }
+        }
+      }
+    }
+  }
+}

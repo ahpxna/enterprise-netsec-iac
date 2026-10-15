@@ -170,6 +170,48 @@ images:
       source: https://hub.docker.com/layers/linuxserver/wireguard/1.0.20210914
       note: Existing project digest is confirmed as the tag's index digest; runtime verifier still checks
         required child platforms.
+  elasticsearch:
+    intent_ref: docker.elastic.co/elasticsearch/elasticsearch:9.3.1
+    pinned_ref: docker.elastic.co/elasticsearch/elasticsearch@sha256:cb637acad8808664b7c57455a2b2ee87e30b3cab210f3ccc423ff6bcc305e0b9
+    status: verified
+    scopes:
+      - compose
+    required_platforms:
+      - linux/amd64
+      - linux/arm64
+    verification:
+      level: registry-metadata
+      kind: multi-platform-index
+      source: https://www.elastic.co/guide/en/elasticsearch/reference/current/docker.html
+      note: Elastic registry inspection resolved the 9.3.1 top-level manifest list and both required child platforms.
+  kibana:
+    intent_ref: docker.elastic.co/kibana/kibana:9.3.1
+    pinned_ref: docker.elastic.co/kibana/kibana@sha256:cb4056251fb4116bbfe4de272284fd3d3f43159ef7a5ffe7c18b64d21ceafb12
+    status: verified
+    scopes:
+      - compose
+    required_platforms:
+      - linux/amd64
+      - linux/arm64
+    verification:
+      level: registry-metadata
+      kind: multi-platform-index
+      source: https://www.elastic.co/guide/en/kibana/current/docker.html
+      note: Elastic registry inspection resolved the 9.3.1 top-level manifest list and both required child platforms.
+  logstash:
+    intent_ref: docker.elastic.co/logstash/logstash:9.3.1
+    pinned_ref: docker.elastic.co/logstash/logstash@sha256:04908aea76eb20de8d7bbaf6870db06419c7db3bbc856266c7a11c7db4972345
+    status: verified
+    scopes:
+      - compose
+    required_platforms:
+      - linux/amd64
+      - linux/arm64
+    verification:
+      level: registry-metadata
+      kind: multi-platform-index
+      source: https://www.elastic.co/guide/en/logstash/current/docker.html
+      note: Elastic registry inspection resolved the 9.3.1 top-level manifest list and both required child platforms.
   batfish:
     intent_ref: batfish/allinone:latest
     pinned_ref: batfish/allinone@sha256:445818fc17c0e24eb097387c84184334ad3fc42807de1ed9fef773762a0be515
