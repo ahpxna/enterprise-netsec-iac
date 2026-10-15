@@ -1,0 +1,559 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CompanyXYZ Network Explorer</title>
+<style>
+:root{
+  --bg:#f5f6f8;--panel:#ffffff;--ink:#15202b;--muted:#5b6876;--line:#d6dbe2;--accent:#1f6feb;
+  --outside:#e8890c;--campus:#1f6feb;--dc:#1a9850;--dmz:#8e44ad;--mgmt:#6b7785;--ok:#1a9850;--bad:#d1242f;--warn:#bf8700;
+  --node:#ffffff;--grid:#e7eaef;--zone-a:.07;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme=light]){
+  --bg:#0d1117;--panel:#161b22;--ink:#e6edf3;--muted:#9aa7b4;--line:#30363d;--accent:#58a6ff;--node:#1c2330;--grid:#1a212b;--zone-a:.12;}}
+:root[data-theme=dark]{--bg:#0d1117;--panel:#161b22;--ink:#e6edf3;--muted:#9aa7b4;--line:#30363d;--accent:#58a6ff;--node:#1c2330;--grid:#1a212b;--zone-a:.12}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:13px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;height:100vh;display:flex;flex-direction:column}
+header{display:flex;align-items:center;gap:14px;padding:8px 14px;background:var(--panel);border-bottom:1px solid var(--line)}
+header h1{font-size:15px;margin:0;white-space:nowrap}
+header .meta{color:var(--muted);font-size:12px;white-space:nowrap}
+header .grow{flex:1}
+input[type=search]{background:var(--bg);color:var(--ink);border:1px solid var(--line);border-radius:6px;padding:5px 9px;width:230px}
+button{background:var(--bg);color:var(--ink);border:1px solid var(--line);border-radius:6px;padding:4px 9px;cursor:pointer;font:inherit}
+button:hover{border-color:var(--accent)}
+.dot{display:inline-block;width:9px;height:9px;border-radius:50%;background:var(--muted);margin-right:5px;vertical-align:middle}
+.dot.on{background:var(--ok)}.dot.off{background:var(--bad)}
+nav{display:flex;gap:2px;padding:0 10px;background:var(--panel);border-bottom:1px solid var(--line);overflow-x:auto}
+nav button{border:none;border-bottom:2px solid transparent;border-radius:0;padding:9px 12px;background:none;color:var(--muted)}
+nav button.active{color:var(--ink);border-bottom-color:var(--accent)}
+main{flex:1;display:flex;min-height:0}
+#stage{flex:1;position:relative;min-width:0}
+#stage svg{width:100%;height:100%;display:block;background:var(--bg);cursor:grab}
+#stage svg.panning{cursor:grabbing}
+aside{width:430px;max-width:46vw;background:var(--panel);border-left:1px solid var(--line);overflow:auto;padding:14px 16px}
+aside.hidden{display:none}
+aside{overflow-x:hidden}aside td,aside th{overflow-wrap:anywhere}aside table{table-layout:auto}
+.page{flex:1;overflow:auto;padding:16px 20px;display:none}
+.page.active{display:block}
+.toolbar{position:absolute;left:10px;top:10px;display:flex;flex-direction:column;gap:6px;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:8px 10px;font-size:12px;z-index:2}
+.toolbar label{display:flex;align-items:center;gap:6px;cursor:pointer}
+.legend{position:absolute;right:10px;bottom:10px;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:8px 10px;font-size:12px;z-index:2}
+.legend div{display:flex;align-items:center;gap:7px;margin:2px 0}
+.sw{width:22px;height:0;border-top:3px solid}
+h2{font-size:14px;margin:0 0 4px}h3{font-size:12px;margin:16px 0 6px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em}
+table{border-collapse:collapse;width:100%;font-size:12px}
+th,td{border-bottom:1px solid var(--line);padding:4px 7px;text-align:left;vertical-align:top}
+th{color:var(--muted);font-weight:600;position:sticky;top:0;background:var(--panel)}
+code,.mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:12px}
+.pill{display:inline-block;border-radius:10px;padding:0 8px;font-size:11px;border:1px solid var(--line);color:var(--muted);margin:0 3px 3px 0}
+.pill.ok{color:var(--ok);border-color:var(--ok)}.pill.bad{color:var(--bad);border-color:var(--bad)}.pill.warn{color:var(--warn);border-color:var(--warn)}
+.card{border:1px solid var(--line);border-radius:8px;padding:10px 12px;margin:0 0 12px;background:var(--panel)}
+.cols{display:grid;grid-template-columns:repeat(auto-fit,minmax(380px,1fr));gap:12px}
+.note{color:var(--muted)}
+.copy{cursor:pointer;color:var(--accent)}
+.rule{padding:3px 0;border-bottom:1px dotted var(--line)}
+.rule .c{color:var(--muted)}
+.drop{color:var(--bad)}.accept{color:var(--ok)}
+svg text{font-family:system-ui,-apple-system,"Segoe UI",sans-serif;fill:var(--ink);paint-order:stroke;stroke:var(--bg);stroke-width:3.5px;stroke-linejoin:round}
+.nodeg{cursor:pointer}.nodeg .box{fill:var(--node);stroke-width:2}
+.nodeg:hover .box,.nodeg.sel .box{stroke-width:4}
+.nodeg.dim{opacity:.25}
+.linkg{cursor:pointer}.linkg.dim{opacity:.2}.linkg .hit{stroke:transparent;stroke-width:14}
+.ifl{font-size:9.5px;fill:var(--muted)}
+.cidr{font-size:10px;font-weight:600}
+.empty{padding:40px;text-align:center;color:var(--muted)}
+</style>
+</head>
+<body>
+<header>
+  <h1>CompanyXYZ Network Explorer</h1>
+  <span class="meta" id="meta"></span>
+  <span class="grow"></span>
+  <input type="search" id="q" placeholder="Search name or IP  (press /)" autocomplete="off">
+  <span class="meta"><span class="dot" id="livedot"></span><span id="livetxt">live: …</span></span>
+  <button id="theme" title="toggle light/dark">◐</button>
+  <a href="/api/model" target="_blank"><button>JSON</button></a>
+</header>
+<nav id="tabs"></nav>
+<main>
+  <div id="stage">
+    <div class="toolbar" id="toolbar"></div>
+    <svg id="svg" role="img" aria-label="network topology"></svg>
+    <div class="legend" id="legend"></div>
+  </div>
+  <div class="page" id="page"></div>
+  <aside id="detail" class="hidden"></aside>
+</main>
+<script>
+"use strict";
+const NS = "http://www.w3.org/2000/svg";
+const $ = (id) => document.getElementById(id);
+let M = null, LIVE = null, TAB = "topology", SELECTED = null, QUERY = "";
+const view = {x: 0, y: 0, k: 1};
+const prefs = {mgmt: false, docker: true, zones: true, ifaces: true, cidr: true};
+const pos = {};                       // dragged node positions, keyed by tab+id
+
+function h(tag, attrs, ...kids) {
+  const el = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs || {})) {
+    if (k === "class") el.className = v;
+    else if (k.startsWith("on")) el.addEventListener(k.slice(2), v);
+    else if (v !== false && v != null) el.setAttribute(k, v === true ? "" : v);
+  }
+  for (const kid of kids.flat()) if (kid != null && kid !== false) el.append(kid.nodeType ? kid : document.createTextNode(String(kid)));
+  return el;
+}
+function s(tag, attrs, ...kids) {
+  const el = document.createElementNS(NS, tag);
+  for (const [k, v] of Object.entries(attrs || {})) if (v != null && v !== false) el.setAttribute(k, v);
+  for (const kid of kids.flat()) if (kid != null) el.append(kid.nodeType ? kid : document.createTextNode(String(kid)));
+  return el;
+}
+const mono = (t) => h("code", {}, t);
+const pill = (t, cls) => h("span", {class: "pill " + (cls || "")}, t);
+function copyable(text) { return h("span", {class: "copy mono", title: "click to copy", onclick: () => navigator.clipboard && navigator.clipboard.writeText(text)}, text); }
+function table(head, rows) {
+  return h("table", {}, h("thead", {}, h("tr", {}, head.map((c) => h("th", {}, c)))), h("tbody", {}, rows.map((r) => h("tr", {}, r.map((c) => h("td", {}, c))))));
+}
+
+/* ------------------------------------------------------------------ data */
+async function load() {
+  const res = await fetch("/api/model");
+  M = await res.json();
+  $("meta").textContent = `${M.meta.name} · ${M.meta.git.branch}@${M.meta.git.commit} · ${M.topology.nodes.length} nodes · ${M.topology.links.length} links`;
+  buildTabs(); render();
+  pollLive(); setInterval(pollLive, 4000);
+}
+async function pollLive() {
+  try {
+    LIVE = await (await fetch("/api/live")).json();
+    const running = Object.values(LIVE.nodes).filter((n) => n.state === "running").length;
+    const svc = Object.values(LIVE.services).filter((n) => n.state === "running").length;
+    const ok = LIVE.docker && LIVE.docker.ok;
+    $("livedot").className = "dot " + (ok && (running || svc) ? "on" : "off");
+    $("livetxt").textContent = ok ? `live: ${running} lab nodes, ${svc} services running` : "live: docker unavailable (static view)";
+    $("livetxt").title = (LIVE.errors || []).join("\n");
+  } catch (e) { $("livetxt").textContent = "live: unreachable"; }
+  paintLive();
+  if (["firewall", "ports"].includes(TAB)) render();
+}
+
+const TABS = [["topology", "Topology"], ["soc", "SOC / AI plane"], ["ipplan", "IP plan"], ["routing", "Routing"], ["firewall", "Firewall"],
+  ["ports", "Services & ports"], ["identity", "Identity & trust"], ["controls", "Controls"], ["ops", "Access & commands"], ["notes", "Notes & checks"]];
+function buildTabs() {
+  $("tabs").replaceChildren(...TABS.map(([id, label]) => h("button", {class: id === TAB ? "active" : "", onclick: () => { TAB = id; SELECTED = null; buildTabs(); render(); }}, label)));
+}
+
+/* ------------------------------------------------------------------ colours */
+const ZONE_COLOR = {outside: "var(--outside)", campus: "var(--campus)", "campus-user": "var(--campus)", "campus-mgmt": "var(--campus)", dc: "var(--dc)", dmz: "var(--dmz)", management: "var(--mgmt)"};
+const KIND_COLOR = {isp: "var(--outside)", router: "var(--campus)", firewall: "var(--bad)", endpoint: "var(--mgmt)", server: "var(--dc)", switch: "var(--campus)", service: "var(--dc)"};
+function nodeLive(id, docker) {
+  if (!LIVE || !LIVE.docker || !LIVE.docker.ok) return null;
+  const src = docker ? LIVE.services : LIVE.nodes;
+  return src[id] || null;
+}
+
+/* ------------------------------------------------------------------ icons (drawn at 0,0, ~56px) */
+function icon(kind, color) {
+  const g = s("g", {});
+  const st = {fill: "none", stroke: color, "stroke-width": 2.4, "stroke-linecap": "round", "stroke-linejoin": "round"};
+  const mk = (tag, a) => g.append(s(tag, {...st, ...a}));
+  if (kind === "router") { mk("circle", {cx: 0, cy: 0, r: 20}); mk("path", {d: "M-12 -4h24m-6 -6l6 6l-6 6M12 6h-24m6 -6l-6 6l6 6"}); }
+  else if (kind === "firewall") { mk("rect", {x: -22, y: -17, width: 44, height: 34, rx: 3}); mk("path", {d: "M-22 -6h44M-22 5h44M-8 -17v11M8 -17v11M0 -6v11M-14 5v12M14 5v12"}); }
+  else if (kind === "switch") { mk("rect", {x: -24, y: -11, width: 48, height: 22, rx: 3}); mk("path", {d: "M-14 -2v4M-6 -2v4M2 -2v4M10 -2v4"}); }
+  else if (kind === "endpoint") { mk("rect", {x: -18, y: -15, width: 36, height: 24, rx: 2}); mk("path", {d: "M-8 17h16M0 9v8"}); }
+  else if (kind === "server") { mk("rect", {x: -17, y: -19, width: 34, height: 12, rx: 2}); mk("rect", {x: -17, y: -5, width: 34, height: 12, rx: 2}); mk("rect", {x: -17, y: 9, width: 34, height: 12, rx: 2}); mk("path", {d: "M-11 -13h2M-11 1h2M-11 15h2"}); }
+  else if (kind === "isp") { mk("path", {d: "M-18 10a9 9 0 0 1 2-17a12 12 0 0 1 23-2a10 10 0 0 1 5 19z"}); }
+  else if (kind === "person") { mk("circle", {cx: 0, cy: -8, r: 8}); mk("path", {d: "M-16 18a16 14 0 0 1 32 0z"}); }
+  else if (kind === "api" || kind === "agent") { mk("rect", {x: -18, y: -14, width: 36, height: 28, rx: 5}); mk("path", {d: "M-9 -3l-5 5l5 5M9 -3l5 5l-5 5"}); }
+  else { mk("path", {d: "M0 -20l18 10v20l-18 10l-18 -10v-20z"}); mk("circle", {cx: 0, cy: 0, r: 5}); }
+  return g;
+}
+
+/* ------------------------------------------------------------------ topology graph */
+function graphFor(tab) {
+  if (tab === "soc") return socGraph();
+  const t = M.topology, nodes = [], links = [];
+  for (const n of t.nodes) nodes.push({id: n.id, label: n.label, kind: n.kind, data: n, type: "node", x: n.pos[0], y: n.pos[1], ip: n.attachments.length ? n.mgmt_ip : n.mgmt_ip});
+  for (const b of t.bridges) nodes.push({id: b.id, label: b.label, kind: "switch", data: b, type: "bridge", x: b.pos[0], y: b.pos[1], ip: b.cidr});
+  if (prefs.docker) for (const d of t.docker) if (d.pos) nodes.push({id: d.id, label: d.label, kind: "service", data: d, type: "docker", x: d.pos[0], y: d.pos[1], ip: d.ip, docker: true});
+  const ids = new Set(nodes.map((n) => n.id));
+  for (const l of t.links) if (ids.has(l.a.node) && ids.has(l.b.node)) links.push({id: l.id, a: l.a.node, b: l.b.node, data: l, type: "link"});
+  return {nodes, links};
+}
+function socGraph() {
+  const nodes = [], links = [], soc = M.soc, byName = {};
+  for (const n of M.topology.nodes) byName[n.id] = {kind: n.kind, data: n, type: "node", label: n.label, ip: n.mgmt_ip};
+  for (const d of M.topology.docker) byName[d.id] = {kind: "service", data: d, type: "docker", label: d.label, ip: d.ip, docker: true};
+  for (const [id, [label, kind, desc]] of Object.entries(soc.notes)) byName[id] = {kind, data: {id, label, description: desc, listens: []}, type: "note", label, ip: null};
+  for (const id of new Set(soc.flows.flatMap((f) => [f.src, f.dst]))) {
+    const base = byName[id]; if (!base) continue;
+    const p = soc.layout[id] || [100, 100];
+    nodes.push({id, label: base.label || id, ...base, x: p[0], y: p[1]});
+  }
+  soc.flows.forEach((f, i) => links.push({id: "flow" + i, a: f.src, b: f.dst, data: f, type: "flow"}));
+  return {nodes, links};
+}
+
+let G = null;
+function renderGraph() {
+  const svg = $("svg");
+  G = graphFor(TAB);
+  svg.replaceChildren();
+  const defs = s("defs", {},
+    s("marker", {id: "arrow", viewBox: "0 0 10 10", refX: 9, refY: 5, markerWidth: 7, markerHeight: 7, orient: "auto-start-reverse"}, s("path", {d: "M0 0L10 5L0 10z", fill: "var(--muted)"})),
+    s("pattern", {id: "grid", width: 40, height: 40, patternUnits: "userSpaceOnUse"}, s("path", {d: "M40 0H0V40", fill: "none", stroke: "var(--grid)", "stroke-width": 1})));
+  const root = s("g", {id: "root"});
+  svg.append(defs, s("rect", {x: -4000, y: -4000, width: 8000, height: 8000, fill: "url(#grid)", id: "bg"}), root);
+  for (const n of G.nodes) { const key = TAB + n.id; if (pos[key]) { n.x = pos[key][0]; n.y = pos[key][1]; } }
+  const zones = s("g", {id: "zones"}), mg = s("g", {id: "mg"}), linkG = s("g", {id: "links"}), nodeG = s("g", {id: "nodes"});
+  root.append(zones, mg, linkG, nodeG);
+  const byId = Object.fromEntries(G.nodes.map((n) => [n.id, n]));
+  for (const l of G.links) l.el = drawLink(l, byId, linkG);
+  for (const n of G.nodes) n.el = drawNode(n, nodeG);
+  drawZones(); drawMgmt();
+  applyView(); paintLive(); applySearch();
+  $("toolbar").replaceChildren(...(TAB === "topology" ? toolbar() : [h("div", {class: "note"}, "Drag nodes · wheel zooms · drag background pans")]), h("button", {onclick: fit}, "Fit view"), h("button", {onclick: resetLayout}, "Reset layout"));
+  $("legend").replaceChildren(...legend());
+}
+function toolbar() {
+  const box = (key, label) => h("label", {}, h("input", {type: "checkbox", checked: prefs[key] || null, onchange: (e) => { prefs[key] = e.target.checked; renderGraph(); }}), label);
+  return [box("ifaces", "interface IPs"), box("cidr", "subnet labels"), box("zones", "zone boxes"), box("docker", "Docker services on DC"), box("mgmt", "OOB management IPs")];
+}
+function legend() {
+  if (TAB === "soc") return [h("div", {}, h("span", {class: "sw", style: "border-color:var(--campus)"}), "mTLS / signed"), h("div", {}, h("span", {class: "sw", style: "border-color:var(--dc)"}), "TLS + least-privilege role"), h("div", {}, h("span", {class: "sw", style: "border-color:var(--muted);border-top-style:dashed"}), "read-only file mount")];
+  return [["outside", "outside / ISP"], ["campus", "campus"], ["dc", "data centre"], ["dmz", "DMZ"]].map(([z, t]) => h("div", {}, h("span", {class: "sw", style: `border-color:var(--${z})`}), t))
+    .concat([h("div", {}, h("span", {class: "sw", style: "border-color:var(--bad)"}), "firewall"), h("div", {class: "note"}, "dashed = VRRP/L2 segment")]);
+}
+function flowColor(f) { return /mTLS|signature/.test(f.auth) ? "var(--campus)" : /read-only/.test(f.auth) ? "var(--muted)" : "var(--dc)"; }
+
+function endpoints(l, byId) {
+  const a = byId[l.a], b = byId[l.b];
+  const dx = b.x - a.x, dy = b.y - a.y, len = Math.hypot(dx, dy) || 1;
+  return {a, b, dx, dy, len, ux: dx / len, uy: dy / len};
+}
+function drawLink(l, byId, layer) {
+  const e = endpoints(l, byId);
+  const g = s("g", {class: "linkg", "data-id": l.id});
+  const color = l.type === "flow" ? flowColor(l.data) : (ZONE_COLOR[l.data.zone] || "var(--muted)");
+  const dashed = l.type === "flow" ? /read-only/.test(l.data.auth) : (l.data.kind === "lan" || l.data.vrrp);
+  const curved = l.type === "flow";
+  const line = s(curved ? "path" : "line", {stroke: color, "stroke-width": 2.6, fill: "none", "stroke-dasharray": dashed ? "7 5" : null, "marker-end": curved ? "url(#arrow)" : null});
+  const hit = s(curved ? "path" : "line", {class: "hit", fill: "none"});
+  const labels = s("g", {});
+  g.append(hit, line, labels);
+  g.addEventListener("click", (ev) => { ev.stopPropagation(); select({type: "link", obj: l}); });
+  g.addEventListener("mouseenter", () => line.setAttribute("stroke-width", 4.5));
+  g.addEventListener("mouseleave", () => line.setAttribute("stroke-width", 2.6));
+  l.parts = {line, hit, labels}; layer.append(g);
+  placeLink(l, byId);
+  return g;
+}
+function placeLink(l, byId) {
+  const e = endpoints(l, byId), {line, hit, labels} = l.parts;
+  const r = 34, x1 = e.a.x + e.ux * r, y1 = e.a.y + e.uy * r, x2 = e.b.x - e.ux * r, y2 = e.b.y - e.uy * r;
+  labels.replaceChildren();
+  const nx = -e.uy, ny = e.ux;
+  const lab = (x, y, text, cls, anchor) => labels.append(s("text", {x, y, class: cls, "text-anchor": anchor || "middle"}, text));
+  if (l.type === "flow") {
+    const bend = Number(l.data.bend || 0), len = Math.hypot(x2 - x1, y2 - y1);
+    const cx = (x1 + x2) / 2 + nx * bend * len, cy = (y1 + y2) / 2 + ny * bend * len;
+    const d = `M${x1},${y1} Q${cx},${cy} ${x2},${y2}`;
+    line.setAttribute("d", d); hit.setAttribute("d", d);
+    const mx = 0.25 * x1 + 0.5 * cx + 0.25 * x2, my = 0.25 * y1 + 0.5 * cy + 0.25 * y2;
+    labels.append(s("rect", {x: mx - l.data.proto.length * 2.9 - 3, y: my - 7, width: l.data.proto.length * 5.8 + 6, height: 13, rx: 3, fill: "var(--panel)", stroke: "var(--line)", "stroke-width": 0.6}));
+    lab(mx, my + 3, l.data.proto, "ifl");
+    return;
+  }
+  for (const el of [line, hit]) { el.setAttribute("x1", x1); el.setAttribute("y1", y1); el.setAttribute("x2", x2); el.setAttribute("y2", y2); }
+  const d = l.data;
+  if (prefs.cidr && TAB === "topology") {
+    const mx = (x1 + x2) / 2, my = (y1 + y2) / 2, text = d.cidr;
+    labels.append(s("rect", {x: mx - text.length * 3.1 - 4, y: my - 8, width: text.length * 6.2 + 8, height: 15, rx: 4, fill: "var(--panel)", stroke: "var(--line)"}));
+    lab(mx, my + 3, text, "cidr");
+  }
+  if (prefs.ifaces && TAB === "topology" && view.k >= 0.62) {
+    const span = Math.hypot(x2 - x1, y2 - y1), off = Math.min(30, span * 0.3);
+    const end = (side, fromStart) => {
+      if (!side.ip) return;
+      const t = fromStart ? off / span : 1 - off / span;
+      lab(x1 + (x2 - x1) * t + nx * 12, y1 + (y2 - y1) * t + ny * 12, `${side.iface || ""} ${side.ip}`, "ifl");
+    };
+    end(d.a, true); end(d.b, false);
+  }
+}
+function drawNode(n, layer) {
+  const g = s("g", {class: "nodeg", "data-id": n.id});
+  const color = n.type === "bridge" ? "var(--campus)" : (KIND_COLOR[n.kind] || "var(--muted)");
+  g.append(s("circle", {class: "box", r: 36, stroke: color}), icon(n.kind, color));
+  const lines = [n.label];
+  const sub = [];
+  if (n.type === "bridge") sub.push(n.data.cidr);
+  else if (n.type === "docker") sub.push(n.ip);
+  else if (n.type === "node") { sub.push("mgmt " + n.data.mgmt_ip); sub.push(`${n.data.attachments.length} interface${n.data.attachments.length === 1 ? "" : "s"}`); }
+  else if (n.ip) sub.push(n.ip);
+  g.append(s("text", {y: 54, "text-anchor": "middle", "font-size": 12, "font-weight": 600}, lines[0]));
+  sub.filter(Boolean).forEach((t, i) => g.append(s("text", {y: 68 + i * 13, "text-anchor": "middle", class: "mono", "font-size": 11, fill: "var(--muted)", style: "fill:var(--muted)"}, t)));
+  g.append(s("circle", {class: "live", cx: 26, cy: -26, r: 6, fill: "var(--muted)", stroke: "var(--panel)", "stroke-width": 2}));
+  g.addEventListener("click", (ev) => { ev.stopPropagation(); select({type: "node", obj: n}); });
+  attachDrag(g, n);
+  layer.append(g); g.setAttribute("transform", `translate(${n.x},${n.y})`);
+  return g;
+}
+function primaryIp(d) {
+  if (d.attachments && d.attachments.length) return d.attachments.map((a) => a.ip).slice(0, 2).join(" · ") + (d.attachments.length > 2 ? " …" : "");
+  return d.mgmt_ip || "";
+}
+function attachDrag(g, n) {
+  g.addEventListener("pointerdown", (ev) => {
+    ev.stopPropagation(); g.setPointerCapture(ev.pointerId);
+    const start = svgPoint(ev), ox = n.x, oy = n.y; let moved = false;
+    const move = (e) => { const p = svgPoint(e); const nx = ox + (p.x - start.x), ny = oy + (p.y - start.y); if (Math.abs(nx - n.x) + Math.abs(ny - n.y) > 1) moved = true; n.x = nx; n.y = ny; pos[TAB + n.id] = [nx, ny]; g.setAttribute("transform", `translate(${nx},${ny})`); relink(); drawZones(); drawMgmt(); };
+    const up = () => { g.removeEventListener("pointermove", move); g.removeEventListener("pointerup", up); if (moved) g.dataset.moved = "1"; setTimeout(() => delete g.dataset.moved, 0); };
+    g.addEventListener("pointermove", move); g.addEventListener("pointerup", up);
+  });
+}
+function relink() { const byId = Object.fromEntries(G.nodes.map((n) => [n.id, n])); for (const l of G.links) placeLink(l, byId); }
+function svgPoint(ev) { const svg = $("svg"), r = svg.getBoundingClientRect(); return {x: (ev.clientX - r.left - view.x) / view.k, y: (ev.clientY - r.top - view.y) / view.k}; }
+let lastDetail = true;
+function applyView() {
+  const root = $("root"); if (root) root.setAttribute("transform", `translate(${view.x},${view.y}) scale(${view.k})`);
+  const detail = view.k >= 0.62;                 // semantic zoom: interface IPs only when readable
+  if (detail !== lastDetail && G) { lastDetail = detail; relink(); }
+}
+function fit() {
+  if (!G || !G.nodes.length) return;
+  const xs = G.nodes.map((n) => n.x), ys = G.nodes.map((n) => n.y), pad = 90;
+  const minx = Math.min(...xs) - pad, maxx = Math.max(...xs) + pad, miny = Math.min(...ys) - pad, maxy = Math.max(...ys) + pad + 30;
+  const r = $("svg").getBoundingClientRect(), left = 190, right = 150;           // keep clear of the toolbar and legend
+  const availW = Math.max(200, r.width - left - right), availH = r.height - 20;
+  view.k = Math.min(availW / (maxx - minx), availH / (maxy - miny), 1.4);
+  view.x = left + (availW - (maxx - minx) * view.k) / 2 - minx * view.k + 0;
+  view.y = 10 + (availH - (maxy - miny) * view.k) / 2 - miny * view.k;
+  lastDetail = view.k >= 0.62; applyView(); relink();
+}
+function resetLayout() { for (const k of Object.keys(pos)) if (k.startsWith(TAB)) delete pos[k]; renderGraph(); fit(); }
+
+const ZONE_GROUPS = [["Internet", ["isp1", "isp2"], "outside"], ["Campus (VLANs 10 / 40)", ["core", "dist1", "dist2", "vlan10", "vlan40", "pc1", "pc4"], "campus"],
+  ["Data centre 172.16.50.0/24", ["br-cxyz-dc", "server1", "syslog-relay", "wazuh.manager", "wireguard", "wazuh-indexer", "wazuh.dashboard"], "dc"], ["DMZ 195.1.1.160/29", ["dmz-web"], "dmz"]];
+function drawZones() {
+  const layer = $("zones"); if (!layer) return; layer.replaceChildren();
+  if (!prefs.zones || TAB !== "topology") return;
+  for (const [label, members, zone] of ZONE_GROUPS) {
+    const ns = G.nodes.filter((n) => members.includes(n.id)); if (!ns.length) continue;
+    const x1 = Math.min(...ns.map((n) => n.x)) - 70, x2 = Math.max(...ns.map((n) => n.x)) + 70, y1 = Math.min(...ns.map((n) => n.y)) - 62, y2 = Math.max(...ns.map((n) => n.y)) + 92;
+    layer.append(s("rect", {x: x1, y: y1, width: x2 - x1, height: y2 - y1, rx: 18, fill: ZONE_COLOR[zone], "fill-opacity": 0.07, stroke: ZONE_COLOR[zone], "stroke-opacity": 0.5, "stroke-dasharray": "6 6"}),
+      s("text", {x: x1 + 12, y: y1 + 18, "font-size": 12, "font-weight": 700, style: `fill:${ZONE_COLOR[zone]}`}, label));
+  }
+}
+function drawMgmt() {
+  const layer = $("mg"); if (!layer) return; layer.replaceChildren();
+  if (!prefs.mgmt || TAB !== "topology") return;
+  const ns = G.nodes.filter((n) => n.type === "node"); const bx = 20, by = 20;
+  layer.append(s("rect", {x: bx, y: by, width: 230, height: 22, rx: 6, fill: "var(--mgmt)", "fill-opacity": 0.18, stroke: "var(--mgmt)"}), s("text", {x: bx + 8, y: by + 15, "font-size": 12, "font-weight": 600}, `OOB mgmt ${M.topology.management.subnet}`));
+  for (const n of ns) layer.append(s("line", {x1: bx + 115, y1: by + 22, x2: n.x, y2: n.y - 36, stroke: "var(--mgmt)", "stroke-opacity": 0.35, "stroke-dasharray": "2 5"}));
+}
+function paintLive() {
+  if (!G) return;
+  for (const n of G.nodes) {
+    const dot = n.el && n.el.querySelector(".live"); if (!dot) continue;
+    const st = n.type === "node" ? nodeLive(n.id, false) : n.type === "docker" ? nodeLive(n.id, true) : null;
+    const color = !st ? "var(--muted)" : st.state === "running" ? (st.health === "unhealthy" ? "var(--warn)" : "var(--ok)") : "var(--bad)";
+    dot.setAttribute("fill", color);
+    const title = st ? `${n.id}: ${st.status}` : (LIVE && LIVE.docker && LIVE.docker.ok ? `${n.id}: not running` : `${n.id}: live status unavailable`);
+    dot.replaceChildren(s("title", {}, title));
+  }
+}
+function applySearch() {
+  if (!G) return; const q = QUERY.trim().toLowerCase();
+  for (const n of G.nodes) {
+    const hay = JSON.stringify([n.id, n.label, n.ip, n.data && n.data.mgmt_ip, n.data && n.data.attachments && n.data.attachments.map((a) => a.ip), n.data && n.data.cidr, n.data && n.data.members]).toLowerCase();
+    n.el.classList.toggle("dim", !!q && !hay.includes(q));
+  }
+  for (const l of G.links) { const hay = JSON.stringify(l.data).toLowerCase(); l.el.classList.toggle("dim", !!q && !hay.includes(q)); }
+}
+
+/* ------------------------------------------------------------------ detail panel */
+function select(sel) {
+  SELECTED = sel;
+  document.querySelectorAll(".nodeg.sel").forEach((e) => e.classList.remove("sel"));
+  if (sel.type === "node" && sel.obj.el) sel.obj.el.classList.add("sel");
+  const aside = $("detail"); aside.classList.remove("hidden"); aside.replaceChildren(detailFor(sel));
+}
+function closeDetail() { $("detail").classList.add("hidden"); SELECTED = null; document.querySelectorAll(".nodeg.sel").forEach((e) => e.classList.remove("sel")); }
+function detailFor(sel) {
+  const head = (title, sub) => h("div", {style: "display:flex;justify-content:space-between;align-items:start"}, h("div", {}, h("h2", {}, title), h("div", {class: "note"}, sub || "")), h("button", {onclick: closeDetail}, "✕"));
+  if (sel.type === "link") return linkDetail(sel.obj, head);
+  const n = sel.obj, d = n.data;
+  if (n.type === "bridge") return bridgeDetail(d, head);
+  if (n.type === "docker") return dockerDetail(d, head);
+  if (n.type === "note") return h("div", {}, head(d.label, "external element"), h("p", {}, d.description), flowTable(n.id));
+  return nodeDetail(d, head, n.id);
+}
+function nodeDetail(d, head, id) {
+  const live = nodeLive(d.id, false), out = [];
+  out.push(head(d.label, `${d.role} · ${d.kind}`), h("p", {}, d.description));
+  out.push(h("div", {}, live ? pill(live.state + (live.health ? " / " + live.health : ""), live.state === "running" ? "ok" : "bad") : pill("not running / unknown"), pill("mgmt " + d.mgmt_ip), d.image && pill(d.image.split("/").pop())));
+  out.push(h("h3", {}, "Interfaces & addresses"));
+  out.push(table(["iface", "address", "network", "zone", "peer"], [["eth0 (mgmt)", mono(d.mgmt_ip + "/24"), M.topology.management.network, "management", "OOB bridge"]].concat(d.attachments.map((a) => [a.interface, mono(a.address), a.network + "  " + a.cidr, a.zone || "", (a.peers || []).map((p) => `${p.node} ${p.ip}`).join(", ")]))));
+  if (d.routes.length) out.push(h("h3", {}, "Static routes"), table(["destination", "via"], d.routes.map((r) => [mono(r.to), mono(r.via)])));
+  if (d.routing) out.push(routingBlock(d.routing));
+  if (d.firewall) out.push(h("h3", {}, "Firewall policy"), fwSummary(d.id, d.firewall), h("div", {class: "note"}, "Full rule list: Firewall tab."));
+  if (d.listens.length) out.push(h("h3", {}, "Listening services"), table(["port", "service", "who may connect"], d.listens.map((l) => [mono(l.port + "/" + l.proto), l.name, l.who])));
+  if (d.firewall && LIVE && LIVE.blocklists && LIVE.blocklists[d.id]) out.push(h("h3", {}, "Live containment (soc_blocklist)"), blocklistView(LIVE.blocklists[d.id]));
+  out.push(h("h3", {}, "Path B"), h("div", {}, pill(d.path_b.management ? "VyOS/VM managed directly" : "reached via " + d.path_b.proxy), d.path_b.detached_after_boot && pill("mgmt NIC detached after boot", "warn")));
+  out.push(h("h3", {}, "Commands"), ...d.commands.map((c) => h("div", {}, copyable(c))));
+  if (d.config_file) out.push(h("h3", {}, "Config"), mono(d.config_file));
+  out.push(flowTable(d.id));
+  return h("div", {}, ...out);
+}
+function routingBlock(r) {
+  const out = [h("h3", {}, "Routing protocols")];
+  if (r.bgp) out.push(h("div", {class: "card"}, h("b", {}, `BGP AS ${r.bgp.asn}`), r.bgp.router_id ? "  router-id " + r.bgp.router_id : "", table(["neighbor", "AS", "protection", "route-map"], Object.entries(r.bgp.neighbors).map(([ip, n]) => [mono(ip), n.remote_as, `password ${n.password || "-"} · ttl-security ${n.ttl_security_hops ?? "-"}`, n.route_map_out || ""])), r.bgp.networks.length ? h("div", {class: "note"}, "originates " + r.bgp.networks.join(", ")) : null));
+  if (r.ospf) out.push(h("div", {class: "card"}, h("b", {}, "OSPF"), "  router-id " + r.ospf.router_id, table(["network", "area"], r.ospf.networks.map((n) => [mono(n.prefix), n.area])), h("div", {class: "note"}, `passive by default: ${r.ospf.passive_default} · active: ${r.ospf.active.join(", ") || "-"} · default originate: ${r.ospf.default_originate}`)));
+  const ifs = Object.entries(r.interfaces || {}).filter(([, i]) => i.ospf_auth || i.vrrp.length);
+  if (ifs.length) out.push(table(["iface", "OSPF auth", "VRRP"], ifs.map(([name, i]) => [name, i.ospf_auth || "", i.vrrp.map((v) => `grp ${v.group} v${v.version} VIP ${v.virtual_ip} prio ${v.priority}`).join("; ")])));
+  return h("div", {}, ...out);
+}
+function fwSummary(id, fw) {
+  const rows = [];
+  for (const t of fw.tables) for (const c of t.chains) rows.push([`${t.family} ${t.name}`, c.name, c.hook ? `${c.hook} (policy ${c.policy})` : "", c.rules.length]);
+  return table(["table", "chain", "hook", "rules"], rows);
+}
+function blocklistView(b) {
+  if (b.error) return h("div", {class: "note"}, b.error);
+  if (!b.elements.length) return h("div", {}, pill("empty - nothing is contained", "ok"));
+  return table(["blocked IP", "expires in"], b.elements.map((e) => [mono(e.ip), e.expires != null ? e.expires + " s" : "-"]));
+}
+function flowTable(id) {
+  const rows = M.soc.flows.filter((f) => f.src === id || f.dst === id);
+  if (!rows.length) return h("span", {});
+  return h("div", {}, h("h3", {}, "SOC data flows"), table(["from", "to", "proto", "auth", "data"], rows.map((f) => [f.src, f.dst, f.proto, f.auth, f.data])));
+}
+function bridgeDetail(d, head) {
+  return h("div", {}, head(d.label, `L2 segment ${d.cidr}`), h("p", {}, d.description), d.vrrp ? h("div", {}, pill(`VRRP group ${d.vrrp.group}`), pill("VIP " + d.vrrp.virtual_ip), pill("primary " + d.vrrp.primary)) : null,
+    h("h3", {}, "Members"), table(["who", "iface", "ip"], d.members.map((m) => [m.node, m.interface || "", mono(m.ip)])), h("div", {class: "note"}, `zone: ${d.zone} · network ${d.network}`));
+}
+function dockerDetail(d, head) {
+  const live = nodeLive(d.id, true);
+  return h("div", {}, head(d.label, `Docker service · profile ${d.profiles.join(", ")}`), h("p", {}, d.description),
+    h("div", {}, live ? pill(live.state + (live.health ? " / " + live.health : ""), live.state === "running" ? "ok" : "bad") : pill("not running / unknown"), d.read_only && pill("read-only rootfs", "ok"), d.user && pill("user " + d.user), d.network_mode && pill("network_mode " + d.network_mode)),
+    h("h3", {}, "Networks"), table(["network", "ip"], d.networks.map((n) => [n.name, n.ip ? mono(n.ip) : "(dynamic)"])),
+    d.ports.length ? [h("h3", {}, "Published to the host"), table(["host", "port", "→ container"], d.ports.map((p) => [p.host, p.published + "/" + p.proto, p.container]))] : h("div", {class: "note"}, "Not published to the host."),
+    d.listens.length ? [h("h3", {}, "Listening"), table(["port", "service", "who"], d.listens.map((l) => [mono(l.port + "/" + l.proto), l.name, l.who]))] : null,
+    d.credential_volume ? h("div", {}, h("h3", {}, "Credentials"), "own volume ", mono(d.credential_volume), " (no other service mounts it)") : null,
+    h("h3", {}, "Image"), mono(d.image), h("h3", {}, "Commands"), h("div", {}, copyable(`docker compose --profile ${d.profiles[0] || "soc"} logs -f ${d.id}`)), flowTable(d.id));
+}
+function linkDetail(l, head) {
+  const d = l.data, isFlow = l.type === "flow";
+  if (isFlow) return h("div", {}, head(`${d.src} → ${d.dst}`, d.proto), h("p", {}, d.data), h("div", {}, pill(d.auth)), h("div", {class: "note"}, "Every hop is authenticated; no service shares another's credentials."));
+  const net = (() => { try { return ipRange(d.cidr); } catch { return null; } })();
+  return h("div", {}, head(`${d.a.node} ⇄ ${d.b.node}`, d.purpose), h("div", {}, pill(d.cidr), pill(d.kind), pill("zone " + d.zone), d.vrrp ? pill("VRRP VIP " + d.vrrp.virtual_ip, "warn") : null),
+    h("h3", {}, "Ends"), table(["node", "interface", "ip"], [[d.a.node, d.a.iface || "", d.a.ip ? mono(d.a.ip) : ""], [d.b.node, d.b.iface || "", d.b.ip ? mono(d.b.ip) : ""]]),
+    net ? h("div", {class: "note"}, `${net.hosts} usable host addresses (${net.first} – ${net.last})`) : null, h("div", {class: "note"}, "network " + d.network));
+}
+function ipRange(cidr) {
+  const [ip, bits] = cidr.split("/"), p = ip.split(".").map(Number), n = ((p[0] << 24) | (p[1] << 16) | (p[2] << 8) | p[3]) >>> 0, b = Number(bits);
+  const size = 2 ** (32 - b), base = (n & (~(size - 1) >>> 0)) >>> 0, fmt = (x) => [x >>> 24, (x >>> 16) & 255, (x >>> 8) & 255, x & 255].join(".");
+  return b >= 31 ? {hosts: b === 31 ? 2 : 1, first: fmt(base), last: fmt(base + size - 1)} : {hosts: size - 2, first: fmt(base + 1), last: fmt(base + size - 2)};
+}
+
+/* ------------------------------------------------------------------ table pages */
+function ipplanPage() {
+  const q = QUERY.toLowerCase();
+  const rows = M.ipplan.filter((r) => !q || JSON.stringify(r).toLowerCase().includes(q));
+  return h("div", {}, h("h2", {}, "IP plan"), h("p", {class: "note"}, "Every subnet in the lab with its zone, gateway and every assigned address. Derived from intent/fabric.yaml, the Docker Compose file and the containerlab file."),
+    ...rows.map((r) => h("div", {class: "card"}, h("div", {style: "display:flex;gap:10px;align-items:baseline"}, h("b", {class: "mono"}, r.cidr), h("span", {}, r.name), pill(r.kind), pill("zone " + r.zone), r.gateway && pill("gateway " + r.gateway, "warn")), h("div", {class: "note"}, r.purpose),
+      r.members.length ? table(["who", "interface", "address"], r.members.map((m) => [m.who, m.interface, mono(m.ip)])) : null)));
+}
+function routingPage() {
+  const nodes = Object.entries(M.routing.nodes);
+  return h("div", {}, h("h2", {}, "Routing"), h("p", {class: "note"}, "Passwords and keys are masked; only the presence of protection is shown."),
+    h("h3", {}, "Adjacencies"), table(["protocol", "between", "detail"], M.routing.adjacencies.map((a) => [a.protocol, `${a.a} ⇄ ${a.b}`, a.protocol === "OSPF" ? `area ${a.area}, ${a.auth} auth, link ${a.link}` : `AS ${a.asn_a} ⇄ AS ${a.asn_b}, ttl-security ${a.ttl_security}`])),
+    h("h3", {}, "Static routes (intent)"), table(["node", "destination", "via"], M.topology.nodes.flatMap((n) => n.routes.map((r) => [n.id, mono(r.to), mono(r.via)]))),
+    h("h3", {}, "Per-node protocol configuration"), h("div", {class: "cols"}, ...nodes.map(([id, r]) => h("div", {class: "card"}, h("b", {}, id), r.config_file ? h("div", {class: "note mono"}, r.config_file) : null, routingBlock(r)))));
+}
+function firewallPage() {
+  const out = [h("h2", {}, "Firewall policy (nftables)"), h("p", {class: "note"}, "Default-deny; every drop is logged with a CXYZ-* prefix that the SIEM ingests. The SOC containment rules come first so they also cut established flows.")];
+  for (const [id, fw] of Object.entries(M.firewalls)) {
+    out.push(h("h3", {}, `${id}  ·  ${fw.config_file}`));
+    const live = LIVE && LIVE.blocklists && LIVE.blocklists[id];
+    out.push(h("div", {class: "card"}, h("b", {}, `Live containment set (inet ${fw.soc_table} soc_blocklist)`), live ? blocklistView(live) : h("div", {class: "note"}, "lab not running (or docker unavailable)")));
+    for (const t of fw.tables) {
+      if (t.sets.length) out.push(table(["set", "type", "flags", "elements"], t.sets.map((s_) => [mono(s_.name), s_.type || "", s_.flags || "", s_.elements.join(", ") || (s_.comment ? "" : "(filled at runtime)")])));
+      for (const c of t.chains) out.push(h("div", {class: "card"}, h("b", {}, `${t.family} ${t.name} / ${c.name}`), c.hook ? h("span", {class: "note"}, `  hook ${c.hook}, policy `) : null, c.policy ? h("b", {class: c.policy === "drop" ? "drop" : "accept"}, c.policy) : null,
+        ...c.rules.map((r) => h("div", {class: "rule"}, r.comment ? h("div", {class: "c"}, "# " + r.comment) : null, h("code", {class: r.verdict || ""}, r.text)))));
+    }
+  }
+  return h("div", {}, ...out);
+}
+function portsPage() {
+  const q = QUERY.toLowerCase();
+  const rows = M.ports.filter((r) => !q || JSON.stringify(r).toLowerCase().includes(q));
+  const live = LIVE && LIVE.services || {};
+  return h("div", {}, h("h2", {}, "Services & ports"), table(["component", "address", "port", "service", "who may connect", "exposure"], rows.map((r) => [r.where, r.ip ? mono(r.ip) : "", mono(r.port + "/" + r.proto), r.service, r.who, r.exposure])),
+    h("h3", {}, "Docker services"), table(["service", "profile", "networks", "image", "state"], M.docker.services.map((d) => [d.name, d.profiles.join(","), d.networks.map((n) => n.name + (n.ip ? " " + n.ip : "")).join(", ") || d.network_mode || "", mono(d.image.split("/").pop()), live[d.name] ? pill(live[d.name].state, live[d.name].state === "running" ? "ok" : "bad") : pill("-")])));
+}
+function identityPage() {
+  const id = M.identity, out = [h("h2", {}, "Identity & trust"), h("p", {class: "note"}, "Names and presence only - no secret value is ever read or shown.")];
+  out.push(h("h3", {}, "PKI and keys"), table(["name", "files", "signs / protects"], id.pki.map((p) => [p.name, mono(p.files), p.signs])));
+  out.push(h("h3", {}, "Elasticsearch least-privilege roles"), table(["role", "index grants"], id.elasticsearch_roles.map((r) => [r.role, r.indices.map((g) => `${g.names.join(", ")}: ${g.privileges.join(", ")}`).join("  |  ")])));
+  out.push(h("h3", {}, ".env secrets"), id.env_secrets.length ? table(["name", "state"], id.env_secrets.map((e) => [mono(e.name), pill(e.state, e.state === "set" ? "ok" : e.state === "placeholder" ? "warn" : "bad")])) : h("div", {class: "note"}, "no .env yet - run `make secrets`"));
+  out.push(h("h3", {}, "SOC certificates present"), id.soc_certificates_present.length ? h("div", {}, ...id.soc_certificates_present.map((c) => pill(c))) : h("div", {class: "note"}, "none yet - generated by `make secrets`"));
+  const pol = M.soc.policy;
+  out.push(h("h3", {}, "Response policy (what can never be auto-contained)"), h("div", {class: "card"}, table(["protected IPs", "protected networks", "protected hosts"], [[pol.protected_ips.join(", "), pol.protected_networks.join(", "), pol.protected_hosts.join(", ")]]),
+    h("div", {}, pill(`rate limit ${pol.rate_limit.max_actions}/${pol.rate_limit.window_seconds}s`), pill(`dedup ${pol.dedup_seconds}s`), pill(`evidence max age ${pol.evidence_max_age_seconds}s`), pill("isolatable hosts: " + (pol.allowed_isolation_hosts.join(", ") || "none"))),
+    table(["policy", "action", "TTL", "requires"], pol.policies.map((p) => [p.id, p.action, p.ttl_seconds + " s", `AI score ≥ ${p.when.ai_score_gte} AND one of: ${p.when.require_any.map((r) => r.type).join(", ")}`])),
+    h("div", {class: "note"}, `decision ladder: ${Object.entries(pol.thresholds).map(([k, v]) => k + " = " + v).join(" · ")}`), table(["path", "component", "mode"], Object.entries(pol.deployments).flatMap(([p, c]) => Object.entries(c).map(([k, v]) => [p, k, pill(v.mode, v.mode === "observe" ? "ok" : "warn")])))));
+  const model = M.soc.model;
+  out.push(h("h3", {}, "AI model registry"), h("div", {class: "card"}, model.present ? h("div", {}, pill(model.model_id), pill(model.algorithm), pill("status " + model.status, model.status === "approved" ? "ok" : "warn"), pill("schema " + model.feature_schema), pill("threshold " + model.threshold)) : h("div", {class: "note"}, model.note)));
+  out.push(h("h3", {}, "Elasticsearch streams"), table(["index pattern", "purpose"], M.soc.indices.map((i) => [mono(i.pattern), i.purpose])), LIVE && Object.keys(LIVE.indices || {}).length ? h("div", {}, h("h3", {}, "Live document counts"), table(["index", "docs"], Object.entries(LIVE.indices).map(([k, v]) => [mono(k), v]))) : null);
+  return h("div", {}, ...out);
+}
+function controlsPage() {
+  return h("div", {}, h("h2", {}, "Security controls"), h("p", {class: "note"}, "UNVERIFIED means no valid evidence artifact exists for this revision; nothing is reported passed from source alone."),
+    table(["id", "severity", "objective", "profiles", "Path A proof", "Path B proof", "latest evidence"], M.controls.map((c) => [mono(c.id), c.severity || "", c.objective + (c.blocker ? "  — blocker: " + c.blocker : ""), c.profiles.join(", "), c.path_a_test ? mono(c.path_a_test) : "", c.path_b_test ? mono(c.path_b_test) : "", pill(c.latest, c.latest.startsWith("PASS") ? "ok" : c.latest.startsWith("FAIL") || c.latest.startsWith("ERROR") ? "bad" : "warn")])));
+}
+function opsPage() {
+  return h("div", {}, h("h2", {}, "Access"), table(["what", "where", "who", "auth / note"], M.access.map((a) => [a.name, copyable(a.url), a.who, a.auth + (a.note ? " · " + a.note : "")])),
+    ...M.commands.map((g) => h("div", {}, h("h3", {}, g.group), table(["command", "what it does"], g.items.map(([c, d]) => [copyable(c), d])))));
+}
+function notesPage() {
+  const v = M.validation;
+  return h("div", {}, h("h2", {}, "Model self-check"), h("div", {class: "card"}, v.ok ? pill("consistent: every IP is inside its subnet, interfaces are mapped, no duplicate addresses", "ok") : v.problems.map((p) => pill(p, "bad"))),
+    h("h2", {}, "Known limits"), h("ul", {}, ...M.limits.map((l) => h("li", {}, l))),
+    h("h2", {}, "Sources of truth"), h("ul", {}, ...M.meta.sources.map((x) => h("li", {}, mono(x)))), h("h2", {}, "Deployment paths"), table(["path", "scope"], Object.entries(M.meta.paths)));
+}
+
+/* ------------------------------------------------------------------ router */
+function render() {
+  if (!M) return;
+  const graph = TAB === "topology" || TAB === "soc";
+  $("stage").style.display = graph ? "block" : "none";
+  $("page").className = "page" + (graph ? "" : " active");
+  if (graph) {
+    renderGraph(); if (!pos["fit" + TAB]) { fit(); pos["fit" + TAB] = true; }
+    if (SELECTED && SELECTED.type !== "link") { const id = SELECTED.obj.id; const n = G.nodes.find((x) => x.id === id); if (n) select({type: "node", obj: n}); else closeDetail(); } else closeDetail();
+  } else {
+    closeDetail();
+    const pages = {ipplan: ipplanPage, routing: routingPage, firewall: firewallPage, ports: portsPage, identity: identityPage, controls: controlsPage, ops: opsPage, notes: notesPage};
+    $("page").replaceChildren(pages[TAB]());
+  }
+}
+
+/* ------------------------------------------------------------------ wiring */
+$("q").addEventListener("input", (e) => { QUERY = e.target.value; if (TAB === "topology" || TAB === "soc") applySearch(); else render(); });
+window.addEventListener("keydown", (e) => { if (e.key === "/" && document.activeElement !== $("q")) { e.preventDefault(); $("q").focus(); } if (e.key === "Escape") { $("q").blur(); closeDetail(); } });
+$("theme").addEventListener("click", () => { const r = document.documentElement; r.dataset.theme = (r.dataset.theme || (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light")) === "dark" ? "light" : "dark"; });
+const svgEl = $("svg");
+svgEl.addEventListener("wheel", (e) => { e.preventDefault(); const r = svgEl.getBoundingClientRect(), mx = e.clientX - r.left, my = e.clientY - r.top, k = Math.min(3, Math.max(0.25, view.k * (e.deltaY < 0 ? 1.12 : 0.89))); view.x = mx - (mx - view.x) * (k / view.k); view.y = my - (my - view.y) * (k / view.k); view.k = k; applyView(); }, {passive: false});
+svgEl.addEventListener("pointerdown", (e) => { if (e.target.closest(".nodeg")) return; svgEl.classList.add("panning"); const sx = e.clientX, sy = e.clientY, ox = view.x, oy = view.y; let moved = false;
+  const move = (ev) => { moved = true; view.x = ox + ev.clientX - sx; view.y = oy + ev.clientY - sy; applyView(); };
+  const up = () => { svgEl.classList.remove("panning"); window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", up); if (!moved) closeDetail(); };
+  window.addEventListener("pointermove", move); window.addEventListener("pointerup", up); });
+window.addEventListener("resize", () => { if (TAB === "topology" || TAB === "soc") fit(); });
+load().catch((e) => { document.body.append(h("div", {class: "empty"}, "Could not load the model: " + e)); });
+</script>
+</body>
+</html>
