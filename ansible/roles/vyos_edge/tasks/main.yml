@@ -35,6 +35,25 @@
     fail_msg: "Path B routing secrets must be supplied through ignored .env or an approved secret backend."
   no_log: true
 
+- name: Read active SOC containment entries before Day-2 saves the running config
+  vyos.vyos.vyos_command:
+    commands:
+      - show configuration commands | match "address-group SOC_BLOCKLIST address"
+  register: vyos_edge_containment
+  changed_when: false
+  when: inventory_hostname in ['fw-core', 'fw-dmz']
+
+- name: Refuse Day-2 while a containment would be persisted into the startup config
+  ansible.builtin.assert:
+    that: >-
+      vyos_edge_containment.stdout[0].splitlines()
+      | reject('search', '192\\.0\\.2\\.1')
+      | list | length == 0
+    fail_msg: >-
+      SOC_BLOCKLIST holds an active containment entry; saving now would make it permanent.
+      Wait for its TTL/rollback (or revert it) and re-run Day-2.
+  when: inventory_hostname in ['fw-core', 'fw-dmz']
+
 - name: Read the canonical Path B SSH public key on the controller
   ansible.builtin.set_fact:
     vyos_edge_ssh_public_key: >-

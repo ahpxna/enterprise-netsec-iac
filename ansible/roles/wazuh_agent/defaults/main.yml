@@ -1,0 +1,12 @@
+---
+wazuh_agent_version: "4.14.7"
+wazuh_agent_manager: "{{ lookup('ansible.builtin.env', 'WAZUH_MANAGER_IP') | default('172.16.50.10', true) }}"
+wazuh_agent_registration_password: "{{ lookup('ansible.builtin.env', 'WAZUH_REGISTRATION_PASSWORD') }}"
+# Fingerprint of the Wazuh package-signing key. The task fails closed on mismatch;
+# re-verify it against Wazuh's published fingerprint before changing it.
+wazuh_agent_gpg_fingerprint: "0DCFCA5547B19D2A6099506096B3EE5F29111145"
+wazuh_agent_repo_key_url: "https://packages.wazuh.com/key/GPG-KEY-WAZUH"
+# Addresses that stay reachable while the endpoint is isolated (the manager is
+# always included). Add a management jump host here only if the lab needs it.
+wazuh_agent_isolation_extra_allowed: []
+wazuh_agent_repo_root: "{{ playbook_dir }}/../.."

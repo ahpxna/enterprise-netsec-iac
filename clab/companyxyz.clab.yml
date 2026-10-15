@@ -64,6 +64,10 @@ topology:
       image: wbitt/network-multitool@sha256:db2810fe2c8d36db074eab5d98fbf861c8ed55e0786d648d3477b3de9135632e
       binds:
         - configs/fw-core.nft:/etc/nftables/policy.nft:ro
+        - ../docker/enforcer/nft_enforcer.py:/opt/cxyz/nft_enforcer.py:ro
+        - ../soc/certs/enforcer-fw-core.crt:/etc/cxyz/enforcer/tls.crt:ro
+        - ../soc/certs/enforcer-fw-core.key:/etc/cxyz/enforcer/tls.key:ro
+        - ../soc/certs/ca.crt:/etc/cxyz/enforcer/ca.crt:ro
       exec:
         - apk add --no-cache python3 rsyslog rsyslog-tls nftables
         - mkdir -p /etc/rsyslog.d /etc/ssh/sshd_config.d
@@ -74,6 +78,10 @@ topology:
         - sh -c 'ip route replace 0.0.0.0/0 via 10.255.0.1'
         - sh -c 'ip route replace 192.168.0.0/16 via 10.255.0.6'
         - nft -f /etc/nftables/policy.nft
+        - sh -c 'nohup python3 /opt/cxyz/nft_enforcer.py --listen 10.1.1.20 --port
+          9443 --cert /etc/cxyz/enforcer/tls.crt --key /etc/cxyz/enforcer/tls.key
+          --client-ca /etc/cxyz/enforcer/ca.crt --allowed-client soc-response --table
+          cxyz --set soc_blocklist >/var/log/cxyz-enforcer.log 2>&1 &'
     core:
       kind: linux
       mgmt-ipv4: 10.1.1.11
@@ -166,6 +174,10 @@ topology:
       image: wbitt/network-multitool@sha256:db2810fe2c8d36db074eab5d98fbf861c8ed55e0786d648d3477b3de9135632e
       binds:
         - configs/fw-dmz.nft:/etc/nftables/policy.nft:ro
+        - ../docker/enforcer/nft_enforcer.py:/opt/cxyz/nft_enforcer.py:ro
+        - ../soc/certs/enforcer-fw-dmz.crt:/etc/cxyz/enforcer/tls.crt:ro
+        - ../soc/certs/enforcer-fw-dmz.key:/etc/cxyz/enforcer/tls.key:ro
+        - ../soc/certs/ca.crt:/etc/cxyz/enforcer/ca.crt:ro
       exec:
         - apk add --no-cache python3 rsyslog rsyslog-tls nftables
         - mkdir -p /etc/rsyslog.d /etc/ssh/sshd_config.d
@@ -176,6 +188,10 @@ topology:
         - sh -c 'ip route replace 172.16.0.0/16 via 10.255.0.9'
         - sh -c 'ip route replace 192.168.0.0/16 via 10.255.0.9'
         - nft -f /etc/nftables/policy.nft
+        - sh -c 'nohup python3 /opt/cxyz/nft_enforcer.py --listen 10.1.1.30 --port
+          9443 --cert /etc/cxyz/enforcer/tls.crt --key /etc/cxyz/enforcer/tls.key
+          --client-ca /etc/cxyz/enforcer/ca.crt --allowed-client soc-response --table
+          dmz --set soc_blocklist >/var/log/cxyz-enforcer.log 2>&1 &'
     dmz-web:
       kind: linux
       mgmt-ipv4: 10.1.1.61

@@ -1,0 +1,54 @@
+---
+# Enables the VyOS HTTPS API used ONLY to add/remove one address in the
+# SOC_BLOCKLIST address-group. The listener is bound to the out-of-band management
+# address, TLS uses a leaf signed by the SOC CA (SAN = management IP), and the API key
+# comes from the ignored .env. The orchestrator never saves the running config, so a
+# reboot clears any active containment.
+- name: Resolve local PKI files for this firewall
+  ansible.builtin.set_fact:
+    vyos_response_api_cert_file: "{{ vyos_response_api_cert_root }}/vyos-api-{{ inventory_hostname }}.crt"
+    vyos_response_api_key_file: "{{ vyos_response_api_cert_root }}/vyos-api-{{ inventory_hostname }}.key"
+
+- name: Assert the API identity and key exist locally
+  ansible.builtin.stat:
+    path: "{{ item }}"
+  loop:
+    - "{{ vyos_response_api_cert_file }}"
+    - "{{ vyos_response_api_key_file }}"
+  delegate_to: localhost
+  become: false
+  register: vyos_response_api_files
+
+- name: Fail closed if the API certificate or key is missing, or the API key is weak
+  ansible.builtin.assert:
+    that:
+      - vyos_response_api_files.results | map(attribute='stat.exists') | min
+      - vyos_response_api_key | length >= 32
+      - not vyos_response_api_key.startswith('CHANGE_ME')
+    fail_msg: "Run make secrets first: the VyOS API certificate or VYOS_API_KEY is missing or weak."
+  no_log: true
+
+- name: Read and normalize the API certificate and private key
+  ansible.builtin.set_fact:
+    vyos_response_api_cert: >-
+      {{ lookup('ansible.builtin.file', vyos_response_api_cert_file)
+         | regex_replace('-----(BEGIN|END) CERTIFICATE-----', '')
+         | regex_replace('\\s+', '') }}
+    vyos_response_api_private: >-
+      {{ lookup('ansible.builtin.file', vyos_response_api_key_file)
+         | regex_replace('-----(BEGIN|END) (RSA )?PRIVATE KEY-----', '')
+         | regex_replace('\\s+', '') }}
+  no_log: true
+
+- name: Configure the constrained response HTTPS API
+  vyos.vyos.vyos_config:
+    lines:
+      - "set pki certificate {{ vyos_response_api_cert_name }} certificate '{{ vyos_response_api_cert }}'"
+      - "set pki certificate {{ vyos_response_api_cert_name }} private key '{{ vyos_response_api_private }}'"
+      - "set service https listen-address {{ ansible_host }}"
+      - "set service https certificates certificate {{ vyos_response_api_cert_name }}"
+      - "set service https api keys id {{ vyos_response_api_key_id }} key '{{ vyos_response_api_key }}'"
+      - "set service https api rest"
+    save: true
+    comment: "CompanyXYZ SOC response API"
+  no_log: true

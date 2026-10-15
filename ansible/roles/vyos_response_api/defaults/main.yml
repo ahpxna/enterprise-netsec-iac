@@ -1,0 +1,6 @@
+---
+vyos_response_api_repo_root: "{{ playbook_dir }}/../.."
+vyos_response_api_cert_root: "{{ vyos_response_api_repo_root }}/soc/certs"
+vyos_response_api_key: "{{ lookup('ansible.builtin.env', 'VYOS_API_KEY') }}"
+vyos_response_api_cert_name: soc-api
+vyos_response_api_key_id: soc-response

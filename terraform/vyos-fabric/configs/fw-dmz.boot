@@ -21,6 +21,9 @@ firewall {
         syn-cookies enable
     }
     group {
+        /* SOC containment set. The response orchestrator adds/removes ONE address at a time via the
+         * VyOS API; 192.0.2.1 (TEST-NET-1, never routed) keeps the group non-empty so it always commits. */
+        address-group SOC_BLOCKLIST { address 192.0.2.1 }
         network-group WEB_HOST { network 195.1.1.161/32 }
         network-group INTERNAL_NETS {
             network 172.16.0.0/16
@@ -28,6 +31,20 @@ firewall {
         }
     }
     ipv4 {
+        prerouting {
+            raw {
+                rule 10 {
+                    action drop
+                    description "SOC containment: blocked source (pre-conntrack, also cuts established flows)"
+                    source { group { address-group SOC_BLOCKLIST } }
+                }
+                rule 11 {
+                    action drop
+                    description "SOC containment: blocked destination (pre-conntrack)"
+                    destination { group { address-group SOC_BLOCKLIST } }
+                }
+            }
+        }
         forward {
             filter {
                 default-action drop
@@ -85,6 +102,14 @@ firewall {
                     description "Management ICMP diagnostics"
                     inbound-interface { name eth2 }
                     protocol icmp
+                }
+                rule 40 {
+                    action accept
+                    description "SOC response HTTPS API from the trusted libvirt host (NAT of the orchestrator)"
+                    inbound-interface { name eth2 }
+                    source { address 10.1.1.1/32 }
+                    destination { port 443 }
+                    protocol tcp
                 }
             }
         }
