@@ -862,3 +862,42 @@ requires `make audit`; Path C requires `make k8s-smoke`; and Path B requires the
 12-node `vm-configure`/idempotency/`vm-audit` sequence. Wazuh PKI identity
 changes require the explicit rotation/reissue runbook instead of a verification
 bypass.
+
+---
+
+## INC-070 — SOC/AI closed-loop completion (Paths A, B and C)
+
+**Status:** source/static verified and covered by offline tests; **no runtime evidence.** Every SOC control is
+`UNVERIFIED` until `make soc-ai-validate` / `make vm-audit` / `make k8s-smoke` run on lab hosts.
+
+### Assurance gaps closed
+
+- **BUG-070-A — nothing ran the loop.** Added the continuous feature worker, ES-pull enrichment outbox, mTLS inference
+  API (Isolation Forest and LSTM), decision runner and orchestrator service with durable journal, recovery, TTL sweep and
+  audit export. *Static + offline tested.*
+- **BUG-070-B — externally supplied evaluation metrics could justify promotion.** Evaluation is now bound to the exact
+  artifact, dataset, labels and vectors (`evaluation-binding-v1`); thresholds are selected on validation only; promotion
+  re-derives every claim against a reviewed policy; a five-detector comparison can be carried into the registry.
+- **BUG-070-C — shared-key command authentication.** Replaced by Ed25519 (decision runner signs; orchestrator verifies).
+- **BUG-070-D — revert could remove a pre-existing block.** The ownership ledger records intent before the side effect and
+  removes an entry only for the last owner of an address the response plane added.
+- **BUG-070-E — containment had no firewall-side expiry.** nftables elements carry a timeout; VyOS relies on the TTL sweep
+  and Day-2 refuses to persist an active containment.
+- **BUG-070-F — containment sets and agent surface.** `soc_blocklist` sets with early drops in the nftables and VyOS configs;
+  a three-operation mTLS enforcement agent on the management network only; Wazuh isolation verified by a FIM marker.
+- **BUG-070-G — Kubernetes had no SOC workloads.** Path C gained Elasticsearch, Kibana, Logstash sidecars and one Deployment
+  per service with per-workload Secrets and NetworkPolicies; manifests are validated strictly against the Kubernetes 1.30
+  schemas in CI.
+- **BUG-070-H — planned controls had no verifier.** Fourteen controls became evidence-backed with a shared live verifier
+  library, an in-process lab that proves the verifiers' logic, and profile scoping (`applicable_profiles`).
+
+### Limits recorded, not hidden
+
+- RESP-04 and the network-fidelity gate (OPNsense HA, Core SPAN, VLAN 30/40/50/99) are **not implemented**; the OPNsense
+  backend is contract-tested only.
+- No model was trained on real telemetry; synthetic metrics are unit-test artifacts.
+- Docker image builds, the VyOS/Wazuh API contracts, Logstash on real input and the Kubernetes runtime were not exercised.
+- `test_ai_cannot_bypass_decision_orchestrator_boundary` used to fail when a macOS `.DS_Store` existed under `ai/` (it read every
+  file as UTF-8 text). It now skips that one OS-metadata name and decodes other files leniently; no other file is exempt, and a
+  planted forbidden token is still caught.
+- Live scenarios use documentation-range addresses and tagged fixtures; the injected anomaly stands in for model output.

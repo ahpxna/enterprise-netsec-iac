@@ -68,6 +68,12 @@ The lifecycle is:
 4. `make configure` applies CIS-aligned Ansible roles.
 5. `make audit` runs policy tests, live validation, attack replay, and report generation.
 
+The SOC analytics profile is additive and can be started independently with
+`make soc-up`. It serves TLS-only Kibana on `https://127.0.0.1:5602`, keeps
+Elasticsearch private, and normalizes Suricata, Wazuh, firewall, RADIUS, and
+network-device telemetry. See [soc/README.md](soc/README.md) and the
+[SOC runbook](soc/RUNBOOK.md).
+
 `TIME-01` is intentionally host-scoped: configure the Linux host chrony service
 from `host/chrony-cxyz.sources.example` (or an equivalent NTS policy) so the
 kernel clock inherited by Docker workloads is authenticated, then verify it
@@ -192,7 +198,6 @@ failover while collecting SIEM-visible evidence.
 - [PKI rotation](docs/PKI-ROTATION.md)
 - [Security implementation ledger](docs/SECURITY-IMPLEMENTATION-LEDGER.md)
 - [Control-to-test mapping](compliance/mappings/cyb-to-repo.md)
-- [Security implementation ledger](docs/SECURITY-IMPLEMENTATION-LEDGER.md)
 - [Container image supply-chain policy](docs/IMAGE-SUPPLY-CHAIN.md)
 
 Container image selection is tracked in `supply-chain/images.lock.yml`.
