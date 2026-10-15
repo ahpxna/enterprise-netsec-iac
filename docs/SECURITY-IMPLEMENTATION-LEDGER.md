@@ -923,3 +923,21 @@ run on a Linux host.
 - **New:** `scripts/try-on-linux.sh` / `scripts/try_linux.py` (install, build, run, test with stage-level failure analysis),
   `scripts/netviz.py` (read-only GNS3-style explorer derived from the sources of truth), `scripts/demo_registry.py` (DEMO approved model from
   synthetic data), `docs/LINUX-QUICKSTART.md`.
+
+---
+
+## INC-072 — DMZ deception lab (vulnerable web application + honeypot)
+
+**Status:** source/static verified and offline-tested; **never run** (no Docker daemon or Linux host was available).
+
+- Added compose profile `dmzlab`: OWASP Juice Shop (`dmz-vuln`) and Cowrie (`dmz-honeypot`), both pinned by digest in `supply-chain/images.lock.yml`,
+  joined to the network namespace of the containerlab `dmz-web` node (no network of their own, no published port, no capabilities, honeypot read-only).
+  This keeps the single-source intent and Path B untouched; the DMZ stays one /29 behind fw-dmz.
+- `clab/configs/fw-dmz.nft`: two new rules open only tcp/3000 and tcp/2222-2223 to the web host, for NEW connections, counted and logged
+  (`CXYZ-DMZLAB-VULN/-HONEYPOT`), placed after the pivot deny and before the egress accept; a test pins that order and that nothing else opens.
+- Logstash: pipeline `45-cowrie.conf` reads the honeypot JSON log from a read-only volume; the ECS branch maps it to dataset `cowrie.honeypot`
+  and drops attacker-supplied passwords before indexing.
+- `make dmzlab-up|down|status|attack`, the runner stages `dmzlab-up`/`dmzlab-verify` (reachable through fw-dmz, counted, logged, unable to pivot) and
+  the network explorer (shared-namespace links, ports, IP plan, SOC flow) cover it.
+- Open: a honeypot hit is not yet an independent signal for the decision engine; Path B has no equivalent; the shared-namespace design must be restarted
+  after `make net`; Cowrie's environment-variable options and read-only root filesystem are unverified against the real image.

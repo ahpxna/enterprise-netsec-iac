@@ -58,6 +58,7 @@ jobs:
           --profile vpn-test
           --profile soc
           --profile soc-ai
+          --profile dmzlab
           config --quiet
 
       - name: Build deterministic local service images

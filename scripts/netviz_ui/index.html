@@ -237,7 +237,7 @@ function drawLink(l, byId, layer) {
   const e = endpoints(l, byId);
   const g = s("g", {class: "linkg", "data-id": l.id});
   const color = l.type === "flow" ? flowColor(l.data) : (ZONE_COLOR[l.data.zone] || "var(--muted)");
-  const dashed = l.type === "flow" ? /read-only/.test(l.data.auth) : (l.data.kind === "lan" || l.data.vrrp);
+  const dashed = l.type === "flow" ? /read-only/.test(l.data.auth) : (l.data.kind === "lan" || l.data.kind === "netns" || l.data.vrrp);
   const curved = l.type === "flow";
   const line = s(curved ? "path" : "line", {stroke: color, "stroke-width": 2.6, fill: "none", "stroke-dasharray": dashed ? "7 5" : null, "marker-end": curved ? "url(#arrow)" : null});
   const hit = s(curved ? "path" : "line", {class: "hit", fill: "none"});
@@ -326,7 +326,7 @@ function fit() {
   if (!G || !G.nodes.length) return;
   const xs = G.nodes.map((n) => n.x), ys = G.nodes.map((n) => n.y), pad = 90;
   const minx = Math.min(...xs) - pad, maxx = Math.max(...xs) + pad, miny = Math.min(...ys) - pad, maxy = Math.max(...ys) + pad + 30;
-  const r = $("svg").getBoundingClientRect(), left = 190, right = 150;           // keep clear of the toolbar and legend
+  const r = $("svg").getBoundingClientRect(), left = Math.min(190, r.width * 0.2), right = Math.min(150, r.width * 0.15);   // keep clear of the toolbar and legend
   const availW = Math.max(200, r.width - left - right), availH = r.height - 20;
   view.k = Math.min(availW / (maxx - minx), availH / (maxy - miny), 1.4);
   view.x = left + (availW - (maxx - minx) * view.k) / 2 - minx * view.k + 0;
@@ -336,7 +336,7 @@ function fit() {
 function resetLayout() { for (const k of Object.keys(pos)) if (k.startsWith(TAB)) delete pos[k]; renderGraph(); fit(); }
 
 const ZONE_GROUPS = [["Internet", ["isp1", "isp2"], "outside"], ["Campus (VLANs 10 / 40)", ["core", "dist1", "dist2", "vlan10", "vlan40", "pc1", "pc4"], "campus"],
-  ["Data centre 172.16.50.0/24", ["br-cxyz-dc", "server1", "syslog-relay", "wazuh.manager", "wireguard", "wazuh-indexer", "wazuh.dashboard"], "dc"], ["DMZ 195.1.1.160/29", ["dmz-web"], "dmz"]];
+  ["Data centre 172.16.50.0/24", ["br-cxyz-dc", "server1", "syslog-relay", "wazuh.manager", "wireguard", "wazuh-indexer", "wazuh.dashboard"], "dc"], ["DMZ 195.1.1.160/29", ["dmz-web", "dmz-vuln", "dmz-honeypot"], "dmz"]];
 function drawZones() {
   const layer = $("zones"); if (!layer) return; layer.replaceChildren();
   if (!prefs.zones || TAB !== "topology") return;

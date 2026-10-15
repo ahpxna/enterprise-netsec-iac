@@ -36,7 +36,7 @@ python compliance/check_wiring.py
 python -m pytest tests/unit tests/soc -q
 
 echo "==> Docker Compose / YAML / Ansible / Kubernetes render"
-docker compose --env-file .env.example --profile siem --profile ids --profile ztna --profile dmz --profile vpn-test --profile soc --profile soc-ai config --quiet
+docker compose --env-file .env.example --profile siem --profile ids --profile ztna --profile dmz --profile vpn-test --profile soc --profile soc-ai --profile dmzlab config --quiet
 yamllint .
 ( cd ansible && ansible-lint )
 kubectl kustomize k8s/ >/tmp/cxyz-k8s-rendered.yaml

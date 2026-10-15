@@ -218,7 +218,7 @@ lint: ## Static checks: yamllint, ansible-lint, terraform, gitleaks
 	find scripts clab/configs -type f -name '*.sh' -print0 | xargs -0 -n1 bash -n
 	python compliance/check_wiring.py
 	python -m pytest tests/unit tests/soc -q
-	docker compose --env-file .env.example --profile siem --profile ids --profile ztna --profile dmz --profile soc --profile soc-ai config --quiet
+	docker compose --env-file .env.example --profile siem --profile ids --profile ztna --profile dmz --profile soc --profile soc-ai --profile dmzlab config --quiet
 	yamllint .
 	cd $(ANSIBLE_DIR) && ansible-lint
 	terraform -chdir=terraform/libvirt init -backend=false -input=false
@@ -389,6 +389,25 @@ report: ## Generate Path A compliance report from controls.yaml + latest evidenc
 .PHONY: audit
 audit: lint batfish validate attack soc-ai-validate report ## Everything an auditor would ask for
 	@echo "==> Evidence bundle: $(EVIDENCE)"
+
+# ---------------------------------------------------------------- DMZ deception lab
+# A vulnerable web app (OWASP Juice Shop) and an SSH/Telnet honeypot (Cowrie) that share the dmz-web node's
+# network namespace behind fw-dmz. Path A only; restart them after any `make net` (the namespace is recreated).
+.PHONY: dmzlab-up dmzlab-down dmzlab-status dmzlab-attack
+dmzlab-up: ## DMZ lab: OWASP Juice Shop + Cowrie honeypot behind fw-dmz (needs the fabric: make net)
+	@docker inspect clab-companyxyz-dmz-web >/dev/null 2>&1 || { echo "dmz-web is not running: bring the fabric up first (make net)" >&2; exit 1; }
+	docker compose --profile dmzlab up -d --force-recreate dmz-vuln dmz-honeypot
+	@echo "==> make dmzlab-status | make dmzlab-attack (generate hostile traffic from pc1)"
+
+dmzlab-down: ## Stop the DMZ lab (honeypot logs are kept in the dmzlab_cowrie_var volume)
+	docker compose --profile dmzlab stop dmz-vuln dmz-honeypot
+
+dmzlab-status: ## Containers and fw-dmz hit counters of the DMZ lab
+	docker compose --profile dmzlab ps dmz-vuln dmz-honeypot
+	-docker exec clab-companyxyz-fw-dmz nft list counters table inet dmz
+
+dmzlab-attack: ## Send controlled hostile traffic from pc1 to the DMZ lab (SQLi/XSS/traversal, telnet) and check isolation
+	bash scripts/dmzlab_attack.sh
 
 # ---------------------------------------------------------------- try it / explore it
 .PHONY: try-linux try-linux-quick try-linux-offline netviz netviz-stop

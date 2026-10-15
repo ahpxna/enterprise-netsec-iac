@@ -111,6 +111,7 @@ DIAGNOSTICS = {
                    "soc-service-init", "soc-ai-api", "soc-response", "soc-decision", "soc-enrichment-worker", "soc-feature-worker"]],
     "fabric-up": [["containerlab", "inspect", "-t", "clab/companyxyz.clab.yml"], ["docker", "ps", "-a", "--filter", "name=clab-", "--format", "{{.Names}}\t{{.Status}}"]],
     "fabric-verify": [["docker", "ps", "-a", "--filter", "name=clab-", "--format", "{{.Names}}\t{{.Status}}"]],
+    "dmzlab-up": [["docker", "compose", "--profile", "dmzlab", "ps", "-a"], ["docker", "compose", "--profile", "dmzlab", "logs", "--tail", "40", "dmz-vuln", "dmz-honeypot"]],
     "security-up": [["docker", "compose", "--profile", "siem", "--profile", "ids", "--profile", "ztna", "--profile", "dmz", "ps", "-a"],
                     ["docker", "compose", "--profile", "siem", "logs", "--tail", "40", "wazuh.manager", "wazuh-indexer"]],
 }
@@ -603,7 +604,7 @@ def static_cmds(ctx: Ctx) -> list[Cmd]:
 
 
 def compose_cmds(ctx: Ctx) -> list[Cmd]:
-    profiles = [["siem", "ids", "ztna", "dmz", "vpn-test", "soc", "soc-ai"]]
+    profiles = [["siem", "ids", "ztna", "dmz", "vpn-test", "soc", "soc-ai", "dmzlab"]]
     cmds = []
     for group in profiles:
         argv = ["docker", "compose", "--env-file", ".env.example"]
@@ -694,6 +695,51 @@ def fabric_verify(ctx: Ctx) -> tuple[str, str]:
     return PASS, "12/12 nodes running, containment sets present, enforcement agents listening"
 
 
+def _docker(argv: Sequence[str], timeout: int = 30, stdin: str | None = None) -> subprocess.CompletedProcess:
+    return subprocess.run(["docker", *argv], capture_output=True, text=True, timeout=timeout, input=stdin, check=False)
+
+
+def dmzlab_verify(ctx: Ctx) -> tuple[str, str]:
+    """The DMZ lab works AND stays contained: reachable through fw-dmz, counted, logged, and unable to pivot inward."""
+
+    target, pc, web, fw = "195.1.1.161", "clab-companyxyz-pc1", "clab-companyxyz-dmz-web", "clab-companyxyz-fw-dmz"
+    running = {}
+    for service in ("dmz-vuln", "dmz-honeypot"):
+        done = _docker(["ps", "--filter", f"label=com.docker.compose.service={service}", "--format", "{{.ID}} {{.Status}}"])
+        row = done.stdout.strip().splitlines()[0] if done.stdout.strip() else ""
+        if " Up" not in row:
+            return FAIL, f"{service} is not running (docker compose --profile dmzlab logs {service}); it joins the dmz-web namespace, so restart it after any `make net`"
+        running[service] = row.split()[0]
+    code = ""
+    for _ in range(18):                                          # Juice Shop needs a while to start
+        code = _docker(["exec", pc, "curl", "-s", "-o", "/dev/null", "-m", "6", "-w", "%{http_code}", f"http://{target}:3000/"]).stdout.strip()
+        if code == "200":
+            break
+        time.sleep(5)
+    if code != "200":
+        return FAIL, f"Juice Shop did not answer HTTP 200 from pc1 through fw-dmz (got {code or 'nothing'}): check the fw-dmz rule CXYZ-DMZLAB-VULN and `docker logs {running['dmz-vuln']}`"
+    banner = _docker(["exec", pc, "sh", "-c", f"nc -w 3 {target} 2222 </dev/null | head -c 20"]).stdout
+    if not banner.startswith("SSH-2.0"):
+        return FAIL, f"the honeypot did not present an SSH banner on tcp/2222 (got {banner!r}); see `docker logs {running['dmz-honeypot']}`"
+    for dest in ("172.16.50.1", "192.168.10.1"):
+        if _docker(["exec", web, "sh", "-c", f"nc -zw 3 {dest} 22"]).returncode == 0:
+            return FAIL, f"ISOLATION BROKEN: the DMZ host reached {dest}:22 - the pivot deny on fw-dmz is not working"
+    counters = {}
+    for name in ("dmzlab_vuln_hit", "dmzlab_honeypot_hit"):
+        out = _docker(["exec", fw, "nft", "-j", "list", "counter", "inet", "dmz", name]).stdout
+        try:
+            counters[name] = next(item["counter"]["packets"] for item in json.loads(out)["nftables"] if "counter" in item)
+        except (ValueError, StopIteration, KeyError):
+            return FAIL, f"fw-dmz has no counter {name}: the DMZ-lab rules are not loaded (restart the fabric so clab/configs/fw-dmz.nft is applied)"
+        if counters[name] < 1:
+            return FAIL, f"fw-dmz counter {name} did not move although traffic was sent: the traffic is not crossing the firewall"
+    log = _docker(["cp", f"{running['dmz-honeypot']}:/cowrie/cowrie-git/var/log/cowrie/cowrie.json", "-"], timeout=20)
+    if log.returncode == 0 and "cowrie.session.connect" not in log.stdout.replace("\x00", ""):
+        return WARN, "the honeypot answered but its JSON log has no session record yet (log buffering); re-check in a minute"
+    return PASS, (f"Juice Shop 200 + SSH honeypot banner via fw-dmz; DMZ host cannot reach internal zones; "
+                  f"fw-dmz counters vuln={counters['dmzlab_vuln_hit']} honeypot={counters['dmzlab_honeypot_hit']}")
+
+
 def report_summary(ctx: Ctx) -> tuple[str, str]:
     runs = sorted((ROOT / "evidence" / "runs").glob("*")) if (ROOT / "evidence" / "runs").is_dir() else []
     if not runs:
@@ -743,6 +789,10 @@ def build_stages(ctx: Ctx) -> list[Stage]:
         S("demo-model", "Build a DEMO approved model (synthetic data; proves wiring only)", "live", cmds=demo_model_cmds, needs=("deps-python", "secrets"), modes=("full", "quick")),
         S("soc-ai-up", "Start features, inference, enrichment, decision, orchestrator (observe mode)", "live",
           cmds=lambda c: [make(c, "soc-ai-up", timeout=2400), make(c, "soc-ai-status")], needs=("soc-smoke", "demo-model", "mgmt-network"), modes=("full", "quick")),
+        S("dmzlab-up", "Start the DMZ deception lab (OWASP Juice Shop + Cowrie honeypot behind fw-dmz)", "live",
+          cmds=lambda c: [make(c, "dmzlab-up", timeout=1800)], needs=("fabric-verify", "images"), modes=("full",)),
+        S("dmzlab-verify", "Verify the DMZ lab: reachable, counted, logged and contained", "live", check=dmzlab_verify, needs=("dmzlab-up",), modes=("full",),
+          hints=[(r"ISOLATION BROKEN", "a deliberately vulnerable host can pivot into the internal network", "inspect clab/configs/fw-dmz.nft (pivot deny) and `nft list ruleset` on fw-dmz")]),
         S("configure", "Apply the Ansible hardening roles", "audit", cmds=lambda c: [make(c, "configure", timeout=3600)], needs=("fabric-verify", "security-up"), modes=("full",), finding=True),
         S("validate", "Live validation: routing, segmentation, hardening", "audit", cmds=lambda c: [make(c, "validate", timeout=2400)], needs=("configure",), modes=("full",), finding=True),
         S("attack", "Replay the attack chain and prove the SIEM sees it", "audit", cmds=lambda c: [make(c, "attack", timeout=1800)], needs=("validate",), modes=("full",), finding=True),
@@ -846,7 +896,7 @@ def summarize(ctx: Ctx, results: list[Result], report: pathlib.Path) -> int:
 def teardown(ctx: Ctx) -> int:
     print("stopping the lab (volumes are kept unless --purge)…")
     env = ctx.env()
-    steps = [["make", "soc-ai-down"], ["make", "soc-down"], ["make", "down"]]
+    steps = [["make", "dmzlab-down"], ["make", "soc-ai-down"], ["make", "soc-down"], ["make", "down"]]
     pid = STATE / "netviz.pid"
     if pid.exists():
         try:

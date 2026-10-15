@@ -303,6 +303,10 @@ LINK_INFO = {
 DC_ATTACHED = {"syslog-relay": [1100, 680], "wazuh.manager": [1260, 680], "wireguard": [1420, 680],
                "wazuh-indexer": [1180, 830], "wazuh.dashboard": [1340, 830]}
 
+# DMZ deception lab: Compose services that join dmz-web's network namespace (they share its address).
+DMZ_LAB = {"dmz-vuln": {"pos": [60, 680], "ports": "tcp/3000"}, "dmz-honeypot": {"pos": [310, 680], "ports": "tcp/2222,2223"}}
+DMZ_WEB_IP = "195.1.1.161"
+
 SERVICE_INFO: dict[str, dict[str, Any]] = {
     "syslog-relay": ("Authenticated mTLS syslog relay: the only log ingress for firewalls, routers and servers.",
                      [("6514", "tcp", "syslog over TLS", "mTLS; client cert required")]),
@@ -333,6 +337,13 @@ SERVICE_INFO: dict[str, dict[str, Any]] = {
     "authentik-postgres": ("Authentik database (internal network only).", []),
     "ztna-demo-app": ("Protected demo application behind the ZTNA gateway.", []),
     "vpn-probe": ("Synthetic external WireGuard client used only by the VPN-01 test.", []),
+    "dmz-vuln": ("OWASP Juice Shop: a deliberately vulnerable web application (OWASP flagship). Shares dmz-web's network namespace, "
+                 "so it sits in the DMZ behind fw-dmz; it can never reach internal zones (pivot deny). Disposable; lab only.",
+                 [("3000", "tcp", "Juice Shop HTTP", "Internet/campus through fw-dmz; every new connection is logged (CXYZ-DMZLAB-VULN)")]),
+    "dmz-honeypot": ("Cowrie SSH/Telnet honeypot. Shares dmz-web's network namespace; every interaction is hostile by construction and its "
+                     "JSON log is shipped read-only to Logstash as dataset cowrie.honeypot.",
+                     [("2222", "tcp", "Cowrie SSH", "Internet/campus through fw-dmz; logged (CXYZ-DMZLAB-HONEYPOT)"),
+                      ("2223", "tcp", "Cowrie Telnet", "same")]),
 }
 
 SOC_LAYOUT: dict[str, list[int]] = {
@@ -340,7 +351,7 @@ SOC_LAYOUT: dict[str, list[int]] = {
     "suricata": [380, 160], "syslog-relay": [380, 360], "wazuh.manager": [380, 600],
     "logstash": [700, 360], "elasticsearch": [1020, 360], "kibana": [1020, 120], "analyst": [1340, 120],
     "soc-feature-worker": [860, 600], "soc-enrichment-worker": [1180, 600], "soc-ai-api": [1500, 600],
-    "soc-decision": [860, 840], "soc-response": [1180, 840], "vyos-api": [1500, 840],
+    "soc-decision": [860, 840], "soc-response": [1180, 840], "vyos-api": [1500, 840], "dmz-honeypot": [380, 800],
 }
 
 SOC_FLOWS: list[dict[str, str]] = [
@@ -350,6 +361,7 @@ SOC_FLOWS: list[dict[str, str]] = [
     {"src": "syslog-relay", "dst": "logstash", "proto": "file (ro volume)", "auth": "read-only mount", "data": "/var/log/cxyz/soc-remote.log"},
     {"src": "suricata", "dst": "logstash", "proto": "file (ro volume)", "auth": "read-only mount", "data": "eve.json"},
     {"src": "wazuh.manager", "dst": "logstash", "proto": "file (ro volume)", "auth": "read-only mount", "data": "alerts.json"},
+    {"src": "dmz-honeypot", "dst": "logstash", "proto": "file (ro volume)", "auth": "read-only mount", "data": "cowrie.json (dataset cowrie.honeypot; passwords dropped)"},
     {"src": "logstash", "dst": "elasticsearch", "proto": "9200/tcp", "auth": "TLS + cxyz_logstash role", "data": "soc-raw / events / deadletter (create-only raw)"},
     {"src": "kibana", "dst": "elasticsearch", "proto": "9200/tcp", "auth": "TLS + kibana_system", "data": "dashboards read events, ai, response"},
     {"src": "analyst", "dst": "kibana", "proto": "5602/tcp", "auth": "TLS + user login", "data": "127.0.0.1 only"},
@@ -672,7 +684,14 @@ def build_model() -> dict[str, Any]:
                  "pos": DC_ATTACHED.get(svc["name"])}
         docker_nodes.append(entry)
     for svc in docker_nodes:
-        if svc["pos"]:
+        lab = DMZ_LAB.get(svc["id"])
+        if lab:
+            svc["pos"], svc["ip"], svc["shares_netns_with"] = lab["pos"], DMZ_WEB_IP, "dmz-web"
+            links.append({"id": f"netns:{svc['id']}", "link": "dmz", "network": "cxyz-fwdmz-dmzweb", "cidr": f"shares dmz-web's netns · {DMZ_WEB_IP}",
+                          "kind": "netns", "purpose": "Compose service joined to the dmz-web network namespace (profile dmzlab)", "zone": "dmz", "vrrp": None,
+                          "a": {"node": svc["id"], "iface": lab["ports"], "ip": DMZ_WEB_IP}, "b": {"node": "dmz-web", "iface": None, "ip": None}})
+    for svc in docker_nodes:
+        if svc["pos"] and not svc.get("shares_netns_with"):
             for net in svc["networks"]:
                 if net["name"] == "cxyz_dc" and net["ip"]:
                     links.append({"id": f"dc:{svc['id']}", "link": "dc", "network": "cxyz-dc", "cidr": "172.16.50.0/24", "kind": "lan",
@@ -714,8 +733,12 @@ def _ipplan(intent: dict[str, Any], nodes: list[dict[str, Any]], bridges: list[d
             for att in node["attachments"]:
                 if att["link"] == name:
                     members.append({"who": node["id"], "interface": att["interface"], "ip": att["ip"]})
+        if name == "dmz":
+            members += [{"who": f"{s['id']} (shares dmz-web)", "interface": "eth1 (shared netns)", "ip": s["ip"]} for s in docker_nodes
+                        if s.get("shares_netns_with")]
         if name == "dc":
-            members += [{"who": s["id"], "interface": "eth0", "ip": s["ip"]} for s in docker_nodes if s["pos"] and s["ip"]]
+            members += [{"who": s["id"], "interface": "eth0", "ip": s["ip"]} for s in docker_nodes
+                        if s["pos"] and s["ip"] and not s.get("shares_netns_with")]
             members.append({"who": "docker host gateway", "interface": "br-cxyz-dc", "ip": "172.16.50.253"})
         vrrp = spec.get("vrrp")
         rows.append({"cidr": spec["cidr"], "name": spec["network_name"], "kind": spec["kind"], "zone": zone, "purpose": purpose,
@@ -744,7 +767,8 @@ def _ports(nodes: list[dict[str, Any]], docker_nodes: list[dict[str, Any]], fire
         published = {p["container"]: p for p in svc["ports"]}
         for item in svc["listens"]:
             pub = published.get(item["port"])
-            exposure = (f"host {pub['host']}:{pub['published']}/{pub['proto']}" if pub else "container network only")
+            exposure = (f"host {pub['host']}:{pub['published']}/{pub['proto']}" if pub else
+                        f"via {svc['shares_netns_with']} {svc['ip']} through fw-dmz" if svc.get("shares_netns_with") else "container network only")
             rows.append({"where": svc["id"], "ip": svc["ip"], "port": item["port"], "proto": item["proto"], "service": item["name"],
                          "who": item["who"], "exposure": exposure})
     return rows

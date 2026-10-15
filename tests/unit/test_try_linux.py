@@ -206,3 +206,96 @@ def test_shell_wrapper_is_syntactically_valid_and_delegates():
     assert subprocess.run(["bash", "-n", str(wrapper)]).returncode == 0
     text = wrapper.read_text()
     assert "try_linux.py" in text and text.startswith("#!/usr/bin/env bash") and wrapper.stat().st_mode & 0o111
+
+
+# ------------------------------------------------------------------ DMZ lab verification
+class FakeDocker:
+    """Scripted `docker ...` replies keyed by the distinguishing part of the command."""
+
+    def __init__(self, **overrides):
+        self.calls = []
+        self.replies = {
+            "ps": "abc123 Up 5 minutes", "curl": "200", "banner": "SSH-2.0-OpenSSH_6.0p1", "pivot": 1,
+            "vuln": 7, "honeypot": 3, "cp": "x" * 10 + '"eventid": "cowrie.session.connect"',
+        }
+        self.replies.update(overrides)
+
+    def __call__(self, argv, timeout=30, stdin=None):
+        self.calls.append(argv)
+        text = " ".join(argv)
+        r = self.replies
+        out = lambda stdout="", rc=0: tl.subprocess.CompletedProcess(argv, rc, stdout, "")          # noqa: E731
+        if argv[0] == "ps":
+            service = text.split("service=")[1].split()[0]
+            row = r["ps"] if not isinstance(r["ps"], dict) else r["ps"].get(service, "")
+            return out(row)
+        if "curl" in argv:
+            return out(r["curl"])
+        if "nc -w 3 195.1.1.161 2222" in text:
+            return out(r["banner"])
+        if "nc -zw 3" in text:
+            return out("", r["pivot"])
+        if argv[:2] == ["exec", "clab-companyxyz-fw-dmz"]:
+            name = argv[-1]
+            key = "vuln" if "vuln" in name else "honeypot"
+            if r[key] is None:
+                return out("", 1)
+            return out(json.dumps({"nftables": [{"counter": {"name": name, "packets": r[key], "bytes": 1}}]}))
+        if argv[0] == "cp":
+            return out(r["cp"])
+        raise AssertionError(argv)
+
+
+@pytest.fixture()
+def lab(monkeypatch):
+    monkeypatch.setattr(tl.time, "sleep", lambda s: None)
+
+    def install(**overrides):
+        fake = FakeDocker(**overrides)
+        monkeypatch.setattr(tl, "_docker", fake)
+        return fake
+    return install
+
+
+def verify():
+    return tl.dmzlab_verify(tl.Ctx(args(), ROOT / "logs" / "x"))
+
+
+def test_dmz_lab_verification_passes_only_when_reachable_logged_and_contained(lab):
+    lab()
+    status, message = verify()
+    assert status == tl.PASS and "vuln=7 honeypot=3" in message and "cannot reach internal zones" in message
+
+
+@pytest.mark.parametrize("override, expected", [
+    ({"ps": {"dmz-vuln": "abc Up 1 minute", "dmz-honeypot": ""}}, "dmz-honeypot is not running"),
+    ({"ps": ""}, "dmz-vuln is not running"),
+    ({"curl": "000"}, "did not answer HTTP 200"),
+    ({"banner": ""}, "did not present an SSH banner"),
+    ({"pivot": 0}, "ISOLATION BROKEN"),
+    ({"vuln": 0}, "dmzlab_vuln_hit did not move"),
+    ({"honeypot": None}, "no counter dmzlab_honeypot_hit"),
+])
+def test_dmz_lab_verification_names_the_exact_failure(lab, override, expected):
+    lab(**override)
+    status, message = verify()
+    assert status == tl.FAIL and expected in message
+
+
+def test_a_broken_isolation_failure_carries_a_specific_remedy(lab, tmp_path, monkeypatch, capsys):
+    lab(pivot=0)
+    monkeypatch.setattr(tl, "ROOT", tmp_path)
+    monkeypatch.setattr(tl, "VENV", tmp_path / ".venv")
+    stage = next(s for s in tl.build_stages(tl.Ctx(args(), tmp_path)) if s.id == "dmzlab-verify")
+    monkeypatch.setattr(tl, "build_stages", lambda ctx: [stage])
+    assert tl.main(["--only", "dmzlab-verify", "--no-viz"]) == 1
+    out = capsys.readouterr().out
+    assert "ISOLATION BROKEN" in out and "pivot deny" in out and "re-run  : scripts/try-on-linux.sh --only dmzlab-verify" in out
+
+
+def test_dmz_lab_is_a_full_mode_stage_ordered_after_the_fabric():
+    ctx = tl.Ctx(args(), ROOT / "logs" / "x")
+    ids = [s.id for s in tl.build_stages(ctx)]
+    stages = {s.id: s for s in tl.build_stages(ctx)}
+    assert ids.index("fabric-verify") < ids.index("dmzlab-up") < ids.index("dmzlab-verify")
+    assert stages["dmzlab-up"].modes == ("full",) and "fabric-verify" in stages["dmzlab-up"].needs

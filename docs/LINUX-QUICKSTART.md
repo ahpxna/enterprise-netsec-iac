@@ -98,6 +98,31 @@ instead of guessing.
 Everything is derived from `intent/fabric.yaml`, the containerlab/FRR/nftables configs, `docker-compose.yml`, the policies and
 `compliance/controls.yaml`; `python scripts/netviz.py --check` fails if the derived model is inconsistent.
 
+## The DMZ deception lab (vulnerable web app + honeypot)
+
+`make dmzlab-up` (the runner's `dmzlab-up`/`dmzlab-verify` stages do it for you in full mode) adds two deliberately hostile-facing services
+**inside the DMZ, behind fw-dmz**: a vulnerable web application and an SSH/Telnet honeypot. They join the network namespace of the `dmz-web`
+node, so they appear on the DMZ segment with its address **195.1.1.161** (ports `3000`, `2222`, `2223`); every probe crosses fw-dmz (new
+connections are counted and logged as `CXYZ-DMZLAB-*`, Suricata sees them) and the existing pivot deny stops either one from reaching an internal
+zone. They publish nothing on the host and run without capabilities.
+
+| Role | Choice | Why this one |
+|---|---|---|
+| Vulnerable web app | **OWASP Juice Shop** (`bkimminich/juice-shop`, pinned digest) | An OWASP *flagship* project, actively maintained, modern stack (Node/Angular/REST), 100+ challenges across the OWASP Top 10 with a built-in scoreboard, and a very large body of public write-ups, which makes the traffic and the detections easy to cross-check. DVWA is the classic starter but is PHP/MySQL, small and slow-moving; Juice Shop is the better-regarded training target today. Alternatives: OWASP WebGoat (guided lessons, Java), OWASP crAPI (API security), bWAPP/Mutillidae (older). |
+| Honeypot | **Cowrie** (`cowrie/cowrie`, pinned digest) | The de-facto standard medium-interaction SSH/Telnet honeypot: fake shell and filesystem, records credentials, commands and downloaded files as JSON, widely used in research. Alternatives: T-Pot (all-in-one, heavy), Dionaea (malware capture), OpenCanary (lightweight multi-protocol). |
+
+```bash
+make dmzlab-up        # needs the fabric (make net); re-run after any `make net`, the namespace it joins is recreated
+make dmzlab-attack    # controlled hostile traffic from pc1: SQLi, XSS, traversal, scanner UA, telnet session; also proves the DMZ cannot pivot inward
+make dmzlab-status    # containers + fw-dmz hit counters
+make dmzlab-down
+```
+
+The honeypot's JSON log is mounted **read-only** into Logstash and normalized as dataset `cowrie.honeypot` into `soc-alerts-*` (attacker-supplied
+passwords are dropped before indexing). The lab is for *your* isolated test network only: the vulnerable app contains real exploitable flaws.
+**Not yet done:** using a honeypot hit as an independent corroborating signal for automatic response (it needs a new signal type in the policy,
+the decision engine and its schemas); the images and the shared-namespace wiring have not been run on a real host.
+
 ## What to expect (not bugs)
 
 * **The model is a DEMO.** `demo-model` builds an approved registry from deterministic synthetic data with relaxed promotion
