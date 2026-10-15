@@ -1,0 +1,19 @@
+{
+  "cluster": ["monitor"],
+  "indices": [
+    {
+      "names": ["soc-raw-*"],
+      "privileges": ["auto_configure", "create_index", "create_doc", "view_index_metadata"]
+    },
+    {
+      "names": [
+        "soc-network-*",
+        "soc-endpoint-*",
+        "soc-auth-*",
+        "soc-alerts-*",
+        "soc-deadletter-*"
+      ],
+      "privileges": ["auto_configure", "create_index", "create", "index", "view_index_metadata"]
+    }
+  ]
+}

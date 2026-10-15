@@ -14,7 +14,20 @@ for required in \
   'WAZUH_REGISTRATION_PASSWORD=CHANGE_ME_agent_enrollment_min_32_chars' \
   'RADIUS_TEST_PASSWORD=CHANGE_ME_ephemeral_integration_password' \
   'RADIUS_TEST_CRYPT=CHANGE_ME_see_scripts_mkhash' \
-  'RADIUS_SECRET_PC1_PROBE=CHANGE_ME_unique_pc1_probe_min_32_chars'; do
+  'RADIUS_SECRET_PC1_PROBE=CHANGE_ME_unique_pc1_probe_min_32_chars' \
+  'ELASTIC_PASSWORD=CHANGE_ME_elastic_admin_min_32_chars' \
+  'KIBANA_SYSTEM_PASSWORD=CHANGE_ME_kibana_system_min_32_chars' \
+  'KIBANA_BOOTSTRAP_PASSWORD=CHANGE_ME_kibana_bootstrap_min_32_chars' \
+  'LOGSTASH_PASSWORD=CHANGE_ME_logstash_writer_min_32_chars' \
+  'KIBANA_SECURITY_ENCRYPTION_KEY=CHANGE_ME_exactly_or_more_than_32_chars' \
+  'KIBANA_SAVED_OBJECTS_ENCRYPTION_KEY=CHANGE_ME_exactly_or_more_than_32_chars' \
+  'KIBANA_REPORTING_ENCRYPTION_KEY=CHANGE_ME_exactly_or_more_than_32_chars' \
+  'SOC_FEATURE_PASSWORD=CHANGE_ME_soc_feature_min_32_chars' \
+  'SOC_AI_WRITER_PASSWORD=CHANGE_ME_soc_ai_writer_min_32_chars' \
+  'SOC_DECISION_PASSWORD=CHANGE_ME_soc_decision_min_32_chars' \
+  'SOC_RESPONSE_PASSWORD=CHANGE_ME_soc_response_min_32_chars' \
+  'VYOS_API_KEY=CHANGE_ME_vyos_api_key_min_32_chars' \
+  'WAZUH_RESPONSE_CREDENTIALS=CHANGE_ME_wazuh_response_credentials'; do
   key="${required%%=*}"
   grep -q "^${key}=" .env || printf '\n%s\n' "$required" >> .env
 done
@@ -27,6 +40,9 @@ while IFS='=' read -r k v; do
   case "$k" in
     RADIUS_ADMIN_CRYPT) new="$(bash scripts/mkhash.sh "$(gen)")";;
     RADIUS_TEST_CRYPT) continue;;
+    # Wazuh's password policy needs upper/lower/digit/symbol; suffix guarantees it.
+    WAZUH_RESPONSE_CREDENTIALS) new="cxyz-response:$(gen | tr -d '/+=')Aa1!";;
+    VYOS_API_KEY) new="$(gen | tr -d '/+=')";;
     *) new="$(gen)";;
   esac
   # portable in-place edit
@@ -47,6 +63,17 @@ if [[ "$test_crypt" == CHANGE_ME* ]]; then
   echo "  set RADIUS_TEST_CRYPT"
 fi
 
+# Compose applies interpolation to unquoted dotenv values. Quote crypt(3)
+# verifiers so their literal `$6$...` bytes survive Compose parsing while
+# env_exec.py continues to remove the surrounding quotes for Ansible.
+for crypt_key in RADIUS_ADMIN_CRYPT RADIUS_TEST_CRYPT; do
+  crypt_value="$(awk -v key="$crypt_key" -F= '$1 == key {sub(/^[^=]*=/, ""); print; exit}' .env)"
+  if [[ "$crypt_value" == \$* ]]; then
+    awk -v key="$crypt_key" -v val="'$crypt_value'" -F= 'BEGIN{OFS="="}
+      $1 == key {$2=val} {print}' .env > .env.tmp && mv .env.tmp .env
+  fi
+done
+
 cert_has_days() {
   local cert="$1" days="$2"
   [ -f "$cert" ] && openssl x509 -checkend "$((days * 86400))" -noout -in "$cert" >/dev/null 2>&1
@@ -63,6 +90,10 @@ require_signing_key() {
   local key="$1"
   [ -f "$key" ] || { echo "missing signing key $key; cannot renew certificates" >&2; exit 1; }
 }
+
+# Internal SOC analytics links use a distinct local CA. This script never
+# prints or commits its private material.
+bash scripts/gen_soc_certs.sh
 
 # TLS identity for the dedicated syslog relay. Private material stays local.
 relay_certs="docker/syslog-relay/certs"

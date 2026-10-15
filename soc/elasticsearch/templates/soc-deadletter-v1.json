@@ -1,0 +1,30 @@
+{
+  "index_patterns": ["soc-deadletter-*"],
+  "priority": 600,
+  "version": 1,
+  "_meta": {
+    "schema": "soc-deadletter-v1",
+    "description": "Malformed events retained with their exact original payload"
+  },
+  "template": {
+    "settings": {
+      "number_of_shards": 1,
+      "number_of_replicas": 0,
+      "index.lifecycle.name": "soc-deadletter-14d"
+    },
+    "mappings": {
+      "dynamic": true,
+      "properties": {
+        "@timestamp": {"type": "date"},
+        "event": {
+          "properties": {
+            "id": {"type": "keyword"},
+            "original": {"type": "wildcard"}
+          }
+        },
+        "error": {"properties": {"message": {"type": "text"}}},
+        "tags": {"type": "keyword"}
+      }
+    }
+  }
+}
