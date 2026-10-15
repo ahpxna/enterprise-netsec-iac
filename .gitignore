@@ -46,9 +46,11 @@ docs/*
 !docs/SECURITY-IMPLEMENTATION-LEDGER.md
 !docs/NETSEC-BASELINE.md
 !docs/SOC-AI-ARCHITECTURE.md
+!docs/LINUX-QUICKSTART.md
 !docs/adr/
 docs/adr/*
 !docs/adr/0006-soc-ai-closed-loop-architecture.md
+!docs/adr/0007-soc-ai-runtime-and-live-validation.md
 
 # ---- Python / tooling ----
 __pycache__/
@@ -62,6 +64,8 @@ terraform/vyos-fabric/bootstrap.auto.tfvars.json
 terraform/vyos-fabric/routing.auto.tfvars.json
 terraform/vyos-fabric/runtime-configs/
 .cxyz-state/
+# one-command runner logs and reports
+logs/
 wireguard/probe/
 docker/zero-trust-gateway/certs/
 soc/certs/

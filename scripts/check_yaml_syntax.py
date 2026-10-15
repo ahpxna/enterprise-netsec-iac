@@ -15,7 +15,8 @@ import yaml
 from yaml.nodes import MappingNode, Node, ScalarNode, SequenceNode
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-SKIP_PARTS = {".git", ".terraform", "evidence", "__pycache__"}
+# .venv/logs/.cxyz-state are created by the one-command runner and must never be linted as repository source
+SKIP_PARTS = {".git", ".terraform", "evidence", "__pycache__", ".venv", "venv", "logs", ".cxyz-state", "node_modules"}
 
 
 def duplicate_key_errors(node: Node | None, path: str = "$.") -> list[str]:

@@ -901,3 +901,25 @@ bypass.
   file as UTF-8 text). It now skips that one OS-metadata name and decodes other files leniently; no other file is exempt, and a
   planted forbidden token is still caught.
 - Live scenarios use documentation-range addresses and tagged fixtures; the injected anomaly stands in for model output.
+
+---
+
+## INC-071 — One-command Linux runner, network explorer, strict-TLS PKI fix
+
+**Status:** source/static verified and offline-tested; the Linux, Docker and containerlab stages of the runner are **unverified** until
+run on a Linux host.
+
+- **BUG-071-A — the SOC CAs lacked `keyUsage`.** `scripts/gen_soc_certs.sh` produced CAs without `keyUsage keyCertSign`, which strict X.509
+  verification rejects (`openssl verify -x509_strict`: "CA cert does not include key usage extension"; the default of Python >= 3.13).
+  Found by the first real run of the new runner in a fresh Python 3.13 environment (two mutual-TLS tests failed). The services' Debian image
+  ships Python 3.11, so nothing was broken at runtime, but any host-side or newer-Python client would have been. Fixed for the three CAs and
+  all leaves (critical `basicConstraints`/`keyUsage`, SKI/AKI); an existing legacy CA is detected and rotated (with every certificate it signed)
+  on the next `make secrets`, with an explicit message to restart the SOC services. The test PKI got the same extensions.
+- **BUG-071-B — wrong nftables table for fw-dmz in the live verifier.** `DockerLab.blocklists()` queried `inet cxyz` on both firewalls; fw-dmz's
+  set lives in `inet dmz`. The live RESP controls would have ended in `ERROR`. Fixed and tied to the shipped configs by a test.
+- **BUG-071-C — `.env.example` inline comments.** `env_exec.parse_dotenv` kept `# ...` comments as part of the value
+  (`SOC_PATH='path-a   # ...'`, `SOC_MODE='# empty ...'`), unlike Docker Compose. It now strips comments exactly as Compose does, and the
+  example keeps comments on their own lines.
+- **New:** `scripts/try-on-linux.sh` / `scripts/try_linux.py` (install, build, run, test with stage-level failure analysis),
+  `scripts/netviz.py` (read-only GNS3-style explorer derived from the sources of truth), `scripts/demo_registry.py` (DEMO approved model from
+  synthetic data), `docs/LINUX-QUICKSTART.md`.

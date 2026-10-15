@@ -44,6 +44,12 @@ cluster.
 
 ## Quick start
 
+**Fastest way to try everything on a Linux machine - one command** (installs dependencies, builds, runs, tests, and pinpoints
+any failure): `./scripts/try-on-linux.sh` (or `make try-linux`; `--quick` skips the containerlab fabric). It also starts a
+GNS3-style, clickable network explorer at <http://127.0.0.1:8088> (`make netviz`). See
+[docs/LINUX-QUICKSTART.md](docs/LINUX-QUICKSTART.md). The step-by-step lifecycle follows.
+
+
 Prerequisites for the default path are Docker, Docker Compose, containerlab,
 Ansible Core, Terraform, and Python 3.11 or newer. The historical FRR 9.1.0
 container used by live Path A is pinned as a `linux/amd64` single-platform
@@ -191,6 +197,7 @@ failover while collecting SIEM-visible evidence.
 
 - [Architecture](ARCHITECTURE.md)
 - [SOC/AI closed-loop architecture](docs/SOC-AI-ARCHITECTURE.md)
+- [Try it on Linux with one command](docs/LINUX-QUICKSTART.md)
 - [Frozen NetSec baseline](docs/NETSEC-BASELINE.md)
 - [VyOS VM fabric](terraform/vyos-fabric/README.md)
 - [Kubernetes security plane](k8s/README.md)

@@ -390,6 +390,23 @@ report: ## Generate Path A compliance report from controls.yaml + latest evidenc
 audit: lint batfish validate attack soc-ai-validate report ## Everything an auditor would ask for
 	@echo "==> Evidence bundle: $(EVIDENCE)"
 
+# ---------------------------------------------------------------- try it / explore it
+.PHONY: try-linux try-linux-quick try-linux-offline netviz netviz-stop
+try-linux: ## ONE COMMAND on a Linux host: install deps, build, run, test everything; pinpoints any failure (scripts/try_linux.py)
+	bash scripts/try-on-linux.sh
+
+try-linux-quick: ## Same without the containerlab fabric: offline gates + SOC analytics + AI/response (observe mode)
+	bash scripts/try-on-linux.sh --quick
+
+try-linux-offline: ## Only the checks that need no containers (works on macOS too)
+	bash scripts/try-on-linux.sh --offline
+
+netviz: ## Local read-only network explorer (GNS3-style, clickable, live overlay): http://127.0.0.1:8088
+	python scripts/netviz.py
+
+netviz-stop: ## Stop the background network explorer started by try-linux
+	@if [ -f .cxyz-state/netviz.pid ]; then kill "$$(cut -d' ' -f1 .cxyz-state/netviz.pid)" 2>/dev/null; rm -f .cxyz-state/netviz.pid; echo "network explorer stopped"; else echo "network explorer is not running"; fi
+
 # ---------------------------------------------------------------- misc
 .PHONY: urls
 urls: ## Print service URLs
