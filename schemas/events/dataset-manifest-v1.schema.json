@@ -1,0 +1,123 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://companyxyz.test/schemas/events/dataset-manifest-v1.schema.json",
+  "title": "CompanyXYZ SOC dataset manifest v1",
+  "description": "Metadata-only manifest for a reproducible, temporally split SOC dataset. Raw event payloads and extracted datasets are never committed with this manifest.",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "dataset_id",
+    "created_at",
+    "time_range",
+    "sources",
+    "feature_schema",
+    "feature_schema_sha256",
+    "sha256",
+    "git_sha",
+    "raw_data_committed",
+    "raw_data_location_class",
+    "label_source",
+    "split",
+    "provenance"
+  ],
+  "properties": {
+    "schema_version": {"const": "dataset-manifest-v1"},
+    "dataset_id": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]{2,127}$"
+    },
+    "created_at": {"type": "string", "format": "date-time"},
+    "time_range": {"$ref": "#/$defs/timeRange"},
+    "sources": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "enum": ["suricata", "wazuh", "opnsense", "radius", "network_syslog", "endpoint"]
+      }
+    },
+    "feature_schema": {"enum": ["network-window-v1", "endpoint-window-v1"]},
+    "feature_schema_sha256": {"$ref": "#/$defs/sha256"},
+    "sha256": {
+      "description": "Digest of the canonical extracted dataset artifact, not of this manifest.",
+      "$ref": "#/$defs/sha256"
+    },
+    "git_sha": {"$ref": "#/$defs/gitSha"},
+    "raw_data_committed": {"const": false},
+    "raw_data_location_class": {
+      "enum": ["local_ignored", "external_evidence", "approved_object_store"]
+    },
+    "label_source": {
+      "type": "object",
+      "required": ["method", "protocol_version", "sha256"],
+      "properties": {
+        "method": {"enum": ["scenario_time_window", "manual_review", "hybrid"]},
+        "protocol_version": {"type": "string", "minLength": 1},
+        "sha256": {"$ref": "#/$defs/sha256"}
+      },
+      "additionalProperties": false
+    },
+    "split": {
+      "type": "object",
+      "required": ["strategy", "session_assignment_sha256", "train", "validation", "test"],
+      "properties": {
+        "strategy": {"const": "temporal_session_isolated"},
+        "session_assignment_sha256": {"$ref": "#/$defs/sha256"},
+        "train": {"$ref": "#/$defs/splitPartition"},
+        "validation": {"$ref": "#/$defs/splitPartition"},
+        "test": {"$ref": "#/$defs/splitPartition"}
+      },
+      "additionalProperties": false
+    },
+    "provenance": {
+      "type": "object",
+      "required": [
+        "normalization_schema_sha256",
+        "collector_config_sha256",
+        "source_manifest_sha256",
+        "feature_engine_git_sha",
+        "generated_by"
+      ],
+      "properties": {
+        "normalization_schema_sha256": {"$ref": "#/$defs/sha256"},
+        "collector_config_sha256": {"$ref": "#/$defs/sha256"},
+        "source_manifest_sha256": {"$ref": "#/$defs/sha256"},
+        "feature_engine_git_sha": {"$ref": "#/$defs/gitSha"},
+        "generated_by": {"type": "string", "minLength": 1}
+      },
+      "additionalProperties": false
+    }
+  },
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^[A-Fa-f0-9]{64}$"
+    },
+    "gitSha": {
+      "type": "string",
+      "pattern": "^[A-Fa-f0-9]{7,64}$"
+    },
+    "timeRange": {
+      "type": "object",
+      "required": ["start", "end"],
+      "properties": {
+        "start": {"type": "string", "format": "date-time"},
+        "end": {"type": "string", "format": "date-time"}
+      },
+      "additionalProperties": false
+    },
+    "splitPartition": {
+      "type": "object",
+      "required": ["start", "end", "vector_count", "session_ids_sha256", "label_profile"],
+      "properties": {
+        "start": {"type": "string", "format": "date-time"},
+        "end": {"type": "string", "format": "date-time"},
+        "vector_count": {"type": "integer", "minimum": 1},
+        "session_ids_sha256": {"$ref": "#/$defs/sha256"},
+        "label_profile": {"enum": ["benign_biased", "mixed", "held_out_attack"]}
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

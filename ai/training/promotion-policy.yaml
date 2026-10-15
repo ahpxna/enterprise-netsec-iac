@@ -1,0 +1,15 @@
+# Governed promotion gate for SOC detection models.
+#
+# These floors are research decisions, not defaults of nature: change them only
+# through review, because the policy digest is recorded in every approval.
+# A candidate must clear every bound on the frozen, artifact-bound TEST metrics.
+---
+schema_version: promotion-policy-v1
+minimum:
+  precision: 0.60
+  recall: 0.60
+  f1: 0.60
+  scenario_detection_ratio: 0.60
+maximum:
+  false_positives_per_hour: 6.0
+  p95_inference_ms: 50.0

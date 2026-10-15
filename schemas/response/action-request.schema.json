@@ -6,11 +6,17 @@
   "required": [
     "schema_version", "correlation_id", "entity", "action", "reason", "ai_score",
     "model_id", "signals", "ttl_seconds", "allowlist_checked", "rollback_required",
-    "requested_at"
+    "requested_at", "decision_event_id", "policy_id", "policy_sha256",
+    "idempotency_key", "issued_by"
   ],
   "properties": {
     "schema_version": {"const": "response-request-v1"},
     "correlation_id": {"type": "string", "minLength": 1},
+    "decision_event_id": {"type": "string", "minLength": 1},
+    "policy_id": {"type": "string", "minLength": 1},
+    "policy_sha256": {"$ref": "#/$defs/sha256"},
+    "idempotency_key": {"type": "string", "minLength": 16, "maxLength": 512},
+    "issued_by": {"const": "decision_engine"},
     "entity": {
       "type": "object",
       "required": ["type", "id"],
@@ -18,6 +24,12 @@
         "type": {"enum": ["ip", "host"]},
         "id": {"type": "string", "minLength": 1}
       },
+      "allOf": [
+        {
+          "if": {"properties": {"type": {"const": "ip"}}, "required": ["type"]},
+          "then": {"properties": {"id": {"$ref": "#/$defs/ipAddress"}}}
+        }
+      ],
       "additionalProperties": false
     },
     "action": {"enum": ["block_ip", "isolate_host"]},
@@ -36,12 +48,71 @@
           "reference": {"type": "string", "minLength": 1}
         },
         "additionalProperties": false
-      }
+      },
+      "allOf": [
+        {
+          "contains": {
+            "type": "object",
+            "properties": {"type": {"const": "ai"}},
+            "required": ["type"]
+          },
+          "minContains": 1
+        },
+        {
+          "contains": {
+            "type": "object",
+            "properties": {
+              "type": {
+                "enum": ["suricata", "wazuh", "authentication", "threat_intel", "protected_asset"]
+              }
+            },
+            "required": ["type"]
+          },
+          "minContains": 1
+        }
+      ]
     },
     "ttl_seconds": {"type": "integer", "minimum": 60, "maximum": 86400},
     "allowlist_checked": {"const": true},
     "rollback_required": {"const": true},
     "requested_at": {"type": "string", "format": "date-time"}
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"action": {"const": "block_ip"}}, "required": ["action"]},
+      "then": {
+        "properties": {
+          "entity": {
+            "properties": {"type": {"const": "ip"}},
+            "required": ["type"]
+          }
+        }
+      }
+    },
+    {
+      "if": {"properties": {"action": {"const": "isolate_host"}}, "required": ["action"]},
+      "then": {
+        "properties": {
+          "entity": {
+            "properties": {"type": {"const": "host"}},
+            "required": ["type"]
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^[A-Fa-f0-9]{64}$"
+    },
+    "ipAddress": {
+      "type": "string",
+      "oneOf": [
+        {"format": "ipv4"},
+        {"format": "ipv6"}
+      ]
+    }
   },
   "additionalProperties": false
 }

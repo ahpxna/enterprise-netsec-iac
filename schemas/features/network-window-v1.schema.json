@@ -1,0 +1,86 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://companyxyz.test/schemas/features/network-window-v1.schema.json",
+  "title": "CompanyXYZ network-window-v1 feature vector",
+  "description": "Closed, deterministic five-minute network feature contract. This schema is intentionally separate from endpoint-window-v1 so model inputs never silently mix semantics. Definitions: a connection is one firewall.syslog record or one Suricata event_type=flow record (alert/dns/http/tls records and device syslog are never connections); bytes_out/bytes_in come only from Suricata flow records (final per-direction counters) or the logged firewall packet length (bytes_out); dns_query_count and unique_domain_count count Suricata dns query records; tls_count counts Suricata tls records; suricata_alert_count counts Suricata alert records; failed_auth_count counts authentication failures attributed to the source IP.",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "feature_schema",
+    "feature_schema_sha256",
+    "vector_id",
+    "entity_type",
+    "entity",
+    "window_start",
+    "window_end",
+    "window_duration",
+    "source_event_count",
+    "source_event_set_sha256",
+    "generator_git_sha",
+    "generated_at",
+    "features"
+  ],
+  "properties": {
+    "schema_version": {"const": "network-window-v1"},
+    "feature_schema": {"const": "network-window-v1"},
+    "feature_schema_sha256": {"$ref": "#/$defs/sha256"},
+    "vector_id": {"type": "string", "minLength": 1, "maxLength": 256},
+    "entity_type": {"const": "src_ip"},
+    "entity": {"$ref": "#/$defs/ipAddress"},
+    "window_start": {"type": "string", "format": "date-time"},
+    "window_end": {"type": "string", "format": "date-time"},
+    "window_duration": {"const": "5m"},
+    "source_event_count": {"type": "integer", "minimum": 1},
+    "source_event_set_sha256": {"$ref": "#/$defs/sha256"},
+    "generator_git_sha": {"$ref": "#/$defs/gitSha"},
+    "generated_at": {"type": "string", "format": "date-time"},
+    "features": {
+      "type": "object",
+      "required": [
+        "connection_count",
+        "unique_dst_ip",
+        "unique_dst_port",
+        "bytes_out",
+        "bytes_in",
+        "blocked_ratio",
+        "dns_query_count",
+        "unique_domain_count",
+        "tls_count",
+        "suricata_alert_count",
+        "failed_auth_count"
+      ],
+      "properties": {
+        "connection_count": {"type": "integer", "minimum": 0},
+        "unique_dst_ip": {"type": "integer", "minimum": 0},
+        "unique_dst_port": {"type": "integer", "minimum": 0},
+        "bytes_out": {"type": "integer", "minimum": 0},
+        "bytes_in": {"type": "integer", "minimum": 0},
+        "blocked_ratio": {"type": "number", "minimum": 0, "maximum": 1},
+        "dns_query_count": {"type": "integer", "minimum": 0},
+        "unique_domain_count": {"type": "integer", "minimum": 0},
+        "tls_count": {"type": "integer", "minimum": 0},
+        "suricata_alert_count": {"type": "integer", "minimum": 0},
+        "failed_auth_count": {"type": "integer", "minimum": 0}
+      },
+      "additionalProperties": false
+    }
+  },
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^[A-Fa-f0-9]{64}$"
+    },
+    "gitSha": {
+      "type": "string",
+      "pattern": "^[A-Fa-f0-9]{7,64}$"
+    },
+    "ipAddress": {
+      "type": "string",
+      "oneOf": [
+        {"format": "ipv4"},
+        {"format": "ipv6"}
+      ]
+    }
+  },
+  "additionalProperties": false
+}

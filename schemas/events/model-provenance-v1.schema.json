@@ -1,0 +1,135 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://companyxyz.test/schemas/events/model-provenance-v1.schema.json",
+  "title": "CompanyXYZ SOC model provenance v1",
+  "description": "Promotion record for a model artifact. It records the data, feature contract, source revision, seed, threshold, hyperparameters, and evaluation needed to reproduce a model decision.",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "model_id",
+    "algorithm",
+    "created_at",
+    "status",
+    "artifact",
+    "dataset",
+    "feature_schema",
+    "git_sha",
+    "training",
+    "threshold",
+    "evaluation",
+    "runtime"
+  ],
+  "properties": {
+    "schema_version": {"const": "model-provenance-v1"},
+    "model_id": {"type": "string", "minLength": 1, "maxLength": 255},
+    "algorithm": {"enum": ["IsolationForest", "LSTMAutoencoder"]},
+    "created_at": {"type": "string", "format": "date-time"},
+    "status": {"enum": ["candidate", "approved", "retired", "revoked"]},
+    "artifact": {
+      "type": "object",
+      "required": ["path", "sha256", "size_bytes", "format"],
+      "properties": {
+        "path": {"type": "string", "minLength": 1, "maxLength": 1024},
+        "sha256": {"$ref": "#/$defs/sha256"},
+        "size_bytes": {"type": "integer", "minimum": 1},
+        "format": {"enum": ["joblib", "onnx", "safetensors"]}
+      },
+      "additionalProperties": false
+    },
+    "dataset": {
+      "type": "object",
+      "required": ["id", "sha256", "manifest_sha256", "train_partition", "validation_partition", "test_partition"],
+      "properties": {
+        "id": {"type": "string", "minLength": 1},
+        "sha256": {"$ref": "#/$defs/sha256"},
+        "manifest_sha256": {"$ref": "#/$defs/sha256"},
+        "train_partition": {"type": "string", "minLength": 1},
+        "validation_partition": {"type": "string", "minLength": 1},
+        "test_partition": {"type": "string", "minLength": 1}
+      },
+      "additionalProperties": false
+    },
+    "feature_schema": {
+      "type": "object",
+      "required": ["id", "sha256"],
+      "properties": {
+        "id": {"enum": ["network-window-v1", "endpoint-window-v1"]},
+        "sha256": {"$ref": "#/$defs/sha256"}
+      },
+      "additionalProperties": false
+    },
+    "git_sha": {"$ref": "#/$defs/gitSha"},
+    "training": {
+      "type": "object",
+      "required": ["random_seed", "started_at", "completed_at", "hyperparameters"],
+      "properties": {
+        "random_seed": {"type": "integer", "minimum": 0},
+        "started_at": {"type": "string", "format": "date-time"},
+        "completed_at": {"type": "string", "format": "date-time"},
+        "hyperparameters": {
+          "type": "object",
+          "minProperties": 1,
+          "additionalProperties": {
+            "anyOf": [
+              {"type": "string", "maxLength": 256},
+              {"type": "number"},
+              {"type": "integer"},
+              {"type": "boolean"},
+              {
+                "type": "array",
+                "items": {"type": ["string", "number", "integer", "boolean"]}
+              }
+            ]
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "threshold": {"type": "number", "minimum": 0, "maximum": 1},
+    "evaluation": {
+      "type": "object",
+      "required": [
+        "precision",
+        "recall",
+        "f1",
+        "pr_auc",
+        "false_positives_per_hour",
+        "mttd_seconds",
+        "p95_inference_ms"
+      ],
+      "properties": {
+        "precision": {"type": "number", "minimum": 0, "maximum": 1},
+        "recall": {"type": "number", "minimum": 0, "maximum": 1},
+        "f1": {"type": "number", "minimum": 0, "maximum": 1},
+        "pr_auc": {"type": "number", "minimum": 0, "maximum": 1},
+        "false_positives_per_hour": {"type": "number", "minimum": 0},
+        "mttd_seconds": {"type": "number", "minimum": 0},
+        "p95_inference_ms": {"type": "number", "minimum": 0}
+      },
+      "additionalProperties": false
+    },
+    "runtime": {
+      "type": "object",
+      "required": ["image_digest", "library_lock_sha256"],
+      "properties": {
+        "image_digest": {
+          "type": "string",
+          "pattern": "^sha256:[A-Fa-f0-9]{64}$"
+        },
+        "library_lock_sha256": {"$ref": "#/$defs/sha256"}
+      },
+      "additionalProperties": false
+    }
+  },
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^[A-Fa-f0-9]{64}$"
+    },
+    "gitSha": {
+      "type": "string",
+      "pattern": "^[A-Fa-f0-9]{7,64}$"
+    }
+  },
+  "additionalProperties": false
+}

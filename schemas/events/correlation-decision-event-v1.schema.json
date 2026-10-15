@@ -1,0 +1,233 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://companyxyz.test/schemas/events/correlation-decision-event-v1.schema.json",
+  "title": "CompanyXYZ correlation and decision event v1",
+  "description": "The policy boundary between scored AI evidence and a privileged response request. A response request requires one AI anomaly and at least one independent non-AI signal.",
+  "type": "object",
+  "required": [
+    "@timestamp",
+    "schema_version",
+    "event",
+    "correlation_id",
+    "target",
+    "anomaly",
+    "signals",
+    "policy",
+    "decision"
+  ],
+  "properties": {
+    "@timestamp": {"type": "string", "format": "date-time"},
+    "schema_version": {"const": "correlation-decision-event-v1"},
+    "event": {
+      "type": "object",
+      "required": ["id", "kind", "category", "dataset"],
+      "properties": {
+        "id": {"type": "string", "minLength": 1},
+        "kind": {"const": "event"},
+        "category": {
+          "type": "array",
+          "minItems": 1,
+          "contains": {"const": "correlation"}
+        },
+        "dataset": {"const": "soc.correlation.decision"}
+      },
+      "additionalProperties": false
+    },
+    "correlation_id": {"type": "string", "minLength": 1, "maxLength": 256},
+    "target": {
+      "type": "object",
+      "required": ["type", "value"],
+      "properties": {
+        "type": {"enum": ["ip", "host"]},
+        "value": {"type": "string", "minLength": 1, "maxLength": 255}
+      },
+      "allOf": [
+        {
+          "if": {"properties": {"type": {"const": "ip"}}, "required": ["type"]},
+          "then": {"properties": {"value": {"$ref": "#/$defs/ipAddress"}}}
+        }
+      ],
+      "additionalProperties": false
+    },
+    "anomaly": {
+      "type": "object",
+      "required": ["event_id", "model_id", "score", "threshold", "is_anomaly"],
+      "properties": {
+        "event_id": {"type": "string", "minLength": 1},
+        "model_id": {"type": "string", "minLength": 1},
+        "score": {"type": "number", "minimum": 0, "maximum": 1},
+        "threshold": {"type": "number", "minimum": 0, "maximum": 1},
+        "is_anomaly": {"type": "boolean"}
+      },
+      "additionalProperties": false
+    },
+    "signals": {
+      "type": "array",
+      "minItems": 2,
+      "items": {
+        "type": "object",
+        "required": ["kind", "reference", "observed_at"],
+        "properties": {
+          "kind": {
+            "enum": [
+              "ai_anomaly",
+              "suricata_alert",
+              "wazuh_alert",
+              "authentication_failures",
+              "threat_intel_match",
+              "protected_asset_context"
+            ]
+          },
+          "reference": {"type": "string", "minLength": 1},
+          "observed_at": {"type": "string", "format": "date-time"},
+          "confidence": {"type": "number", "minimum": 0, "maximum": 1}
+        },
+        "additionalProperties": false
+      },
+      "allOf": [
+        {
+          "contains": {
+            "type": "object",
+            "properties": {"kind": {"const": "ai_anomaly"}},
+            "required": ["kind"]
+          },
+          "minContains": 1
+        },
+        {
+          "contains": {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "enum": [
+                  "suricata_alert",
+                  "wazuh_alert",
+                  "authentication_failures",
+                  "threat_intel_match",
+                  "protected_asset_context"
+                ]
+              }
+            },
+            "required": ["kind"]
+          },
+          "minContains": 1
+        }
+      ]
+    },
+    "policy": {
+      "type": "object",
+      "required": ["id", "version", "sha256"],
+      "properties": {
+        "id": {"type": "string", "minLength": 1},
+        "version": {"type": "string", "minLength": 1},
+        "sha256": {"$ref": "#/$defs/sha256"}
+      },
+      "additionalProperties": false
+    },
+    "decision": {
+      "type": "object",
+      "required": ["outcome", "action", "automatic_response_eligible", "confidence", "reason"],
+      "properties": {
+        "outcome": {"enum": ["store_only", "alert", "response_requested", "denied"]},
+        "action": {"enum": ["none", "block_ip", "isolate_host"]},
+        "automatic_response_eligible": {"type": "boolean"},
+        "response_request_id": {"type": "string", "minLength": 1},
+        "confidence": {"type": "number", "minimum": 0, "maximum": 1},
+        "reason": {"type": "string", "minLength": 1, "maxLength": 2048}
+      },
+      "additionalProperties": false
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "decision": {
+            "properties": {"outcome": {"const": "response_requested"}},
+            "required": ["outcome"]
+          }
+        },
+        "required": ["decision"]
+      },
+      "then": {
+        "properties": {
+          "anomaly": {
+            "properties": {
+              "score": {"minimum": 0.9},
+              "is_anomaly": {"const": true}
+            },
+            "required": ["score", "is_anomaly"]
+          },
+          "decision": {
+            "properties": {
+              "action": {"enum": ["block_ip", "isolate_host"]},
+              "automatic_response_eligible": {"const": true}
+            },
+            "required": ["response_request_id"]
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "decision": {
+            "properties": {
+              "action": {"const": "none"},
+              "automatic_response_eligible": {"const": false}
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "decision": {
+            "properties": {"action": {"const": "block_ip"}},
+            "required": ["action"]
+          }
+        },
+        "required": ["decision"]
+      },
+      "then": {
+        "properties": {
+          "target": {
+            "properties": {"type": {"const": "ip"}},
+            "required": ["type"]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "decision": {
+            "properties": {"action": {"const": "isolate_host"}},
+            "required": ["action"]
+          }
+        },
+        "required": ["decision"]
+      },
+      "then": {
+        "properties": {
+          "target": {
+            "properties": {"type": {"const": "host"}},
+            "required": ["type"]
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^[A-Fa-f0-9]{64}$"
+    },
+    "ipAddress": {
+      "type": "string",
+      "oneOf": [
+        {"format": "ipv4"},
+        {"format": "ipv6"}
+      ]
+    }
+  },
+  "additionalProperties": false
+}

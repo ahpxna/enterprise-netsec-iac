@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://companyxyz.test/schemas/ecs/soc-raw-event-v1.json",
+  "title": "CompanyXYZ append-only raw SOC event",
+  "type": "object",
+  "required": ["@timestamp", "event", "observer", "cxyz"],
+  "properties": {
+    "@timestamp": {"type": "string", "format": "date-time"},
+    "event": {
+      "type": "object",
+      "required": ["id", "kind", "dataset", "original"],
+      "properties": {
+        "id": {"type": "string", "minLength": 1},
+        "kind": {"const": "event"},
+        "dataset": {"pattern": "^[a-z0-9_.-]+\\.raw$"},
+        "original": {"type": "string"}
+      },
+      "additionalProperties": true
+    },
+    "observer": {
+      "type": "object",
+      "required": ["name", "type"],
+      "properties": {
+        "name": {"type": "string", "minLength": 1},
+        "type": {"type": "string", "minLength": 1}
+      },
+      "additionalProperties": true
+    },
+    "cxyz": {
+      "type": "object",
+      "required": ["schema_version", "sensor_zone", "source_authentication", "ingestion_id"],
+      "properties": {
+        "schema_version": {"const": "soc-raw-v1"},
+        "sensor_zone": {"type": "string", "minLength": 1},
+        "source_authentication": {"enum": ["mtls_relay", "read_only_volume", "operator_fixture"]},
+        "ingestion_id": {"type": "string", "minLength": 1}
+      },
+      "additionalProperties": true
+    }
+  },
+  "additionalProperties": true
+}
