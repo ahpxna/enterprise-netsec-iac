@@ -32,12 +32,10 @@
     dest: /etc/apt/sources.list.d/wazuh.list
     mode: "0644"
     content: "deb [signed-by=/usr/share/keyrings/wazuh.asc] https://packages.wazuh.com/4.x/apt/ stable main\n"
-  register: wazuh_agent_repo
+  notify: refresh apt cache
 
-- name: Refresh the package index after changing the repository
-  ansible.builtin.apt:
-    update_cache: true
-  when: wazuh_agent_repo is changed
+- name: Refresh the package index now if the repository changed (the agent install below needs it)
+  ansible.builtin.meta: flush_handlers
 
 - name: Install the pinned Wazuh agent, enrolled by name with the registration password
   ansible.builtin.apt:

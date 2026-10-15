@@ -941,3 +941,20 @@ run on a Linux host.
   the network explorer (shared-namespace links, ports, IP plan, SOC flow) cover it.
 - Open: a honeypot hit is not yet an independent signal for the decision engine; Path B has no equivalent; the shared-namespace design must be restarted
   after `make net`; Cowrie's environment-variable options and read-only root filesystem are unverified against the real image.
+
+---
+
+## INC-073 — Honeypot interaction as a corroborating signal; CI green again
+
+**Status:** offline-tested (decision runner, engine, policy, schemas); live behaviour unverified.
+
+- New independent signal type `honeypot` (policy vocabulary, engine, `correlation-decision-event-v1` kind `honeypot_interaction`,
+  `response-request-v1`). The decision runner reads `cowrie.honeypot` events of the anomalous source from `soc-alerts-*` and folds them into
+  one signal (worst severity, count). `COR-001` accepts it with `min_severity: 5` in every shipped policy; a static check enforces the floor.
+- **BUG-073-A — the routed transit was containable.** `10.255.0.0/16` (router/firewall transit, and the NATed source of all campus traffic
+  toward the DMZ) was not a protected network, so a corroborated anomaly on fw-core's outside address could have blocked a whole zone.
+  It is now protected in every policy and statically enforced.
+- **CI:** `ansible-lint` failed on `no-handler` (`wazuh_agent` refreshed the apt index with `when: changed`; now a handler flushed before the
+  install). `gitleaks` reported five findings in history, all reviewed false positives (`curl --user name:${VAR}` variable references, Ed25519 key
+  IDs, the `Ed25519PrivateKey` type name); `.gitleaks.toml` allowlists exactly those secret shapes and was checked to still report real-looking
+  credentials in the same contexts.

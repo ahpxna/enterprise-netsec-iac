@@ -368,7 +368,7 @@ SOC_FLOWS: list[dict[str, str]] = [
     {"src": "soc-feature-worker", "dst": "elasticsearch", "proto": "9200/tcp", "auth": "feature_engine role", "data": "reads events, writes soc-features-*"},
     {"src": "soc-enrichment-worker", "dst": "elasticsearch", "proto": "9200/tcp", "auth": "ai_event_writer role", "data": "reads features, writes soc-ai-*"},
     {"src": "soc-enrichment-worker", "dst": "soc-ai-api", "proto": "8443/tcp", "auth": "mTLS (dedicated client CA)", "data": "feature vector -> score"},
-    {"src": "soc-decision", "dst": "elasticsearch", "proto": "9200/tcp", "auth": "decision_engine role", "data": "reads soc-ai + telemetry, writes decisions"},
+    {"src": "soc-decision", "dst": "elasticsearch", "proto": "9200/tcp", "auth": "decision_engine role", "data": "reads soc-ai + alerts (Suricata, Wazuh, honeypot) + auth, writes decisions"},
     {"src": "soc-decision", "dst": "soc-response", "proto": "8443/tcp", "auth": "mTLS + Ed25519 signature", "data": "signed containment command"},
     {"src": "soc-response", "dst": "elasticsearch", "proto": "9200/tcp", "auth": "response_orchestrator role", "data": "append-only audit"},
     {"src": "soc-response", "dst": "fw-core", "bend": "-0.3", "proto": "9443/tcp", "auth": "mTLS (CN soc-response)", "data": "add/remove/contains soc_blocklist"},

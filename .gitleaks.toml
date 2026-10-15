@@ -1,0 +1,18 @@
+# gitleaks configuration: the default rules plus a NARROW allowlist for reviewed false positives.
+# Each regex matches the detected *secret* only, never a whole file or path, so a real credential in
+# the same files is still reported. Legacy [allowlist] syntax keeps the CI-pinned gitleaks v8.24 working.
+title = "enterprise-netsec-iac"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Reviewed false positives (identifiers and variable references, not credentials)"
+regexTarget = "secret"
+regexes = [
+  # curl --user <name>:${VAR} / $${VAR} in Make and Compose: the password is expanded at run time from .env
+  '''^"?[a-z][a-z0-9_]*:\$?\$\{[A-Z][A-Z0-9_]*\}"?$''',
+  # Ed25519 decision-signing key IDs (decision-key-1, decision-2026-q3, decision-key-1.pub) and the key type name
+  '''^decision-[a-z0-9][a-z0-9.-]*$''',
+  '''^Ed25519(Private|Public)Key$''',
+]

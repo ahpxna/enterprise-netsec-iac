@@ -35,6 +35,9 @@ defaults:
       - 172.16.50.254  # fw-core DC interface
     protected_networks:
       - 10.1.1.0/24
+      # Routed transit between edge, firewalls, core and distribution. Campus traffic is NATed to fw-core's
+      # outside address, so a block here would cut a whole zone, never contain one host.
+      - 10.255.0.0/16
     protected_hosts:
       - elasticsearch
       - kibana
@@ -78,6 +81,9 @@ policies:
           min_count: 20
         - type: threat_intel
         - type: protected_asset
+        # DMZ honeypot (Cowrie): a login attempt or worse; a bare connection (severity 3) is not enough
+        - type: honeypot
+          min_severity: 5
 
   - id: COR-002
     version: "1.0.0"

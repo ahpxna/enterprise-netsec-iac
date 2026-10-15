@@ -131,8 +131,9 @@ score >= 0.90 + second signal -> eligible for automatic response
 ```
 
 Valid second signals include a Suricata alert, high-severity Wazuh alert,
-repeated authentication failures, threat-intelligence match, or known
-protected-asset context. Eligibility still requires an allowlist check, TTL,
+repeated authentication failures, threat-intelligence match, known
+protected-asset context, or an interaction with the DMZ honeypot (a login
+attempt or worse; all honeypot events of one source count as one signal). Eligibility still requires an allowlist check, TTL,
 rate limit, deduplication, rollback plan, and append-only response audit.
 
 Network containment is membership of the fixed `SOC_BLOCKLIST` set on *every* firewall peer

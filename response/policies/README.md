@@ -57,3 +57,12 @@ automatic action, even if the numeric thresholds match.
 `tests/soc/test_deployment_configs.py` enforces that overlays never relax a safeguard
 (protected targets, rate limit, dedup, freshness) and that validation overlays are never
 the shipped default; the Kubernetes mirror carries `default.yaml` only.
+
+## Honeypot corroboration
+
+`COR-001` accepts `type: honeypot` with `min_severity: 5`: a Cowrie event (dataset `cowrie.honeypot` in `soc-alerts-*`) from the
+anomalous source address within the evidence window, at the level of a login attempt or worse (`cowrie.session.connect` is 3, failed
+login 5, successful login 8, command 9, file transfer 10). The decision runner folds every honeypot event of that source into ONE signal
+(worst severity, event count), so a noisy attacker cannot look like several independent observations. It never makes a protected target
+containable: the routed transit `10.255.0.0/16` is protected in every policy because campus traffic reaches the DMZ NATed to fw-core's
+outside address, and blocking that address would cut the whole campus, not contain one host.

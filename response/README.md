@@ -48,8 +48,8 @@ python -m response.service orchestrator --config /etc/soc/response.yaml
 
 **Decision runner** reads `soc-ai-*` anomalies (`is_anomaly` and score >= the
 configured floor, never below 0.90) in a durable order, gathers the independent
-evidence stored by Logstash (`soc-alerts-*`, `soc-auth-*`, `soc-endpoint-*`,
-`soc-network-*`), asks the pure engine for a verdict, appends the correlation
+evidence stored by Logstash (`soc-alerts-*` - Suricata, Wazuh and the DMZ honeypot -, `soc-auth-*`,
+`soc-endpoint-*`, `soc-network-*`), asks the pure engine for a verdict, appends the correlation
 decision to `soc-response-*`, and - only in `enforce` mode - delivers the signed
 command over mTLS. An anomaly without a second signal produces *no* decision
 record and no request. It holds the signing key and an Elasticsearch identity

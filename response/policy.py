@@ -21,7 +21,7 @@ from .errors import PolicyError
 
 SUPPORTED_ACTIONS = frozenset({"block_ip", "isolate_host"})
 SUPPORTED_SIGNAL_TYPES = frozenset(
-    {"suricata", "wazuh", "authentication", "threat_intel", "protected_asset"}
+    {"suricata", "wazuh", "authentication", "threat_intel", "protected_asset", "honeypot"}
 )
 
 

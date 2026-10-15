@@ -4,3 +4,8 @@
     name: wazuh-agent
     state: restarted
   listen: restart wazuh-agent
+
+- name: Refresh the apt package index
+  ansible.builtin.apt:
+    update_cache: true
+  listen: refresh apt cache

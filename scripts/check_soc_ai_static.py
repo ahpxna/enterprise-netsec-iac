@@ -192,6 +192,11 @@ for policy in sorted((ROOT / "response/policies").glob("*.yaml")):
     protections = body["defaults"]["protections"]
     if "172.16.50.1" not in protections["protected_ips"] or "10.1.1.0/24" not in protections["protected_networks"]:
         fail(f"{policy.name} dropped a protected infrastructure target")
+    if "10.255.0.0/16" not in protections["protected_networks"]:
+        fail(f"{policy.name} must protect the routed transit 10.255.0.0/16 (campus traffic is NATed onto it)")
+    honeypot = [r for p in body["policies"] if p["action"] == "block_ip" for r in p["when"]["require_any"] if r["type"] == "honeypot"]
+    if any(r.get("min_severity", 0) < 5 for r in honeypot):
+        fail(f"{policy.name}: a honeypot signal needs min_severity >= 5 (a bare connection must not corroborate)")
 roles = {n: yaml.safe_load(text(f"soc/elasticsearch/{n}-role.json")) for n in
          ("feature-engine", "ai-event-writer", "decision-engine", "response-orchestrator")}
 for name, role in roles.items():

@@ -427,7 +427,7 @@ class DecisionEngine:
             if signal_type == "ai":
                 raise CorrelationRejected("AI output cannot corroborate itself")
             if not isinstance(signal_type, str) or signal_type not in {
-                "suricata", "wazuh", "authentication", "threat_intel", "protected_asset"
+                "suricata", "wazuh", "authentication", "threat_intel", "protected_asset", "honeypot"
             }:
                 raise CorrelationRejected(f"independent_signals[{index}] has an unsupported type")
             if not isinstance(reference, str) or not reference.strip():
@@ -511,6 +511,7 @@ class DecisionEngine:
                             "authentication": "authentication_failures",
                             "threat_intel": "threat_intel_match",
                             "protected_asset": "protected_asset_context",
+                            "honeypot": "honeypot_interaction",
                         }[item["type"]],
                         "reference": item["reference"],
                         "observed_at": item["observed_at"],

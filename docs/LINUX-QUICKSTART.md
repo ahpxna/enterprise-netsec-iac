@@ -120,8 +120,10 @@ make dmzlab-down
 
 The honeypot's JSON log is mounted **read-only** into Logstash and normalized as dataset `cowrie.honeypot` into `soc-alerts-*` (attacker-supplied
 passwords are dropped before indexing). The lab is for *your* isolated test network only: the vulnerable app contains real exploitable flaws.
-**Not yet done:** using a honeypot hit as an independent corroborating signal for automatic response (it needs a new signal type in the policy,
-the decision engine and its schemas); the images and the shared-namespace wiring have not been run on a real host.
+A honeypot interaction from a source (a login attempt or worse) is also an **independent corroborating signal** for the decision engine
+(`honeypot` in policy `COR-001`); together with an AI anomaly for the same address it makes that address eligible for automatic containment.
+Campus attackers reach the DMZ NATed to fw-core's outside address, which is protected and never blocked, so this corroboration works for
+sources outside the campus. The images and the shared-namespace wiring have not been run on a real host.
 
 ## What to expect (not bugs)
 

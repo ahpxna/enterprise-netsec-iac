@@ -75,7 +75,8 @@
               "wazuh_alert",
               "authentication_failures",
               "threat_intel_match",
-              "protected_asset_context"
+              "protected_asset_context",
+                  "honeypot_interaction"
             ]
           },
           "reference": {"type": "string", "minLength": 1},
@@ -103,7 +104,8 @@
                   "wazuh_alert",
                   "authentication_failures",
                   "threat_intel_match",
-                  "protected_asset_context"
+                  "protected_asset_context",
+                  "honeypot_interaction"
                 ]
               }
             },

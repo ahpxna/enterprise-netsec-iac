@@ -157,6 +157,15 @@ class DecisionRunner:
                        severity=_alert_severity(self._dig(alert, "alert.severity")))
             wazuh = self._alerts("wazuh.alerts", "source.ip", entity, start, end)
             auth_index, auth_filter = "soc-auth-*", [{"term": {"source.ip": entity}}]
+            # A honeypot has no legitimate users: any interaction from this source is hostile by construction.
+            # All of it collapses into ONE signal (worst severity, event count) so a chatty attacker cannot
+            # look like several independent observations.
+            honeypot = self._alerts("cowrie.honeypot", "source.ip", entity, start, end)
+            if honeypot:
+                ids = [str(self._dig(hit, "event.id")) for hit in honeypot]
+                worst = max(int(self._dig(hit, "event.severity") or 0) for hit in honeypot)
+                latest = max(str(hit["@timestamp"]) for hit in honeypot)
+                signal("honeypot", "honeypot:" + _digest(ids), latest, severity=worst, count=len(ids))
         else:
             wazuh = self._alerts("wazuh.alerts", "host.name", entity, start, end)
             auth_index = "soc-endpoint-*"
