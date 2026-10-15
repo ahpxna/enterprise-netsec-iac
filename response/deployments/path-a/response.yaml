@@ -1,0 +1,33 @@
+# Path A (containerlab, nftables). Names files and endpoints only - no secrets.
+# `mode: observe` is the shipped default: the service accepts no command and
+# applies nothing. Switch to `enforce` only after the observe-mode false-positive
+# review (see soc/RUNBOOK.md, "Enabling automatic response").
+schema_version: response-service-v1
+mode: observe
+state_dir: /var/lib/soc/response
+policy_file: /etc/soc/policy.yaml
+verify_keys_dir: /run/soc/keys
+tick_seconds: 10
+elasticsearch:
+  url: https://elasticsearch:9200
+  ca: /run/soc/ca.crt
+  api_key_file: /run/soc/es.key
+listen:
+  host: toward-elasticsearch
+  port: 8443
+  cert: /run/soc/tls.crt
+  key: /run/soc/tls.key
+  client_ca: /run/soc/decision-ca.crt
+firewall:
+  backend: nftables
+  peers:
+    - name: fw-core
+      url: https://10.1.1.20:9443
+      ca: /run/soc/ca.crt
+      client_cert: /run/soc/client.crt
+      client_key: /run/soc/client.key
+    - name: fw-dmz
+      url: https://10.1.1.30:9443
+      ca: /run/soc/ca.crt
+      client_cert: /run/soc/client.crt
+      client_key: /run/soc/client.key

@@ -1,0 +1,107 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://companyxyz.test/response/schemas/response-command-v1.schema.json",
+  "title": "CompanyXYZ decision-to-orchestrator response command v1",
+  "description": "Signed internal handoff from the Decision Engine to the Response Orchestrator. No adapter credential or arbitrary firewall configuration is permitted in this payload.",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "request_id",
+    "decision_event_id",
+    "correlation_id",
+    "policy",
+    "target",
+    "action",
+    "ttl_seconds",
+    "allowlist_checked",
+    "rollback_required",
+    "idempotency_key",
+    "authorization"
+  ],
+  "properties": {
+    "schema_version": {"const": "response-command-v1"},
+    "request_id": {"type": "string", "minLength": 1},
+    "decision_event_id": {"type": "string", "minLength": 1},
+    "correlation_id": {"type": "string", "minLength": 1},
+    "policy": {
+      "type": "object",
+      "required": ["id", "version", "sha256"],
+      "properties": {
+        "id": {"type": "string", "minLength": 1},
+        "version": {"type": "string", "minLength": 1},
+        "sha256": {"$ref": "#/$defs/sha256"}
+      },
+      "additionalProperties": false
+    },
+    "target": {
+      "type": "object",
+      "required": ["type", "value"],
+      "properties": {
+        "type": {"enum": ["ip", "host"]},
+        "value": {"type": "string", "minLength": 1, "maxLength": 255}
+      },
+      "allOf": [
+        {
+          "if": {"properties": {"type": {"const": "ip"}}, "required": ["type"]},
+          "then": {"properties": {"value": {"$ref": "#/$defs/ipAddress"}}}
+        }
+      ],
+      "additionalProperties": false
+    },
+    "action": {"enum": ["block_ip", "isolate_host"]},
+    "ttl_seconds": {"type": "integer", "minimum": 60, "maximum": 86400},
+    "allowlist_checked": {"const": true},
+    "rollback_required": {"const": true},
+    "idempotency_key": {"type": "string", "minLength": 16, "maxLength": 512},
+    "authorization": {
+      "type": "object",
+      "required": ["issuer", "key_id", "signature", "issued_at", "expires_at"],
+      "properties": {
+        "issuer": {"const": "decision_engine"},
+        "key_id": {"type": "string", "minLength": 1, "maxLength": 255},
+        "signature": {"type": "string", "pattern": "^[A-Za-z0-9_-]{32,2048}$"},
+        "issued_at": {"type": "string", "format": "date-time"},
+        "expires_at": {"type": "string", "format": "date-time"}
+      },
+      "additionalProperties": false
+    }
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"action": {"const": "block_ip"}}, "required": ["action"]},
+      "then": {
+        "properties": {
+          "target": {
+            "properties": {"type": {"const": "ip"}},
+            "required": ["type"]
+          }
+        }
+      }
+    },
+    {
+      "if": {"properties": {"action": {"const": "isolate_host"}}, "required": ["action"]},
+      "then": {
+        "properties": {
+          "target": {
+            "properties": {"type": {"const": "host"}},
+            "required": ["type"]
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^[A-Fa-f0-9]{64}$"
+    },
+    "ipAddress": {
+      "type": "string",
+      "oneOf": [
+        {"format": "ipv4"},
+        {"format": "ipv6"}
+      ]
+    }
+  },
+  "additionalProperties": false
+}
