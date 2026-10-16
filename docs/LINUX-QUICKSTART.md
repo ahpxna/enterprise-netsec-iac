@@ -11,9 +11,12 @@ PASS/FAIL per stage. If anything fails it tells you **where** (stage, command, f
 test or Python frame), **why** it most likely failed, the container logs that matter, the log file, and the exact command
 that re-runs just that stage.
 
-> **Honest status.** The runner, the explorer and every check it calls are unit-tested offline (on macOS). The Linux,
-> Docker, containerlab and Kubernetes stages have **not** been run by the author; the first run on a real host is the
-> first real test of those stages. If something fails in a way the hints do not explain, send `logs/try-linux/<time>/report.md`.
+> **Honest status.** The runner, the explorer and every check it calls are unit-tested offline (on macOS). The SOC analytics
+> plane (`soc-up`, `soc-smoke`), the honeypot ingestion path and the AI/response services in observe mode (`demo-model`,
+> `soc-ai-up`) have been run for real on Docker Desktop (macOS, arm64); that run found and fixed the bugs in ledger INC-074. The Linux
+> runner itself, the containerlab fabric, Wazuh, enforcement on the real firewalls and Kubernetes have **not** been run; the first run on a
+> real host is the first real test of those stages. If something fails in a way the hints do not explain, send
+> `logs/try-linux/<time>/report.md`.
 
 ## What you need
 
@@ -72,7 +75,7 @@ captured on failure), `report.md` and `report.json`. Nothing in `logs/` is commi
 Typical causes the runner recognises: Docker permission or daemon not running, unreachable registry/DNS/proxy, Docker Hub
 rate limit, full disk, `vm.max_map_count`, a host port already in use, containerlab missing, CPU architecture mismatch,
 missing management/DC network, sudo needing a password, missing Python dependency, no approved model digest, missing Wazuh
-PKI, unhealthy containers, and TIME-01 (host NTS). An unrecognised error prints the last output lines and the log path
+PKI, a Logstash pipeline that does not compile on the pinned Logstash (`scripts/check_logstash_config.sh` names the setting), unhealthy containers, and TIME-01 (host NTS). An unrecognised error prints the last output lines and the log path
 instead of guessing.
 
 ## The network explorer (GNS3-style view)
@@ -119,11 +122,12 @@ make dmzlab-down
 ```
 
 The honeypot's JSON log is mounted **read-only** into Logstash and normalized as dataset `cowrie.honeypot` into `soc-alerts-*` (attacker-supplied
-passwords are dropped before indexing). The lab is for *your* isolated test network only: the vulnerable app contains real exploitable flaws.
+passwords are redacted in the received line itself, so neither `soc-alerts-*` nor the raw copy in `soc-raw-*` stores them). The lab is for *your* isolated test network only: the vulnerable app contains real exploitable flaws.
 A honeypot interaction from a source (a login attempt or worse) is also an **independent corroborating signal** for the decision engine
 (`honeypot` in policy `COR-001`); together with an AI anomaly for the same address it makes that address eligible for automatic containment.
 Campus attackers reach the DMZ NATed to fw-core's outside address, which is protected and never blocked, so this corroboration works for
-sources outside the campus. The images and the shared-namespace wiring have not been run on a real host.
+sources outside the campus. The Cowrie image, its hardening options and the path from its log to `soc-alerts-*` and to the decision
+runner's signal query were run for real; Juice Shop and the shared-namespace wiring behind fw-dmz have not been run on a real host.
 
 ## What to expect (not bugs)
 
