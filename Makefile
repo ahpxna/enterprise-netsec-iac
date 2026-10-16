@@ -109,7 +109,7 @@ image-lock-check: ## Offline: require every audited external image to match supp
 verify-image-platforms: ## Online: verify locked OCI index digests and amd64/arm64 coverage with Docker buildx
 	python scripts/verify_image_platforms.py --strict
 
-.PHONY: soc-certs soc-contracts soc-up soc-health soc-status soc-smoke soc-down
+.PHONY: soc-certs soc-contracts soc-logstash-check soc-up soc-health soc-status soc-smoke soc-down
 soc-certs: ## Generate ignored TLS identities for the SOC analytics plane
 	bash scripts/gen_soc_certs.sh
 
@@ -117,7 +117,10 @@ soc-contracts: ## Validate SOC architecture and schema invariants
 	python scripts/check_soc_static.py
 	python -m pytest tests/soc -q
 
-soc-up: secrets dc-network ## Start TLS-protected Elasticsearch, Logstash, and Kibana
+soc-logstash-check: ## Compile the Logstash pipelines with the pinned image (fails fast, names the setting)
+	bash scripts/check_logstash_config.sh
+
+soc-up: secrets dc-network soc-logstash-check ## Start TLS-protected Elasticsearch, Logstash, and Kibana
 	docker compose --profile soc up -d --wait elasticsearch
 	docker compose --profile soc run --rm --no-deps soc-account-setup
 	docker compose --profile soc up -d --wait --no-deps logstash kibana

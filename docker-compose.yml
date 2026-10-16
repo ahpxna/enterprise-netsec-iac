@@ -272,7 +272,9 @@ services:
       - dmzlab_cowrie_var:/honeypot/cowrie:ro
       - soc_fixtures:/fixtures
     healthcheck:
-      test: ["CMD-SHELL", "curl --silent --fail http://localhost:9600/_node/pipelines >/dev/null"]
+      # Healthy only once the soc-ingestion pipeline is loaded: the API answers (and a bare
+      # /_node/pipelines succeeds) even while a broken pipeline makes Logstash crash-loop.
+      test: ["CMD-SHELL", "curl --silent --fail http://localhost:9600/_node/pipelines/soc-ingestion >/dev/null"]
       interval: 10s
       timeout: 10s
       retries: 60

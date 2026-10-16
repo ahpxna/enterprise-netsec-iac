@@ -73,6 +73,8 @@ def test_inject_appends_one_line_to_a_known_fixture_only(script):
     DockerLab().inject("suricata.json", '{"x": 1}')
     argv, kwargs = script.calls[0]
     assert "SOC_LIVE_FIXTURE=suricata.json" in argv and "logstash" in argv and kwargs["input"] == '{"x": 1}\n'
+    # The fixture volume is root-owned; Logstash (uid 1000) cannot append to it.
+    assert argv[argv.index("--user") + 1] == "0" and argv.index("--user") < argv.index("logstash")
     with pytest.raises(ValueError):
         DockerLab().inject("../etc/passwd", "x")
     with pytest.raises(ValueError):

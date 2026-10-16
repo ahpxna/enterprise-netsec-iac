@@ -168,8 +168,9 @@ class DockerLab:
             raise LabNotReady(f"docker compose is unavailable: {exc}") from exc
 
     def _exec(self, service: str, *command: str, stdin: str | None = None, env: Mapping[str, str] | None = None,
-              timeout: int = 120) -> str:
+              timeout: int = 120, user: str | None = None) -> str:
         flags = [item for key, value in (env or {}).items() for item in ("-e", f"{key}={value}")]
+        flags += ["--user", user] if user else []
         result = self._compose("exec", "-T", *flags, service, *command, stdin=stdin, timeout=timeout)
         if result.returncode != 0:
             raise LabNotReady(f"{service}: {' '.join(command[:3])} failed: {result.stderr.strip()[:300]}")
@@ -214,8 +215,10 @@ class DockerLab:
     def inject(self, fixture: str, line: str) -> None:
         if fixture not in FIXTURE_DATASETS or "\n" in line:
             raise ValueError("unsupported fixture or multi-line payload")
+        # The fixture volume is created root-owned and Logstash runs as uid 1000: write as root,
+        # the default umask leaves the file readable for the file input.
         self._exec("logstash", "bash", "-ec", 'cat >> "/fixtures/${SOC_LIVE_FIXTURE}"',
-                   stdin=line + "\n", env={"SOC_LIVE_FIXTURE": fixture})
+                   stdin=line + "\n", env={"SOC_LIVE_FIXTURE": fixture}, user="0")
 
     def logstash_pipeline(self) -> dict:
         script = ('curl --silent --fail http://localhost:9600/_node/pipelines/soc-ingestion && echo && '
