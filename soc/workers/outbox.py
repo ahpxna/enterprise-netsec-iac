@@ -26,6 +26,7 @@ class Outbox:
         if path.parent.is_symlink() or parent.st_uid != os.getuid() or parent.st_mode & 0o077:
             raise ValueError("outbox parent directory must have mode 0700")
         self._lock_path = path.with_suffix(".lock")
+        self._held = False
         fd = os.open(path, os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)
         try:
             info = os.fstat(fd)
@@ -57,6 +58,11 @@ class Outbox:
 
     @contextmanager
     def exclusive(self):
+        # Re-entrant for this worker: flock() belongs to an open file description, so a nested call that
+        # opened the lock file again (serve -> drain) would be refused as if it were another worker.
+        if self._held:
+            yield
+            return
         fd = os.open(self._lock_path, os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)
         with os.fdopen(fd, "a") as lock:
             info = os.fstat(lock.fileno())
@@ -66,9 +72,11 @@ class Outbox:
                 fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
             except BlockingIOError:
                 raise RuntimeError("another outbox worker is active") from None
+            self._held = True
             try:
                 yield
             finally:
+                self._held = False
                 fcntl.flock(lock, fcntl.LOCK_UN)
 
     def enqueue(self, vector: dict, metadata_hash: str) -> bool:

@@ -62,6 +62,8 @@ docker network create \
   --driver bridge \
   --subnet "$subnet" \
   --gateway "$gateway" \
+  --aux-address "server1=172.16.50.1" \
+  --aux-address "fw-core=$firewall_gateway" \
   --opt "com.docker.network.bridge.name=$bridge_name" \
   --opt "com.docker.network.bridge.enable_ip_masquerade=false" \
   "$network_name" >/dev/null

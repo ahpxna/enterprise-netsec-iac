@@ -71,6 +71,9 @@ for name, own_volume in AI_SERVICES.items():
         allowed = {"cxyz_soc_backend", "cxyz_response_egress", "cxyz_dc"}
     if names != allowed:
         fail(f"{name} networks must be exactly {sorted(allowed)}, found {sorted(names)}")
+    probe = " ".join((service.get("healthcheck") or {}).get("test", []))
+    if len(names) > 1 and "gethostname()" in probe:
+        fail(f"{name} is multi-homed: its healthcheck must probe the address it binds, not whatever its hostname resolves to")
 
 # Only the orchestrator may reach firewalls/Wazuh; the AI plane is backend-only.
 for name in ("soc-ai-api", "soc-feature-worker", "soc-enrichment-worker", "soc-decision"):
