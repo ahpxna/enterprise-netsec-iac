@@ -399,7 +399,7 @@ audit: lint batfish validate attack soc-ai-validate report ## Everything an audi
 # ---------------------------------------------------------------- DMZ deception lab
 # A vulnerable web app (OWASP Juice Shop) and an SSH/Telnet honeypot (Cowrie) that share the dmz-web node's
 # network namespace behind fw-dmz. Path A only; restart them after any `make net` (the namespace is recreated).
-.PHONY: dmzlab-up dmzlab-down dmzlab-status dmzlab-attack
+.PHONY: dmzlab-up dmzlab-down dmzlab-status dmzlab-attack dmzlab-siem-check
 dmzlab-up: ## DMZ lab: OWASP Juice Shop + Cowrie honeypot behind fw-dmz (needs the fabric: make net)
 	@docker inspect clab-companyxyz-dmz-web >/dev/null 2>&1 || { echo "dmz-web is not running: bring the fabric up first (make net)" >&2; exit 1; }
 	docker compose --profile dmzlab up -d --force-recreate dmz-vuln dmz-honeypot
@@ -414,6 +414,9 @@ dmzlab-status: ## Containers and fw-dmz hit counters of the DMZ lab
 
 dmzlab-attack: ## Send controlled hostile traffic from pc1 to the DMZ lab (SQLi/XSS/traversal, telnet) and check isolation
 	bash scripts/dmzlab_attack.sh
+
+dmzlab-siem-check: ## Honeypot session from pc1 -> SIEM (cowrie.honeypot) -> password redacted (raw too) -> one decision signal
+	python scripts/honeypot_e2e.py
 
 # ---------------------------------------------------------------- try it / explore it
 .PHONY: try-linux try-linux-quick try-linux-offline netviz netviz-stop
