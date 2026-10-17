@@ -14,7 +14,7 @@ from typing import Any, Mapping
 
 from urllib.parse import urlsplit
 
-from soc.workers.common import ElasticClient, address_toward, elastic_authorization, read_secret_file, single_owner
+from soc.workers.common import ElasticClient, FileAuthorization, address_toward, single_owner
 from soc.workers.https import DeliveryError, JsonHTTPS
 
 from ..decision import DecisionEngine
@@ -35,8 +35,7 @@ from .runner import AuditExporter, ResponseService
 
 
 def _elastic(cfg: Mapping[str, Any]) -> ElasticClient:
-    credential = read_secret_file(cfg["api_key_file"], "Elasticsearch credential")
-    return ElasticClient(JsonHTTPS(cfg["url"], ca=cfg["ca"], authorization=elastic_authorization(credential)))
+    return ElasticClient(JsonHTTPS(cfg["url"], ca=cfg["ca"], authorization=FileAuthorization(cfg["api_key_file"])))
 
 
 def run_orchestrator(config_path: Path) -> int:

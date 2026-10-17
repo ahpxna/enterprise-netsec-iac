@@ -356,6 +356,8 @@ services:
       VYOS_API_KEY: ${VYOS_API_KEY:-}
       WAZUH_RESPONSE_CREDENTIALS: ${WAZUH_RESPONSE_CREDENTIALS:-}
       OPNSENSE_CREDENTIALS: ${OPNSENSE_CREDENTIALS:-}
+      # 1 = rotate every service API key (make soc-ai-rotate-keys); otherwise valid keys are kept.
+      SOC_ROTATE_SERVICE_KEYS: ${SOC_ROTATE_SERVICE_KEYS:-0}
     command: ["bash", "/setup/provision-service-credentials.sh"]
     volumes:
       - soc_ca:/certs:ro

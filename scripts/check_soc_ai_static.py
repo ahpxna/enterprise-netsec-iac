@@ -93,6 +93,17 @@ for line in provision.splitlines():
         fail("the decision signing key may only be written to the decision volume")
 if "/out/response" in provision and re.search(r"decision-key-1\.key.*?/out/response", provision):
     fail("the response orchestrator must receive verification keys only, never the signing key")
+# Compose re-runs soc-service-init on every `up` of a dependent service. Rotating the API keys each time
+# invalidated the key every running worker held (HTTP 401 until restarted; observed live).
+for token, why in (("key_is_current", "keep an API key that still authenticates with an unchanged role"),
+                   ("! -name es.key", "not wipe the kept API key with the rest of the credential directory"),
+                   ('mv -f "$dest/.es.key.new" "$dest/es.key"', "replace a rotated key atomically")):
+    if token not in provision:
+        fail(f"provision-service-credentials.sh must {why}")
+for path, call in (("soc/workers/common.py", "authorization=FileAuthorization(key_file)"),
+                   ("response/service/__main__.py", 'authorization=FileAuthorization(cfg["api_key_file"])')):
+    if call not in text(path):
+        fail(f"{path}: Elasticsearch clients must re-read a rotated credential file (FileAuthorization)")
 if "keys/decision-key-1.pub" not in provision:
     fail("the orchestrator must be provisioned with the decision public key")
 

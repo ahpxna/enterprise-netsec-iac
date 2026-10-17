@@ -149,7 +149,7 @@ SOC_POLICY ?= $(if $(filter path-b,$(SOC_PATH)),lab-path-b,default)
 export SOC_PATH SOC_POLICY
 SOC_COMPOSE = docker compose $(if $(filter path-a,$(SOC_PATH)),-f docker-compose.yml -f docker-compose.path-a.yml,) --profile soc --profile soc-ai
 
-.PHONY: soc-ai-contracts soc-ai-preflight soc-ai-up soc-ai-down soc-ai-status soc-ai-promote soc-ai-wazuh-user soc-ai-validate-up soc-ai-restore soc-live-deps soc-ai-validate soc-ai-dataset
+.PHONY: soc-ai-contracts soc-ai-preflight soc-ai-up soc-ai-rotate-keys soc-ai-down soc-ai-status soc-ai-promote soc-ai-wazuh-user soc-ai-validate-up soc-ai-restore soc-live-deps soc-ai-validate soc-ai-dataset
 soc-ai-contracts: ## Offline AI + response contract gates (static checks and the full unit suite)
 	python scripts/check_soc_ai_static.py
 	python -m pytest tests/soc tests/unit -q
@@ -162,6 +162,9 @@ soc-ai-up: soc-up soc-ai-preflight ## Start features, inference, enrichment, dec
 	$(SOC_COMPOSE) up -d soc-service-init
 	$(SOC_COMPOSE) up -d --wait soc-ai-api soc-response
 	$(SOC_COMPOSE) up -d soc-feature-worker soc-enrichment-worker soc-decision
+
+soc-ai-rotate-keys: ## Rotate every SOC service API key (running services re-read the key file on their next request)
+	SOC_ROTATE_SERVICE_KEYS=1 $(SOC_COMPOSE) run --rm --no-deps soc-service-init
 
 soc-ai-down: ## Stop the AI/response services (state and credentials volumes are kept)
 	$(SOC_COMPOSE) stop soc-decision soc-enrichment-worker soc-feature-worker soc-response soc-ai-api soc-service-init

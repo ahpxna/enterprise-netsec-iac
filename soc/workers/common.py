@@ -124,14 +124,47 @@ def read_secret_file(path: str | Path, label: str) -> str:
     return value
 
 
+class FileAuthorization:
+    """Elasticsearch ``Authorization`` value backed by a credential file, re-read when the file changes.
+
+    The provisioning job rotates a service's API key by rewriting its file; a worker that read the key
+    once would keep sending the invalidated one (HTTP 401) until restarted. The file is read at
+    construction (a missing or malformed credential still fails at start-up) and again whenever its
+    inode, size or modification time changes; a replacement caught half-written keeps the last good value.
+    """
+
+    def __init__(self, path: str | Path, label: str = "Elasticsearch credential") -> None:
+        self._path, self._label = Path(path), label
+        self._stamp: tuple[int, int, int] | None = None
+        self._value = ""
+        self._reload(strict=True)
+
+    def _reload(self, *, strict: bool) -> None:
+        info = os.stat(self._path)
+        stamp = (info.st_ino, info.st_size, info.st_mtime_ns)
+        if stamp == self._stamp:
+            return
+        try:
+            self._value = elastic_authorization(read_secret_file(self._path, self._label))
+        except (OSError, ValueError):
+            if strict:
+                raise
+            return
+        self._stamp = stamp
+
+    def __call__(self) -> str:
+        try:
+            self._reload(strict=False)
+        except OSError:
+            pass                      # replaced right now: keep the last good value, retry next request
+        return self._value
+
+
 def elastic_transport_from_environment() -> JsonHTTPS:
     """TLS-verified transport from SOC_ES_URL / SOC_ES_CA / SOC_ES_API_KEY_FILE."""
 
     key_file = os.environ.get("SOC_ES_API_KEY_FILE") or os.environ["SOC_AI_ES_API_KEY_FILE"]
-    return JsonHTTPS(
-        os.environ["SOC_ES_URL"], ca=os.environ["SOC_ES_CA"],
-        authorization=elastic_authorization(read_secret_file(key_file, "Elasticsearch credential")),
-    )
+    return JsonHTTPS(os.environ["SOC_ES_URL"], ca=os.environ["SOC_ES_CA"], authorization=FileAuthorization(key_file))
 
 
 def elastic_from_environment() -> "ElasticClient":
