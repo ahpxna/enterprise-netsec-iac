@@ -41,7 +41,8 @@ DATASETS = {
 
 def append_fixture(filename: str, payload: str) -> None:
     subprocess.run(
-        ["docker", "compose", "exec", "-T", "logstash", "bash", "-ec", f"cat >> /fixtures/{filename}"],
+        # The fixture volume is root-owned and Logstash runs as uid 1000: write as root.
+        ["docker", "compose", "exec", "-T", "--user", "0", "logstash", "bash", "-ec", f"cat >> /fixtures/{filename}"],
         input=payload + "\n",
         check=True,
         text=True,

@@ -73,6 +73,8 @@ def test_inject_appends_one_line_to_a_known_fixture_only(script):
     DockerLab().inject("suricata.json", '{"x": 1}')
     argv, kwargs = script.calls[0]
     assert "SOC_LIVE_FIXTURE=suricata.json" in argv and "logstash" in argv and kwargs["input"] == '{"x": 1}\n'
+    # The fixture volume is root-owned; Logstash (uid 1000) cannot append to it.
+    assert argv[argv.index("--user") + 1] == "0" and argv.index("--user") < argv.index("logstash")
     with pytest.raises(ValueError):
         DockerLab().inject("../etc/passwd", "x")
     with pytest.raises(ValueError):
@@ -140,6 +142,14 @@ def test_kibana_object_and_logstash_pipeline_parsing(script):
     assert lab.logstash_pipeline()["node"]["pipelines"]["soc-ingestion"]["dead_letter_queue_enabled"] is True
     script.queue('{"x":1}\n{"pipelines":{"soc-ingestion":{"queue":{"type":"persisted","events_count":4}}}}')
     assert lab.logstash_queue_depth() == 4
+    # Logstash 9.3 during an Elasticsearch outage (observed live): the event is read into a batch the output keeps
+    # retrying, so the queue reports 0 unread events while the raw output shows in > out. It is held, not lost.
+    held = {"pipelines": {"soc-ingestion": {"queue": {"type": "persisted", "events_count": 0}, "plugins": {"outputs": [
+        {"id": "soc-raw-output", "events": {"in": 38, "out": 37}},
+        {"id": "soc-normalized-output", "events": {"in": 36, "out": 36}},
+        {"id": "soc-deadletter-output", "events": {}}]}}}}
+    script.queue('{"x":1}\n' + json.dumps(held))
+    assert lab.logstash_queue_depth() == 1
 
 
 def test_outage_stops_then_always_restarts_elasticsearch(script):

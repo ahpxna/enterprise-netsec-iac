@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 
 import yaml
@@ -118,6 +119,10 @@ logstash = SERVICES.get("logstash", {})
 require(not logstash.get("ports"), "Logstash must not publish synthetic or production ingestion ports")
 require(logstash.get("networks") == ["cxyz_soc_backend"], "Logstash must remain isolated on the private SOC backend")
 require("soc_fixtures:/fixtures" in logstash.get("volumes", []), "Logstash fixture volume is missing")
+require(
+    "/_node/pipelines/soc-ingestion" in " ".join(logstash.get("healthcheck", {}).get("test", [])),
+    "Logstash health must require the soc-ingestion pipeline, not just a responding API (a broken pipeline crash-loops)",
+)
 require("dmzlab_cowrie_var:/honeypot/cowrie:ro" in logstash.get("volumes", []), "Logstash must read the honeypot log volume read-only")
 for name in ("dmz-vuln", "dmz-honeypot"):
     lab = SERVICES.get(name, {})
@@ -168,6 +173,14 @@ for token in (
 ):
     require(token in pipeline, f"Logstash pipeline lost required contract: {token}")
 require("ssl_verification_mode => \"none\"" not in pipeline, "Logstash TLS verification cannot be disabled")
+outputs = pipeline.count("elasticsearch {")
+# The writer role cannot manage templates (403 at bootstrap stops the whole pipeline); templates and
+# ILM are installed by soc-account-setup and the SOC indices are plain daily indices.
+for setting in ("manage_template => false", "ilm_enabled => false", "data_stream => false"):
+    require(pipeline.count(setting) == outputs, f"every Elasticsearch output must set {setting}")
+# The csv filter has no tag_on_failure option; Logstash refuses the whole pipeline if it is set.
+for block in re.findall(r"\bcsv\s*\{(.*?)\n\s*\}", pipeline, flags=re.S):
+    require("tag_on_failure" not in block, "csv filter does not support tag_on_failure")
 require("soc-ai-" not in pipeline, "Logstash must not write AI-owned indices")
 require("soc-response-" not in pipeline, "Logstash must not write response-owned indices")
 

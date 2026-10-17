@@ -330,6 +330,23 @@ for token in ("--cacert", "vpn_probe_admin_ssh_reachable", "vpn_probe_route_uses
     if token not in hardening_test:
         fail(f"live hardening assurance lost required proof: {token}")
 
+# The DC bridge is shared with containerlab nodes whose addresses Docker's IPAM cannot see (server1 .1,
+# fw-core .254; the host gateway is .253). A member without a fixed address is handed .1 and collides
+# with server1, so every Compose member must pin a unique address outside the fabric's.
+fabric_dc = {"172.16.50.1", "172.16.50.253", "172.16.50.254"}
+dc_addresses: dict[str, str] = {}
+for name, service in services.items():
+    networks = service.get("networks") or {}
+    if "cxyz_dc" not in networks:
+        continue
+    address = (networks.get("cxyz_dc") or {}).get("ipv4_address") if isinstance(networks, dict) else None
+    if not address:
+        fail(f"{name} joins cxyz_dc without a fixed ipv4_address (a dynamic one collides with server1 172.16.50.1)")
+    elif address in fabric_dc or address in dc_addresses.values():
+        fail(f"{name} uses {address} on cxyz_dc, already taken by the fabric or another service")
+    else:
+        dc_addresses[name] = address
+
 wireguard_networks = service_networks("wireguard")
 if "cxyz_dc" not in wireguard_networks or "cxyz_edge" not in wireguard_networks:
     fail("WireGuard must bridge the VPN ingress plane to the approved DC management target network")

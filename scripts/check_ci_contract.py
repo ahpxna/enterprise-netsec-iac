@@ -108,6 +108,7 @@ ci_tokens = {
     "SOC Compose render": "--profile soc",
     "SOC AI Compose render": "--profile soc-ai",
     "SOC service image build": "docker build --pull=false -f docker/soc-python/Dockerfile -t cxyz/soc-python:ci .",
+    "Logstash pipeline compile with the pinned image": "scripts/check_logstash_config.sh",
     "LSTM family CPU torch job": "https://download.pytorch.org/whl/cpu",
 }
 for label, token in ci_tokens.items():
