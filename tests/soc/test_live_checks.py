@@ -198,3 +198,25 @@ def test_endpoint_isolation_is_verified_only_where_an_endpoint_exists(run, tmp_p
         assert observed["states"][-1] == "EXPIRED"
     finally:
         lab_b.close()
+
+
+def test_a_failed_shared_scenario_is_reported_by_every_later_check_not_rerun(run):
+    # Regression (live run on Docker Desktop): the response scenario failed in COR-01, and RESP-01, RESP-03 and
+    # SOC-01..03 each re-ran it, re-injected the same documents and failed on HTTP 409 instead of the cause.
+    calls = []
+
+    def scenario():
+        calls.append(1)
+        raise AssertionError("timed out waiting for REQUESTED -> APPLIED -> VERIFIED audit events")
+
+    run._run_response = scenario
+    for check in (live.check_cor01, live.check_resp01, live.check_soc03):
+        with pytest.raises(AssertionError, match="REQUESTED -> APPLIED -> VERIFIED"):
+            check(run)
+    assert calls == [1]
+
+    run.cache.clear()
+    run._run_response = lambda: (_ for _ in ()).throw(LabNotReady("enforcement is not enabled"))
+    for _ in range(2):
+        with pytest.raises(LabNotReady, match="enforcement is not enabled"):
+            live.check_resp01(run)
