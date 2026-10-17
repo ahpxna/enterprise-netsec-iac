@@ -47,6 +47,7 @@ docs/*
 !docs/NETSEC-BASELINE.md
 !docs/SOC-AI-ARCHITECTURE.md
 !docs/LINUX-QUICKSTART.md
+!docs/TEST-EVERYTHING.md
 !docs/adr/
 docs/adr/*
 !docs/adr/0006-soc-ai-closed-loop-architecture.md

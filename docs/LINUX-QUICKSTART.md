@@ -28,6 +28,9 @@ that re-runs just that stage.
 | Access | a user with `sudo` (packages, `sysctl`, containerlab, routes), and Internet access to pull images (Docker Hub, Elastic, GHCR, quay.io, snapshot.debian.org) |
 | Time | the first run is dominated by image pulls and builds; expect tens of minutes to an hour on a good link (not measured) |
 
+For the complete test plan (offline gates, every stage, the corners to poke by hand, Path B and Path C) see
+[TEST-EVERYTHING.md](TEST-EVERYTHING.md).
+
 ## Modes
 
 | Command | What runs | Needs |
@@ -49,11 +52,12 @@ that re-runs just that stage.
 `deps-sysctl` (`vm.max_map_count`, inotify, forwarding) → `deps-python` (`.venv` + requirements) → `offline-static` (14 static
 gates, one command each so a failure names the gate) → `offline-tests` (pytest) → `offline-compose` → `viz-start` (network
 explorer) → `secrets` → `images` → `dc-network` → `wazuh-config` → `fabric-up` → `fabric-verify` (12 nodes, containment sets,
-enforcement agents listening) → `security-up` → `soc-up` → `soc-smoke` → `demo-model` → `soc-ai-up` → `configure` → `validate`
-→ `attack` → `soc-validate` → `report`.
+enforcement agents listening) → `security-up` → `soc-up` → `soc-smoke` → `demo-model` → `soc-ai-up` → `dmzlab-up` →
+`dmzlab-verify` (reachable, counted, contained) → `dmzlab-siem` (honeypot session → SIEM, password redacted, one decision
+signal) → `configure` → `validate` → `attack` → `soc-validate` → `report`.
 
 A stage that depends on a failed stage is reported `BLOCKED by <stage>` instead of failing for the same reason again.
-Stages that run *tests* (`offline-tests`, `configure`, `validate`, `attack`, `soc-validate`) are *findings*: when they fail the
+Stages that run *tests* (`offline-tests`, `dmzlab-siem`, `configure`, `validate`, `attack`, `soc-validate`) are *findings*: when they fail the
 run exits non-zero but later independent stages still run.
 
 ## Reading a failure
@@ -103,7 +107,7 @@ Everything is derived from `intent/fabric.yaml`, the containerlab/FRR/nftables c
 
 ## The DMZ deception lab (vulnerable web app + honeypot)
 
-`make dmzlab-up` (the runner's `dmzlab-up`/`dmzlab-verify` stages do it for you in full mode) adds two deliberately hostile-facing services
+`make dmzlab-up` (the runner's `dmzlab-up`/`dmzlab-verify`/`dmzlab-siem` stages do it for you in full mode) adds two deliberately hostile-facing services
 **inside the DMZ, behind fw-dmz**: a vulnerable web application and an SSH/Telnet honeypot. They join the network namespace of the `dmz-web`
 node, so they appear on the DMZ segment with its address **195.1.1.161** (ports `3000`, `2222`, `2223`); every probe crosses fw-dmz (new
 connections are counted and logged as `CXYZ-DMZLAB-*`, Suricata sees them) and the existing pivot deny stops either one from reaching an internal
@@ -118,6 +122,7 @@ zone. They publish nothing on the host and run without capabilities.
 make dmzlab-up        # needs the fabric (make net); re-run after any `make net`, the namespace it joins is recreated
 make dmzlab-attack    # controlled hostile traffic from pc1: SQLi, XSS, traversal, scanner UA, telnet session; also proves the DMZ cannot pivot inward
 make dmzlab-status    # containers + fw-dmz hit counters
+make dmzlab-siem-check # a real honeypot session from pc1 -> soc-alerts-*, password redacted everywhere, one decision signal
 make dmzlab-down
 ```
 
