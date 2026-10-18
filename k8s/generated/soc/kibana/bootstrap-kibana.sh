@@ -12,7 +12,7 @@ while :; do
     -F file=@/setup/saved-objects/soc-overview.ndjson \
     -o /tmp/import.json -w '%{http_code}' \
     'https://kibana:5601/api/saved_objects/_import?overwrite=true')"
-  [[ "$code" == 403 && SECONDS -lt deadline ]] || break
+  [[ "$code" == 403 ]] && (( SECONDS < deadline )) || break
   echo "Kibana privileges not registered yet (HTTP 403); retrying ..." >&2
   sleep 5
 done

@@ -6,7 +6,8 @@ state_file="$ROOT/.cxyz-state/dc-network.env"
 bridge_name="br-cxyz-dc"
 firewall_gateway="172.16.50.254"
 [[ -f "$state_file" ]] || exit 0
-# shellcheck disable=SC1090 -- file is generated locally by ensure_dc_network.sh with %q
+# The state file is generated locally by ensure_dc_network.sh with %q.
+# shellcheck disable=SC1090
 source "$state_file"
 if (( EUID == 0 )); then SUDO=(); else SUDO=(sudo); fi
 
