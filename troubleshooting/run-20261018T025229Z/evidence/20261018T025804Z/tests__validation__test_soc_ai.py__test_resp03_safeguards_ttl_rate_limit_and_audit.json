@@ -1,0 +1,39 @@
+{
+  "assertion": "A protected infrastructure target was denied by policy and never blocked; an eligible target was blocked on every peer and recovered (EXPIRED, removed everywhere) after its TTL; targets beyond the policy rate limit were rejected with RATE_LIMITED and never reached a firewall; the audit trail is one append-only transition sequence",
+  "control_catalog_sha256": "9aa1afbab98a288dd065c8008fb114eaa7585b6363503a9d1b4278d0f64cd26d",
+  "control_id": "RESP-03",
+  "counter_after": null,
+  "counter_before": null,
+  "deployment_config_sha256": "cafc092f55a3020a758605773933d843bc1a20390fbbe33115974b5fa5eec319",
+  "duration_seconds": 88.092974,
+  "ended_at": "2026-10-18T03:36:38.829465Z",
+  "enforcement_node": "clab-companyxyz-fw-core,clab-companyxyz-fw-dmz",
+  "environment": "local-containerlab",
+  "failure": null,
+  "git_dirty": true,
+  "git_sha": "unknown",
+  "observed": {
+    "blocked_after_expiry": {
+      "fw-core": false,
+      "fw-dmz": false
+    },
+    "protected_target": "172.16.50.1",
+    "rate_limited_targets": [
+      "198.51.100.33",
+      "198.51.100.64",
+      "198.51.100.95"
+    ],
+    "run_marker": "cxyz-live-fa40f335b6",
+    "seconds_to_expiry": 66.068,
+    "ttl_seconds": 60
+  },
+  "pytest_phase": "call",
+  "result": "PASS",
+  "run_id": "20261018T025804Z",
+  "schema_version": 2,
+  "source_tree_sha256": "fdf46ed0bb3c604900c350416a4c39682efcb67929721c5c76c8ed38702e375b",
+  "started_at": "2026-10-18T03:35:10.736484Z",
+  "test_id": "tests/validation/test_soc_ai.py::test_resp03_safeguards_ttl_rate_limit_and_audit",
+  "test_suite_sha256": "69883f08da68f0dad0c6ded4adf5e731114916ef6c555c239991ae5637aa6a07",
+  "topology_sha256": "6d9d5eadf866fbfaf75766cceed735486c90beae1f6b65db1a7615f71e76579b"
+}

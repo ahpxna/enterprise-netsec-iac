@@ -1,0 +1,34 @@
+{
+  "assertion": "An injected AI anomaly with score >= 0.90 and no other evidence produced no decision record and no response request, while the same score with an independent Suricata alert produced a hybrid decision (AI signal plus suricata_alert) and a response request",
+  "control_catalog_sha256": "9aa1afbab98a288dd065c8008fb114eaa7585b6363503a9d1b4278d0f64cd26d",
+  "control_id": "COR-01",
+  "counter_after": null,
+  "counter_before": null,
+  "deployment_config_sha256": "cafc092f55a3020a758605773933d843bc1a20390fbbe33115974b5fa5eec319",
+  "duration_seconds": 89.904896,
+  "ended_at": "2026-10-18T03:35:10.618081Z",
+  "enforcement_node": null,
+  "environment": "local-containerlab",
+  "failure": null,
+  "git_dirty": true,
+  "git_sha": "unknown",
+  "observed": {
+    "anomaly_only_target": "203.0.113.225",
+    "corroborated_signals": [
+      "ai_anomaly",
+      "suricata_alert"
+    ],
+    "corroborated_target": "203.0.113.128",
+    "decision_event_id": "dec-c7ba192e3062e477e8175d30",
+    "run_marker": "cxyz-live-fa40f335b6"
+  },
+  "pytest_phase": "call",
+  "result": "PASS",
+  "run_id": "20261018T025804Z",
+  "schema_version": 2,
+  "source_tree_sha256": "fdf46ed0bb3c604900c350416a4c39682efcb67929721c5c76c8ed38702e375b",
+  "started_at": "2026-10-18T03:33:40.713175Z",
+  "test_id": "tests/validation/test_soc_ai.py::test_cor01_anomaly_alone_never_requests_containment",
+  "test_suite_sha256": "69883f08da68f0dad0c6ded4adf5e731114916ef6c555c239991ae5637aa6a07",
+  "topology_sha256": "6d9d5eadf866fbfaf75766cceed735486c90beae1f6b65db1a7615f71e76579b"
+}

@@ -1,0 +1,265 @@
+
+$ make soc-ai-validate
+secrets ready (values NOT shown; stored in .env and local service config)
+bash scripts/ensure_dc_network.sh
+cxyz_dc already matches canonical DC network
+docker compose --profile soc up -d --wait elasticsearch
+ Container cxyz-security-elasticsearch-1  Running
+ Container cxyz-security-soc-cert-init-1  Starting
+ Container cxyz-security-soc-cert-init-1  Started
+ Container cxyz-security-soc-cert-init-1  Waiting
+ Container cxyz-security-soc-cert-init-1  Exited
+ Container cxyz-security-elasticsearch-1  Waiting
+ Container cxyz-security-soc-cert-init-1  Waiting
+ Container cxyz-security-elasticsearch-1  Healthy
+ Container cxyz-security-soc-cert-init-1  Exited
+docker compose --profile soc run --rm --no-deps soc-account-setup
+{}{"role":{"created":false}}{"created":false}{"created":true}{"role":{"created":false}}{"role":{"created":false}}{"role":{"created":false}}{"role":{"created":false}}{"acknowledged":true}{"acknowledged":true}{"acknowledged":true}{"acknowledged":true}{"acknowledged":true}{"acknowledged":true}{"acknowledged":true}{"acknowledged":true}{"acknowledged":true}{"acknowledged":true}{"acknowledged":true}{"acknowledged":true}SOC Elasticsearch roles, users, and templates are current
+docker compose --profile soc up -d --wait --no-deps logstash kibana
+ Container cxyz-security-kibana-1  Running
+ Container cxyz-security-logstash-1  Running
+ Container cxyz-security-logstash-1  Waiting
+ Container cxyz-security-kibana-1  Waiting
+ Container cxyz-security-kibana-1  Healthy
+ Container cxyz-security-logstash-1  Healthy
+docker compose --profile soc run --rm --no-deps soc-kibana-setup
+SOC Kibana data views and dashboards are current
+docker compose --profile soc run --rm --no-deps soc-kibana-bootstrap-revoke
+{"found":true}SOC Kibana bootstrap identity revoked
+python scripts/soc_ai_preflight.py
+OK: SOC AI/response preflight (approved model digest, PKI, signing key, deployment files)
+docker build -f docker/soc-python/Dockerfile -t cxyz/soc-python:local .
+#0 building with "default" instance using docker driver
+
+#1 [internal] load build definition from Dockerfile
+#1 transferring dockerfile: 2.23kB done
+#1 DONE 0.0s
+
+#2 [internal] load metadata for docker.io/library/debian@sha256:abd67ffcfa541b485a3dff59865ab629aa048a6c613e639d36e7456b0b229241
+#2 DONE 0.0s
+
+#3 [internal] load .dockerignore
+#3 transferring context: 507B done
+#3 DONE 0.0s
+
+#4 [ 1/11] FROM docker.io/library/debian@sha256:abd67ffcfa541b485a3dff59865ab629aa048a6c613e639d36e7456b0b229241
+#4 DONE 0.0s
+
+#5 [internal] load build context
+#5 transferring context: 5.77kB 0.0s done
+#5 DONE 0.0s
+
+#6 [ 2/11] RUN rm -f /etc/apt/sources.list.d/debian.sources     && printf '%s\n'        "deb [check-valid-until=no] http://snapshot.debian.org/archive/debian/20260820T000000Z/ bookworm main"        "deb [check-valid-until=no] http://snapshot.debian.org/archive/debian-security/20260820T000000Z/ bookworm-security main"        > /etc/apt/sources.list     && apt-get -o Acquire::Check-Valid-Until=false update     && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends ca-certificates     && printf '%s\n'        "deb [check-valid-until=no] https://snapshot.debian.org/archive/debian/20260820T000000Z/ bookworm main"        "deb [check-valid-until=no] https://snapshot.debian.org/archive/debian-security/20260820T000000Z/ bookworm-security main"        > /etc/apt/sources.list     && apt-get -o Acquire::Check-Valid-Until=false update     && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends        python3 python3-venv     && rm -rf /var/lib/apt/lists/*
+#6 CACHED
+
+#7 [ 6/11] WORKDIR /app
+#7 CACHED
+
+#8 [ 3/11] COPY requirements-soc-service.lock /tmp/requirements-soc-service.lock
+#8 CACHED
+
+#9 [ 7/11] COPY ai /app/ai
+#9 CACHED
+
+#10 [ 9/11] COPY schemas /app/schemas
+#10 CACHED
+
+#11 [10/11] COPY soc/__init__.py /app/soc/__init__.py
+#11 CACHED
+
+#12 [ 5/11] RUN useradd --uid 10001 --no-create-home --shell /usr/sbin/nologin soc     && mkdir -p /app /var/lib/soc && chown soc:soc /var/lib/soc && chmod 0700 /var/lib/soc
+#12 CACHED
+
+#13 [ 8/11] COPY response /app/response
+#13 CACHED
+
+#14 [ 4/11] RUN python3 -m venv /opt/venv     && /opt/venv/bin/pip install --no-cache-dir --require-hashes -r /tmp/requirements-soc-service.lock     && rm -f /tmp/requirements-soc-service.lock
+#14 CACHED
+
+#15 [11/11] COPY soc/workers /app/soc/workers
+#15 CACHED
+
+#16 exporting to image
+#16 exporting layers done
+#16 writing image sha256:3de08080328abfef63378de56aefc193c12b6bfc27842ff7447fff6573e23ae5 done
+#16 naming to docker.io/cxyz/soc-python:local done
+#16 DONE 0.0s
+docker compose -f docker-compose.yml -f docker-compose.path-a.yml --profile soc --profile soc-ai up -d soc-service-init
+ Container cxyz-security-elasticsearch-1  Running
+ Container cxyz-security-soc-cert-init-1  Starting
+ Container cxyz-security-soc-cert-init-1  Started
+ Container cxyz-security-soc-cert-init-1  Waiting
+ Container cxyz-security-soc-cert-init-1  Exited
+ Container cxyz-security-elasticsearch-1  Waiting
+ Container cxyz-security-elasticsearch-1  Healthy
+ Container cxyz-security-soc-service-init-1  Starting
+ Container cxyz-security-soc-service-init-1  Started
+docker compose -f docker-compose.yml -f docker-compose.path-a.yml --profile soc --profile soc-ai up -d --wait soc-ai-api soc-response
+ Container cxyz-security-elasticsearch-1  Running
+ Container cxyz-security-soc-service-init-1  Running
+ Container cxyz-security-soc-response-1  Running
+ Container cxyz-security-soc-ai-api-1  Running
+ Container cxyz-security-soc-cert-init-1  Starting
+ Container cxyz-security-soc-cert-init-1  Started
+ Container cxyz-security-soc-cert-init-1  Waiting
+ Container cxyz-security-soc-cert-init-1  Exited
+ Container cxyz-security-elasticsearch-1  Waiting
+ Container cxyz-security-elasticsearch-1  Healthy
+ Container cxyz-security-soc-service-init-1  Waiting
+ Container cxyz-security-soc-service-init-1  Waiting
+ Container cxyz-security-soc-service-init-1  Exited
+ Container cxyz-security-soc-service-init-1  Exited
+ Container cxyz-security-soc-ai-api-1  Waiting
+ Container cxyz-security-elasticsearch-1  Waiting
+ Container cxyz-security-soc-service-init-1  Waiting
+ Container cxyz-security-soc-cert-init-1  Waiting
+ Container cxyz-security-soc-response-1  Waiting
+ Container cxyz-security-soc-service-init-1  Exited
+ Container cxyz-security-elasticsearch-1  Healthy
+ Container cxyz-security-soc-ai-api-1  Healthy
+ Container cxyz-security-soc-response-1  Healthy
+ Container cxyz-security-soc-cert-init-1  Exited
+docker compose -f docker-compose.yml -f docker-compose.path-a.yml --profile soc --profile soc-ai up -d soc-feature-worker soc-enrichment-worker soc-decision
+ Container cxyz-security-elasticsearch-1  Running
+ Container cxyz-security-soc-ai-api-1  Running
+ Container cxyz-security-soc-enrichment-worker-1  Running
+ Container cxyz-security-soc-decision-1  Running
+ Container cxyz-security-soc-feature-worker-1  Running
+ Container cxyz-security-soc-cert-init-1  Starting
+ Container cxyz-security-soc-cert-init-1  Started
+ Container cxyz-security-soc-cert-init-1  Waiting
+ Container cxyz-security-soc-cert-init-1  Exited
+ Container cxyz-security-elasticsearch-1  Waiting
+ Container cxyz-security-elasticsearch-1  Healthy
+ Container cxyz-security-soc-service-init-1  Starting
+ Container cxyz-security-soc-service-init-1  Started
+ Container cxyz-security-soc-service-init-1  Waiting
+ Container cxyz-security-soc-service-init-1  Waiting
+ Container cxyz-security-soc-service-init-1  Waiting
+ Container cxyz-security-soc-service-init-1  Exited
+ Container cxyz-security-soc-service-init-1  Exited
+ Container cxyz-security-soc-service-init-1  Exited
+ Container cxyz-security-soc-service-init-1  Waiting
+ Container cxyz-security-soc-ai-api-1  Waiting
+ Container cxyz-security-soc-ai-api-1  Healthy
+ Container cxyz-security-soc-service-init-1  Exited
+SOC_MODE=enforce SOC_POLICY=lab-validation \
+	docker compose -f docker-compose.yml -f docker-compose.path-a.yml --profile soc --profile soc-ai up -d --force-recreate soc-response soc-decision
+ Container cxyz-security-elasticsearch-1  Running
+ Container cxyz-security-soc-decision-1  Recreate
+ Container cxyz-security-soc-response-1  Recreate
+ Container cxyz-security-soc-response-1  Recreated
+ Container cxyz-security-soc-decision-1  Recreated
+ Container cxyz-security-soc-cert-init-1  Starting
+ Container cxyz-security-soc-cert-init-1  Started
+ Container cxyz-security-soc-cert-init-1  Waiting
+ Container cxyz-security-soc-cert-init-1  Exited
+ Container cxyz-security-elasticsearch-1  Waiting
+ Container cxyz-security-elasticsearch-1  Healthy
+ Container cxyz-security-soc-service-init-1  Starting
+ Container cxyz-security-soc-service-init-1  Started
+ Container cxyz-security-soc-service-init-1  Waiting
+ Container cxyz-security-soc-service-init-1  Waiting
+ Container cxyz-security-soc-service-init-1  Exited
+ Container cxyz-security-soc-service-init-1  Exited
+ Container cxyz-security-soc-response-1  Starting
+ Container cxyz-security-soc-decision-1  Starting
+ Container cxyz-security-soc-decision-1  Started
+ Container cxyz-security-soc-response-1  Started
+==> enforcement is ON for this lab run; it is switched off again by soc-ai-restore
+============================= test session starts ==============================
+platform linux -- Python 3.12.15, pytest-9.1.1, pluggy-1.7.0 -- /home/phan/Documents/enterprise-netsec-iac-main/.venv/bin/python
+cachedir: .pytest_cache
+rootdir: /home/phan/Documents/enterprise-netsec-iac-main
+configfile: pytest.ini
+plugins: anyio-4.15.1, platformdirs-4.13.3
+collecting ... collected 13 items
+
+tests/validation/test_soc_ai.py::test_log01_multi_source_ingestion PASSED [  7%]
+tests/validation/test_soc_ai.py::test_log02_ecs_normalization_preserves_raw PASSED [ 15%]
+tests/validation/test_soc_ai.py::test_log03_ingestion_failure_is_accounted PASSED [ 23%]
+tests/validation/test_soc_ai.py::test_ai01_feature_to_inference_event FAILED [ 30%]
+tests/validation/test_soc_ai.py::test_ai02_model_provenance_is_bound_to_serving PASSED [ 38%]
+tests/validation/test_soc_ai.py::test_ai03_schema_mismatch_is_rejected PASSED [ 46%]
+tests/validation/test_soc_ai.py::test_ai04_five_detector_comparison_is_carried PASSED [ 53%]
+tests/validation/test_soc_ai.py::test_cor01_anomaly_alone_never_requests_containment PASSED [ 61%]
+tests/validation/test_soc_ai.py::test_resp01_firewall_containment_is_applied_and_verified PASSED [ 69%]
+tests/validation/test_soc_ai.py::test_resp03_safeguards_ttl_rate_limit_and_audit PASSED [ 76%]
+tests/validation/test_soc_ai.py::test_soc01_dashboards_show_the_attack_trace PASSED [ 84%]
+tests/validation/test_soc_ai.py::test_soc02_timing_is_derived_from_immutable_records PASSED [ 92%]
+tests/validation/test_soc_ai.py::test_soc03_audit_chain_links_alert_to_rollback PASSED [100%]
+
+=================================== FAILURES ===================================
+_____________________ test_ai01_feature_to_inference_event _____________________
+
+soc_run = <soc_live.Run object at 0x7f7e8c0de090>
+evidence = <function evidence.<locals>._record at 0x7f7e8c04b600>
+
+    def test_ai01_feature_to_inference_event(soc_run, evidence):
+>       verify("AI-01", soc_run, evidence)
+
+tests/validation/test_soc_ai.py:50: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/validation/test_soc_ai.py:32: in verify
+    assertion, observed = soc_live.CHECKS[control](soc_run)
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/validation/soc_live.py:668: in check_ai01
+    result = run.ai_pipeline()
+             ^^^^^^^^^^^^^^^^^
+tests/validation/soc_live.py:472: in ai_pipeline
+    return self.once("ai_pipeline", self._run_ai_pipeline)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/validation/soc_live.py:354: in once
+    self.cache[name] = build()
+                       ^^^^^^^
+tests/validation/soc_live.py:494: in _run_ai_pipeline
+    found_inference = wait_until(lab, inference, timeout=self.timeouts.ai_pipeline, interval=15,
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+lab = <soc_live.DockerLab object at 0x7f7e8c0de0c0>
+probe = <function Run._run_ai_pipeline.<locals>.inference at 0x7f7e8c04b6a0>
+timeout = 1500.0, interval = 15
+what = 'the enriched soc-ai event for that vector'
+
+    def wait_until(lab: Lab, probe: Callable[[], Any], *, timeout: float, interval: float, what: str) -> Any:
+        deadline = lab.now() + timedelta(seconds=timeout)
+        while True:
+            value = probe()
+            if value:
+                return value
+            if lab.now() >= deadline:
+>               raise AssertionError(f"timed out after {timeout:.0f}s waiting for {what}")
+E               AssertionError: timed out after 1500s waiting for the enriched soc-ai event for that vector
+
+tests/validation/soc_live.py:139: AssertionError
+- generated xml file: /home/phan/Documents/enterprise-netsec-iac-main/evidence/runs/20261018T025804Z/soc-ai-validation.xml -
+=========================== short test summary info ============================
+FAILED tests/validation/test_soc_ai.py::test_ai01_feature_to_inference_event
+================== 1 failed, 12 passed in 2263.44s (0:37:43) ===================
+make[1]: Entering directory '/home/phan/Documents/enterprise-netsec-iac-main'
+SOC_MODE= docker compose -f docker-compose.yml -f docker-compose.path-a.yml --profile soc --profile soc-ai up -d --force-recreate soc-response soc-decision
+ Container cxyz-security-elasticsearch-1  Running
+ Container cxyz-security-soc-response-1  Recreate
+ Container cxyz-security-soc-decision-1  Recreate
+ Container cxyz-security-soc-response-1  Recreated
+ Container cxyz-security-soc-decision-1  Recreated
+ Container cxyz-security-soc-cert-init-1  Starting
+ Container cxyz-security-soc-cert-init-1  Started
+ Container cxyz-security-soc-cert-init-1  Waiting
+ Container cxyz-security-soc-cert-init-1  Exited
+ Container cxyz-security-elasticsearch-1  Waiting
+ Container cxyz-security-elasticsearch-1  Healthy
+ Container cxyz-security-soc-service-init-1  Starting
+ Container cxyz-security-soc-service-init-1  Started
+ Container cxyz-security-soc-service-init-1  Waiting
+ Container cxyz-security-soc-service-init-1  Waiting
+ Container cxyz-security-soc-service-init-1  Exited
+ Container cxyz-security-soc-decision-1  Starting
+ Container cxyz-security-soc-service-init-1  Exited
+ Container cxyz-security-soc-response-1  Starting
+ Container cxyz-security-soc-decision-1  Started
+ Container cxyz-security-soc-response-1  Started
+make[1]: Leaving directory '/home/phan/Documents/enterprise-netsec-iac-main'
+make: *** [Makefile:194: soc-ai-validate] Error 1
+
+[runner] exit code 2

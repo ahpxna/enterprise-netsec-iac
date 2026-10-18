@@ -1,0 +1,1 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="0" skipped="0" tests="1" time="2.116" timestamp="2026-10-17T22:57:02.182413-04:00" hostname="host"><testcase classname="tests.validation.test_routing" name="test_ospf_md5_and_bgp_ttl" time="1.995" /></testsuite></testsuites>

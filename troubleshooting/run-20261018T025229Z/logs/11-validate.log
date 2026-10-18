@@ -1,0 +1,38 @@
+
+$ make validate
+EVIDENCE_DIR=evidence/runs/20261018T025656Z python -m pytest tests/validation/test_routing.py -v \
+	--junitxml=evidence/runs/20261018T025656Z/routing-health.xml
+============================= test session starts ==============================
+platform linux -- Python 3.12.15, pytest-9.1.1, pluggy-1.7.0 -- /home/phan/Documents/enterprise-netsec-iac-main/.venv/bin/python
+cachedir: .pytest_cache
+rootdir: /home/phan/Documents/enterprise-netsec-iac-main
+configfile: pytest.ini
+plugins: anyio-4.15.1, platformdirs-4.13.3
+collecting ... collected 1 item
+
+tests/validation/test_routing.py::test_ospf_md5_and_bgp_ttl PASSED       [100%]
+
+- generated xml file: /home/phan/Documents/enterprise-netsec-iac-main/evidence/runs/20261018T025656Z/routing-health.xml -
+============================== 1 passed in 2.11s ===============================
+python scripts/prepare_vpn_probe.py
+Traceback (most recent call last):
+  File "/home/phan/.local/share/uv/python/cpython-3.12.15-linux-x86_64-gnu/lib/python3.12/pathlib.py", line 1311, in mkdir
+    os.mkdir(self, mode)
+FileNotFoundError: [Errno 2] No such file or directory: '/home/phan/Documents/enterprise-netsec-iac-main/wireguard/probe/wg_confs'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/home/phan/Documents/enterprise-netsec-iac-main/scripts/prepare_vpn_probe.py", line 67, in <module>
+    raise SystemExit(main())
+                     ^^^^^^
+  File "/home/phan/Documents/enterprise-netsec-iac-main/scripts/prepare_vpn_probe.py", line 59, in main
+    DEST.parent.mkdir(parents=True, exist_ok=True)
+  File "/home/phan/.local/share/uv/python/cpython-3.12.15-linux-x86_64-gnu/lib/python3.12/pathlib.py", line 1315, in mkdir
+    self.parent.mkdir(parents=True, exist_ok=True)
+  File "/home/phan/.local/share/uv/python/cpython-3.12.15-linux-x86_64-gnu/lib/python3.12/pathlib.py", line 1311, in mkdir
+    os.mkdir(self, mode)
+PermissionError: [Errno 13] Permission denied: '/home/phan/Documents/enterprise-netsec-iac-main/wireguard/probe'
+make: *** [Makefile:245: vpn-probe] Error 1
+
+[runner] exit code 2

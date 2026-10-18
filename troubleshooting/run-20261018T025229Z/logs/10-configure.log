@@ -1,0 +1,319 @@
+
+$ make configure
+secrets ready (values NOT shown; stored in .env and local service config)
+python scripts/env_exec.py --env-file .env -- bash -lc 'cd ansible && ansible-playbook site.yml'
+
+PLAY [Baseline hardening on every reachable node] ******************************
+
+TASK [Gathering Facts] *********************************************************
+ok: [clab-companyxyz-core]
+ok: [clab-companyxyz-dist1]
+ok: [clab-companyxyz-edge]
+ok: [clab-companyxyz-fw-core]
+ok: [clab-companyxyz-fw-dmz]
+ok: [clab-companyxyz-dist2]
+ok: [clab-companyxyz-server1]
+ok: [clab-companyxyz-pc4]
+ok: [clab-companyxyz-pc1]
+ok: [clab-companyxyz-dmz-web]
+
+TASK [common_hardening : Ensure telnet server is absent (HRD-02 / CIS 1.6.5)] ***
+ok: [clab-companyxyz-core] => (item=telnetd)
+ok: [clab-companyxyz-fw-core] => (item=telnetd)
+ok: [clab-companyxyz-dist1] => (item=telnetd)
+ok: [clab-companyxyz-edge] => (item=telnetd)
+ok: [clab-companyxyz-fw-dmz] => (item=telnetd)
+ok: [clab-companyxyz-core] => (item=inetutils-telnetd)
+ok: [clab-companyxyz-dist1] => (item=inetutils-telnetd)
+ok: [clab-companyxyz-edge] => (item=inetutils-telnetd)
+ok: [clab-companyxyz-fw-core] => (item=inetutils-telnetd)
+ok: [clab-companyxyz-fw-dmz] => (item=inetutils-telnetd)
+ok: [clab-companyxyz-dist2] => (item=telnetd)
+ok: [clab-companyxyz-pc1] => (item=telnetd)
+ok: [clab-companyxyz-pc4] => (item=telnetd)
+ok: [clab-companyxyz-server1] => (item=telnetd)
+ok: [clab-companyxyz-dmz-web] => (item=telnetd)
+ok: [clab-companyxyz-dist2] => (item=inetutils-telnetd)
+ok: [clab-companyxyz-pc1] => (item=inetutils-telnetd)
+ok: [clab-companyxyz-server1] => (item=inetutils-telnetd)
+ok: [clab-companyxyz-pc4] => (item=inetutils-telnetd)
+ok: [clab-companyxyz-dmz-web] => (item=inetutils-telnetd)
+
+TASK [common_hardening : Detect whether OpenSSH server is installed] ***********
+ok: [clab-companyxyz-core]
+ok: [clab-companyxyz-fw-dmz]
+ok: [clab-companyxyz-edge]
+ok: [clab-companyxyz-dist1]
+ok: [clab-companyxyz-fw-core]
+ok: [clab-companyxyz-dist2]
+ok: [clab-companyxyz-server1]
+ok: [clab-companyxyz-pc1]
+ok: [clab-companyxyz-dmz-web]
+ok: [clab-companyxyz-pc4]
+
+TASK [common_hardening : Ensure OpenSSH drop-in directory exists] **************
+skipping: [clab-companyxyz-fw-core]
+skipping: [clab-companyxyz-fw-dmz]
+skipping: [clab-companyxyz-edge]
+skipping: [clab-companyxyz-core]
+skipping: [clab-companyxyz-dist1]
+skipping: [clab-companyxyz-dist2]
+skipping: [clab-companyxyz-pc1]
+skipping: [clab-companyxyz-pc4]
+skipping: [clab-companyxyz-dmz-web]
+ok: [clab-companyxyz-server1]
+
+TASK [common_hardening : Enforce SSH idle timeout and root policy where SSH exists (HRD-01 / CIS 1.8, 5.x)] ***
+skipping: [clab-companyxyz-fw-core]
+skipping: [clab-companyxyz-fw-dmz]
+skipping: [clab-companyxyz-edge]
+skipping: [clab-companyxyz-core]
+skipping: [clab-companyxyz-dist1]
+skipping: [clab-companyxyz-dist2]
+skipping: [clab-companyxyz-pc1]
+skipping: [clab-companyxyz-pc4]
+skipping: [clab-companyxyz-dmz-web]
+changed: [clab-companyxyz-server1]
+
+TASK [common_hardening : Enforce interactive shell timeout] ********************
+changed: [clab-companyxyz-core]
+changed: [clab-companyxyz-edge]
+changed: [clab-companyxyz-dist1]
+changed: [clab-companyxyz-fw-core]
+changed: [clab-companyxyz-fw-dmz]
+changed: [clab-companyxyz-server1]
+changed: [clab-companyxyz-dist2]
+changed: [clab-companyxyz-pc4]
+changed: [clab-companyxyz-pc1]
+changed: [clab-companyxyz-dmz-web]
+
+TASK [common_hardening : Set login banner] *************************************
+changed: [clab-companyxyz-edge]
+changed: [clab-companyxyz-fw-core]
+changed: [clab-companyxyz-dist1]
+changed: [clab-companyxyz-fw-dmz]
+changed: [clab-companyxyz-core]
+changed: [clab-companyxyz-dist2]
+changed: [clab-companyxyz-server1]
+changed: [clab-companyxyz-pc1]
+changed: [clab-companyxyz-pc4]
+changed: [clab-companyxyz-dmz-web]
+
+RUNNING HANDLER [common_hardening : Restart sshd] ******************************
+changed: [clab-companyxyz-server1]
+
+PLAY [Data-center identity, time and logging services] *************************
+
+TASK [Gathering Facts] *********************************************************
+ok: [clab-companyxyz-server1]
+
+TASK [radius_secure : Install FreeRADIUS runtime and validation client tools] ***
+ok: [clab-companyxyz-server1]
+
+TASK [radius_secure : Fail fast if identity secrets were not generated or are reused] ***
+ok: [clab-companyxyz-server1] => 
+    changed: false
+    msg: All assertions passed
+
+TASK [radius_secure : Deploy FreeRADIUS clients.conf with one secret per client] ***
+changed: [clab-companyxyz-server1]
+
+TASK [radius_secure : Deploy authorize file with HASHED credentials only] ******
+changed: [clab-companyxyz-server1]
+
+TASK [radius_secure : Send RADIUS service logs through the authenticated syslog path] ***
+changed: [clab-companyxyz-server1]
+
+TASK [radius_secure : Log RADIUS authentication outcomes] **********************
+changed: [clab-companyxyz-server1]
+
+TASK [radius_secure : Keep successful and failed passwords out of RADIUS logs] ***
+ok: [clab-companyxyz-server1]
+
+TASK [radius_secure : Scan active RADIUS user store for a cleartext password attribute] ***
+ok: [clab-companyxyz-server1]
+
+TASK [radius_secure : Assert active RADIUS user store contains no cleartext password] ***
+ok: [clab-companyxyz-server1] => 
+    changed: false
+    msg: All assertions passed
+
+TASK [ntp_secure : Install chrony] *********************************************
+skipping: [clab-companyxyz-server1]
+
+TASK [ntp_secure : Configure chrony with NTS upstreams] ************************
+skipping: [clab-companyxyz-server1]
+
+TASK [syslog_tls : Install rsyslog and the platform TLS driver] ****************
+[WARNING]: Deprecation warnings can be disabled by setting `deprecation_warnings=False` in ansible.cfg.
+[DEPRECATION WARNING]: INJECT_FACTS_AS_VARS default to `True` is deprecated, top-level facts will not be auto injected after the change. This feature will be removed from ansible-core version 2.24.
+Origin: /home/phan/Documents/enterprise-netsec-iac-main/ansible/roles/syslog_tls/tasks/main.yml:8:9
+
+6     name:
+7       - rsyslog
+8       - "{{ 'rsyslog-tls' if ansible_os_family == 'Alpine' else 'rsyslog-gnutls' }}"
+          ^ column 9
+
+Use `ansible_facts["fact_name"]` (no `ansible_` prefix) instead.
+
+ok: [clab-companyxyz-server1]
+
+TASK [syslog_tls : Derive the stable logging identity for this node] ***********
+ok: [clab-companyxyz-server1]
+
+TASK [syslog_tls : Install the private logging CA] *****************************
+changed: [clab-companyxyz-server1]
+
+TASK [syslog_tls : Install the node mTLS certificate] **************************
+changed: [clab-companyxyz-server1]
+
+TASK [syslog_tls : Install the node mTLS private key] **************************
+changed: [clab-companyxyz-server1]
+
+TASK [syslog_tls : Configure mutually authenticated TLS log forwarding to the SIEM] ***
+changed: [clab-companyxyz-server1]
+
+RUNNING HANDLER [radius_secure : Restart FreeRADIUS on systemd or supervisor managed hosts] ***
+changed: [clab-companyxyz-server1]
+
+RUNNING HANDLER [syslog_tls : Restart rsyslog] *********************************
+changed: [clab-companyxyz-server1]
+
+PLAY [Detection + remote-access controls] **************************************
+
+TASK [Gathering Facts] *********************************************************
+ok: [clab-companyxyz-server1]
+
+TASK [suricata : Note — Suricata runs as a container; this role validates rule presence] ***
+ok: [clab-companyxyz-server1] => 
+    msg: Suricata sensor managed via docker-compose (ids profile). Rules in docker/ids/rules.
+
+PLAY [Ship device logs through the authenticated TLS relay] ********************
+
+TASK [Gathering Facts] *********************************************************
+ok: [clab-companyxyz-core]
+ok: [clab-companyxyz-edge]
+ok: [clab-companyxyz-dist1]
+ok: [clab-companyxyz-dist2]
+ok: [clab-companyxyz-fw-core]
+ok: [clab-companyxyz-fw-dmz]
+
+TASK [syslog_tls : Install rsyslog and the platform TLS driver] ****************
+ok: [clab-companyxyz-fw-core]
+ok: [clab-companyxyz-fw-dmz]
+[ERROR]: Task failed: Module failed: failed to install ['rsyslog', 'rsyslog-tls']
+Origin: /home/phan/Documents/enterprise-netsec-iac-main/ansible/roles/syslog_tls/tasks/main.yml:4:3
+
+2 # Mutual-TLS log shipping. The relay validates each device certificate and
+3 # each client validates the relay name against the private logging CA.
+4 - name: Install rsyslog and the platform TLS driver
+    ^ column 3
+
+fatal: [clab-companyxyz-edge]: FAILED! => 
+    changed: false
+    msg: failed to install ['rsyslog', 'rsyslog-tls']
+    packages: []
+    stderr: |-
+        WARNING: updating and opening https://dl-cdn.alpinelinux.org/alpine/v3.18/main: temporary error (try again later)
+        WARNING: updating and opening https://dl-cdn.alpinelinux.org/alpine/v3.18/community: temporary error (try again later)
+        ERROR: unable to select packages:
+          rsyslog (no such package):
+            required by: world[rsyslog]
+          rsyslog-tls (no such package):
+            required by: world[rsyslog-tls]
+    stderr_lines: <omitted>
+    stdout: |-
+        fetch https://dl-cdn.alpinelinux.org/alpine/v3.18/main/x86_64/APKINDEX.tar.gz
+        fetch https://dl-cdn.alpinelinux.org/alpine/v3.18/community/x86_64/APKINDEX.tar.gz
+    stdout_lines: <omitted>
+fatal: [clab-companyxyz-core]: FAILED! => 
+    changed: false
+    msg: failed to install ['rsyslog', 'rsyslog-tls']
+    packages: []
+    stderr: |-
+        WARNING: updating and opening https://dl-cdn.alpinelinux.org/alpine/v3.18/main: temporary error (try again later)
+        WARNING: updating and opening https://dl-cdn.alpinelinux.org/alpine/v3.18/community: temporary error (try again later)
+        ERROR: unable to select packages:
+          rsyslog (no such package):
+            required by: world[rsyslog]
+          rsyslog-tls (no such package):
+            required by: world[rsyslog-tls]
+    stderr_lines: <omitted>
+    stdout: |-
+        fetch https://dl-cdn.alpinelinux.org/alpine/v3.18/main/x86_64/APKINDEX.tar.gz
+        fetch https://dl-cdn.alpinelinux.org/alpine/v3.18/community/x86_64/APKINDEX.tar.gz
+    stdout_lines: <omitted>
+fatal: [clab-companyxyz-dist2]: FAILED! => 
+    changed: false
+    msg: failed to install ['rsyslog', 'rsyslog-tls']
+    packages: []
+    stderr: |-
+        WARNING: updating and opening https://dl-cdn.alpinelinux.org/alpine/v3.18/main: temporary error (try again later)
+        WARNING: updating and opening https://dl-cdn.alpinelinux.org/alpine/v3.18/community: temporary error (try again later)
+        ERROR: unable to select packages:
+          rsyslog (no such package):
+            required by: world[rsyslog]
+          rsyslog-tls (no such package):
+            required by: world[rsyslog-tls]
+    stderr_lines: <omitted>
+    stdout: |-
+        fetch https://dl-cdn.alpinelinux.org/alpine/v3.18/main/x86_64/APKINDEX.tar.gz
+        fetch https://dl-cdn.alpinelinux.org/alpine/v3.18/community/x86_64/APKINDEX.tar.gz
+    stdout_lines: <omitted>
+fatal: [clab-companyxyz-dist1]: FAILED! => 
+    changed: false
+    msg: failed to install ['rsyslog', 'rsyslog-tls']
+    packages: []
+    stderr: |-
+        WARNING: updating and opening https://dl-cdn.alpinelinux.org/alpine/v3.18/main: temporary error (try again later)
+        WARNING: updating and opening https://dl-cdn.alpinelinux.org/alpine/v3.18/community: temporary error (try again later)
+        ERROR: unable to select packages:
+          rsyslog (no such package):
+            required by: world[rsyslog]
+          rsyslog-tls (no such package):
+            required by: world[rsyslog-tls]
+    stderr_lines: <omitted>
+    stdout: |-
+        fetch https://dl-cdn.alpinelinux.org/alpine/v3.18/main/x86_64/APKINDEX.tar.gz
+        fetch https://dl-cdn.alpinelinux.org/alpine/v3.18/community/x86_64/APKINDEX.tar.gz
+    stdout_lines: <omitted>
+
+TASK [syslog_tls : Derive the stable logging identity for this node] ***********
+ok: [clab-companyxyz-fw-core]
+ok: [clab-companyxyz-fw-dmz]
+
+TASK [syslog_tls : Install the private logging CA] *****************************
+changed: [clab-companyxyz-fw-dmz]
+changed: [clab-companyxyz-fw-core]
+
+TASK [syslog_tls : Install the node mTLS certificate] **************************
+changed: [clab-companyxyz-fw-dmz]
+changed: [clab-companyxyz-fw-core]
+
+TASK [syslog_tls : Install the node mTLS private key] **************************
+changed: [clab-companyxyz-fw-core]
+changed: [clab-companyxyz-fw-dmz]
+
+TASK [syslog_tls : Configure mutually authenticated TLS log forwarding to the SIEM] ***
+changed: [clab-companyxyz-fw-core]
+changed: [clab-companyxyz-fw-dmz]
+
+RUNNING HANDLER [syslog_tls : Restart rsyslog] *********************************
+changed: [clab-companyxyz-fw-core]
+changed: [clab-companyxyz-fw-dmz]
+
+PLAY RECAP *********************************************************************
+clab-companyxyz-core       : ok=6    changed=2    unreachable=0    failed=1    skipped=2    rescued=0    ignored=0   
+clab-companyxyz-dist1      : ok=6    changed=2    unreachable=0    failed=1    skipped=2    rescued=0    ignored=0   
+clab-companyxyz-dist2      : ok=6    changed=2    unreachable=0    failed=1    skipped=2    rescued=0    ignored=0   
+clab-companyxyz-dmz-web    : ok=5    changed=2    unreachable=0    failed=0    skipped=2    rescued=0    ignored=0   
+clab-companyxyz-edge       : ok=6    changed=2    unreachable=0    failed=1    skipped=2    rescued=0    ignored=0   
+clab-companyxyz-fw-core    : ok=13   changed=7    unreachable=0    failed=0    skipped=2    rescued=0    ignored=0   
+clab-companyxyz-fw-dmz     : ok=13   changed=7    unreachable=0    failed=0    skipped=2    rescued=0    ignored=0   
+clab-companyxyz-pc1        : ok=5    changed=2    unreachable=0    failed=0    skipped=2    rescued=0    ignored=0   
+clab-companyxyz-pc4        : ok=5    changed=2    unreachable=0    failed=0    skipped=2    rescued=0    ignored=0   
+clab-companyxyz-server1    : ok=28   changed=14   unreachable=0    failed=0    skipped=2    rescued=0    ignored=0   
+
+make: *** [Makefile:84: configure] Error 2
+
+[runner] exit code 2

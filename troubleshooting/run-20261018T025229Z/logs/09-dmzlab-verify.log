@@ -1,0 +1,1 @@
+dmzlab-verify: PASS Juice Shop 200 + SSH honeypot banner via fw-dmz; DMZ host cannot reach internal zones; fw-dmz counters vuln=1 honeypot=1

@@ -1,0 +1,30 @@
+
+$ make soc-smoke
+secrets ready (values NOT shown; stored in .env and local service config)
+bash scripts/ensure_dc_network.sh
+cxyz_dc already matches canonical DC network
+docker compose --profile soc up -d --wait elasticsearch
+ Container cxyz-security-elasticsearch-1  Running
+ Container cxyz-security-soc-cert-init-1  Starting
+ Container cxyz-security-soc-cert-init-1  Started
+ Container cxyz-security-soc-cert-init-1  Waiting
+ Container cxyz-security-soc-cert-init-1  Exited
+ Container cxyz-security-soc-cert-init-1  Waiting
+ Container cxyz-security-elasticsearch-1  Waiting
+ Container cxyz-security-soc-cert-init-1  Exited
+ Container cxyz-security-elasticsearch-1  Healthy
+docker compose --profile soc run --rm --no-deps soc-account-setup
+{}{"role":{"created":false}}{"created":false}{"created":true}{"role":{"created":false}}{"role":{"created":false}}{"role":{"created":false}}{"role":{"created":false}}{"acknowledged":true}{"acknowledged":true}{"acknowledged":true}{"acknowledged":true}{"acknowledged":true}{"acknowledged":true}{"acknowledged":true}{"acknowledged":true}{"acknowledged":true}{"acknowledged":true}{"acknowledged":true}{"acknowledged":true}SOC Elasticsearch roles, users, and templates are current
+docker compose --profile soc up -d --wait --no-deps logstash kibana
+ Container cxyz-security-kibana-1  Running
+ Container cxyz-security-logstash-1  Running
+ Container cxyz-security-logstash-1  Waiting
+ Container cxyz-security-kibana-1  Waiting
+ Container cxyz-security-logstash-1  Healthy
+ Container cxyz-security-kibana-1  Healthy
+docker compose --profile soc run --rm --no-deps soc-kibana-setup
+SOC Kibana data views and dashboards are current
+docker compose --profile soc run --rm --no-deps soc-kibana-bootstrap-revoke
+{"found":true}SOC Kibana bootstrap identity revoked
+python scripts/soc_smoke.py
+SOC smoke PASS: datasets=['firewall.syslog', 'freeradius.auth', 'suricata.eve', 'wazuh.alerts'], raw=57, malformed=6, dashboard=cxyz-soc-overview

@@ -1,0 +1,41 @@
+{
+  "assertion": "The controlled attack trace is present in the network/alert, AI and response data views, and the four dashboards (SOC overview, network/NIDS, AI, response) are installed in Kibana; the dashboards use only the non-secret normalized, AI and response-audit indices",
+  "control_catalog_sha256": "9aa1afbab98a288dd065c8008fb114eaa7585b6363503a9d1b4278d0f64cd26d",
+  "control_id": "SOC-01",
+  "counter_after": null,
+  "counter_before": null,
+  "deployment_config_sha256": "cafc092f55a3020a758605773933d843bc1a20390fbbe33115974b5fa5eec319",
+  "duration_seconds": 2.880353,
+  "ended_at": "2026-10-18T03:36:41.759983Z",
+  "enforcement_node": null,
+  "environment": "local-containerlab",
+  "failure": null,
+  "git_dirty": true,
+  "git_sha": "unknown",
+  "observed": {
+    "dashboards": {
+      "cxyz-ai": "[REDACTED:ORG_NAME] AI",
+      "cxyz-network-nids": "[REDACTED:ORG_NAME] Network / NIDS",
+      "cxyz-response": "[REDACTED:ORG_NAME] Response",
+      "cxyz-soc-overview": "[REDACTED:ORG_NAME] SOC Overview"
+    },
+    "decision_event_id": "dec-c7ba192e3062e477e8175d30",
+    "run_marker": "cxyz-live-fa40f335b6",
+    "target": "203.0.113.128",
+    "trace_counts": {
+      "AI anomaly (soc-ai)": 1,
+      "NIDS alert": 1,
+      "network telemetry (soc-network/endpoint/auth/alerts)": 1,
+      "response audit (soc-response)": 4
+    }
+  },
+  "pytest_phase": "call",
+  "result": "PASS",
+  "run_id": "20261018T025804Z",
+  "schema_version": 2,
+  "source_tree_sha256": "fdf46ed0bb3c604900c350416a4c39682efcb67929721c5c76c8ed38702e375b",
+  "started_at": "2026-10-18T03:36:38.879622Z",
+  "test_id": "tests/validation/test_soc_ai.py::test_soc01_dashboards_show_the_attack_trace",
+  "test_suite_sha256": "69883f08da68f0dad0c6ded4adf5e731114916ef6c555c239991ae5637aa6a07",
+  "topology_sha256": "6d9d5eadf866fbfaf75766cceed735486c90beae1f6b65db1a7615f71e76579b"
+}

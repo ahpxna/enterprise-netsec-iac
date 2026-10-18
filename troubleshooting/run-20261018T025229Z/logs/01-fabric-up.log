@@ -1,0 +1,302 @@
+
+$ make net
+bash scripts/ensure_dc_network.sh
+cxyz_dc already matches canonical DC network
+secrets ready (values NOT shown; stored in .env and local service config)
+python scripts/render_runtime_configs.py
+rendered secret-bearing routing configs under clab/runtime-configs
+sudo containerlab deploy -t clab/companyxyz.clab.yml --reconfigure
+22:52:41 INFO Containerlab started version=0.81.1
+22:52:41 INFO Parsing & checking topology file=companyxyz.clab.yml
+22:52:41 INFO Destroying lab name=companyxyz
+22:52:42 INFO Removed container name=clab-companyxyz-access-switch
+22:52:42 INFO Removed container name=clab-companyxyz-isp2
+22:52:42 INFO Removed container name=clab-companyxyz-dmz-web
+22:52:42 INFO Removed container name=clab-companyxyz-pc1
+22:52:42 INFO Removed container name=clab-companyxyz-isp1
+22:52:42 INFO Removed container name=clab-companyxyz-server1
+22:52:42 INFO Removed container name=clab-companyxyz-core
+22:52:43 INFO Removed container name=clab-companyxyz-fw-dmz
+22:52:43 INFO Removed container name=clab-companyxyz-dist2
+22:52:43 INFO Removed container name=clab-companyxyz-pc4
+22:52:43 INFO Removed container name=clab-companyxyz-dist1
+22:52:43 INFO Removed container name=clab-companyxyz-edge
+22:52:43 INFO Removed container name=clab-companyxyz-fw-core
+22:52:43 INFO Removing host entries path=/etc/hosts
+22:52:43 INFO Removing SSH config path=/etc/ssh/ssh_config.d/clab-companyxyz.conf
+22:52:43 INFO Removing directory path=/home/phan/Documents/enterprise-netsec-iac-main/clab/clab-companyxyz
+22:52:43 INFO Creating lab directory path=/home/phan/Documents/enterprise-netsec-iac-main/clab/clab-companyxyz
+22:52:43 INFO Creating container name=isp2
+22:52:43 INFO Creating container name=fw-core
+22:52:43 INFO Creating container name=server1
+22:52:43 INFO Creating container name=dmz-web
+22:52:44 INFO Creating container name=isp1
+22:52:44 INFO Creating container name=core
+22:52:45 INFO Created link: fw-core:eth2 ▪┄┄▪ core:eth1
+22:52:46 INFO Creating container name=fw-dmz
+22:52:47 INFO Created link: fw-dmz:eth2 ▪┄┄▪ dmz-web:eth1
+22:52:47 INFO Creating container name=edge
+22:52:48 INFO Created link: isp1:eth1 ▪┄┄▪ edge:eth1
+22:52:48 INFO Created link: isp2:eth1 ▪┄┄▪ edge:eth2
+22:52:48 INFO Created link: edge:eth3 ▪┄┄▪ fw-core:eth1
+22:52:49 INFO Created link: edge:eth4 ▪┄┄▪ fw-dmz:eth1
+22:52:50 INFO Creating container name=pc1
+22:52:50 INFO Creating container name=dist1
+22:52:51 INFO Creating container name=dist2
+22:52:51 INFO Created link: core:eth2 ▪┄┄▪ dist1:eth1
+22:52:51 INFO Created link: core:eth3 ▪┄┄▪ dist2:eth1
+22:52:52 INFO Creating container name=access-switch
+22:52:52 INFO Creating container name=pc4
+22:52:53 INFO Created link: dist1:eth3 ▪┄┄▪ vlan40|access-switch:vlan40-1
+22:52:53 INFO Created link: dist1:eth2 ▪┄┄▪ vlan10|access-switch:vlan10-1
+22:52:53 INFO Created link: dist2:eth3 ▪┄┄▪ vlan40|access-switch:vlan40-2
+22:52:53 INFO Created link: dist2:eth2 ▪┄┄▪ vlan10|access-switch:vlan10-2
+22:52:53 INFO Created link: pc1:eth1 ▪┄┄▪ vlan10|access-switch:vlan10-3
+22:52:53 INFO Created link: pc4:eth1 ▪┄┄▪ vlan40|access-switch:vlan40-3
+22:52:53 INFO Created link: fw-core:eth3 ▪┄┄▪ br-cxyz-dc:dc-1
+22:52:53 INFO Created link: server1:eth1 ▪┄┄▪ br-cxyz-dc:dc-2
+22:52:55 INFO Executed command node=isp2 command="sysctl -w net.ipv4.ip_forward=1"
+  stdout=
+  │ net.ipv4.ip_forward = 1
+
+22:52:55 INFO Executed command node=server1 command="sh -c ip address replace 172.16.50.1/24 dev eth1" stdout=""
+22:52:55 INFO Executed command node=isp2 command="sh -c ip rule del pref 11001 2>/dev/null || true; ip rule add pref 11001 iif eth1 to 10.1.1.0/24 prohibit" stdout=""
+22:52:55 INFO Executed command node=isp2 command="sh -c ip address replace 197.10.10.1/30 dev eth1" stdout=""
+22:52:55 INFO Executed command node=server1 command="sh -c ip route replace 0.0.0.0/0 via 172.16.50.254" stdout=""
+22:52:55 INFO Executed command node=isp2 command="sh -c ip route replace 10.255.0.0/16 via 197.10.10.2" stdout=""
+22:52:55 INFO Executed command node=isp1 command="sysctl -w net.ipv4.ip_forward=1"
+  stdout=
+  │ net.ipv4.ip_forward = 1
+
+22:52:55 INFO Executed command node=core command="sysctl -w net.ipv4.ip_forward=1"
+  stdout=
+  │ net.ipv4.ip_forward = 1
+
+22:52:55 INFO Executed command node=isp1 command="sh -c ip rule del pref 11001 2>/dev/null || true; ip rule add pref 11001 iif eth1 to 10.1.1.0/24 prohibit" stdout=""
+22:52:55 INFO Executed command node=core command="sh -c ip rule del pref 11001 2>/dev/null || true; ip rule add pref 11001 iif eth1 to 10.1.1.0/24 prohibit" stdout=""
+22:52:55 INFO Executed command node=isp1 command="sh -c ip address replace 198.10.10.1/30 dev eth1" stdout=""
+22:52:55 INFO Executed command node=core command="sh -c ip rule del pref 11002 2>/dev/null || true; ip rule add pref 11002 iif eth2 to 10.1.1.0/24 prohibit" stdout=""
+22:52:55 INFO Executed command node=isp1 command="sh -c ip route replace 10.255.0.0/16 via 198.10.10.2" stdout=""
+22:52:55 INFO Executed command node=core command="sh -c ip rule del pref 11003 2>/dev/null || true; ip rule add pref 11003 iif eth3 to 10.1.1.0/24 prohibit" stdout=""
+22:52:55 INFO Executed command node=core command="sh -c ip address replace 10.255.0.6/30 dev eth1" stdout=""
+22:52:55 INFO Executed command node=core command="sh -c ip address replace 10.255.1.0/31 dev eth2" stdout=""
+22:52:55 INFO Executed command node=core command="sh -c ip address replace 10.255.1.2/31 dev eth3" stdout=""
+22:52:55 INFO Executed command node=core command="sh -c ip route replace 0.0.0.0/0 via 10.255.0.5" stdout=""
+22:52:55 INFO Executed command node=core command="sh -c ip route replace 172.16.50.0/24 via 10.255.0.5" stdout=""
+22:52:55 INFO Executed command node=edge command="sysctl -w net.ipv4.ip_forward=1"
+  stdout=
+  │ net.ipv4.ip_forward = 1
+
+22:52:55 INFO Executed command node=edge command="sh -c ip rule del pref 11001 2>/dev/null || true; ip rule add pref 11001 iif eth1 to 10.1.1.0/24 prohibit" stdout=""
+22:52:55 INFO Executed command node=edge command="sh -c ip rule del pref 11002 2>/dev/null || true; ip rule add pref 11002 iif eth2 to 10.1.1.0/24 prohibit" stdout=""
+22:52:55 INFO Executed command node=edge command="sh -c ip rule del pref 11003 2>/dev/null || true; ip rule add pref 11003 iif eth3 to 10.1.1.0/24 prohibit" stdout=""
+22:52:55 INFO Executed command node=edge command="sh -c ip rule del pref 11004 2>/dev/null || true; ip rule add pref 11004 iif eth4 to 10.1.1.0/24 prohibit" stdout=""
+22:52:55 INFO Executed command node=dmz-web command="apk add --no-cache python3 rsyslog rsyslog-tls netcat-openbsd"
+  stdout=
+  │ fetch https://dl-cdn.alpinelinux.org/alpine/v3.22/main/x86_64/APKINDEX.tar.gz
+  │ fetch https://dl-cdn.alpinelinux.org/alpine/v3.22/community/x86_64/APKINDEX.tar.gz
+  │ (1/11) Upgrading libexpat (2.7.3-r0 -> 2.8.5-r0)
+  │ (2/11) Installing mpdecimal (4.0.1-r0)
+  │ (3/11) Installing sqlite-libs (3.49.2-r1)
+  │ (4/11) Installing python3 (3.12.15-r0)
+  │ (5/11) Installing python3-pycache-pyc0 (3.12.15-r0)
+  │ (6/11) Installing pyc (3.12.15-r0)
+  │ (7/11) Installing python3-pyc (3.12.15-r0)
+  │ (8/11) Installing libestr (0.1.11-r4)
+  │ (9/11) Installing libfastjson (1.2304.0-r4)
+  │ (10/11) Installing rsyslog (8.2410.0-r1)
+  │ (11/11) Installing rsyslog-tls (8.2410.0-r1)
+  │ Executing busybox-1.37.0-r20.trigger
+  │ OK: 343 MiB in 171 packages
+
+22:52:55 INFO Executed command node=edge command="sh -c ip address replace 198.10.10.2/30 dev eth1" stdout=""
+22:52:55 INFO Executed command node=dmz-web command="mkdir -p /etc/rsyslog.d /etc/ssh/sshd_config.d" stdout=""
+22:52:55 INFO Executed command node=edge command="sh -c ip address replace 197.10.10.2/30 dev eth2" stdout=""
+22:52:55 INFO Executed command node=dmz-web command="sh -c ip address replace 195.1.1.161/29 dev eth1" stdout=""
+22:52:55 INFO Executed command node=fw-core command="apk add --no-cache python3 rsyslog rsyslog-tls nftables"
+  stdout=
+  │ fetch https://dl-cdn.alpinelinux.org/alpine/v3.22/main/x86_64/APKINDEX.tar.gz
+  │ fetch https://dl-cdn.alpinelinux.org/alpine/v3.22/community/x86_64/APKINDEX.tar.gz
+  │ (1/13) Upgrading libexpat (2.7.3-r0 -> 2.8.5-r0)
+  │ (2/13) Installing libnftnl (1.2.9-r0)
+  │ (3/13) Installing nftables (1.1.3-r0)
+  │ (4/13) Installing mpdecimal (4.0.1-r0)
+  │ (5/13) Installing sqlite-libs (3.49.2-r1)
+  │ (6/13) Installing python3 (3.12.15-r0)
+  │ (7/13) Installing python3-pycache-pyc0 (3.12.15-r0)
+  │ (8/13) Installing pyc (3.12.15-r0)
+  │ (9/13) Installing python3-pyc (3.12.15-r0)
+  │ (10/13) Installing libestr (0.1.11-r4)
+  │ (11/13) Installing libfastjson (1.2304.0-r4)
+  │ (12/13) Installing rsyslog (8.2410.0-r1)
+  │ (13/13) Installing rsyslog-tls (8.2410.0-r1)
+  │ Executing busybox-1.37.0-r20.trigger
+  │ OK: 344 MiB in 173 packages
+
+22:52:55 INFO Executed command node=dmz-web command="sh -c ip route replace 0.0.0.0/0 via 195.1.1.166" stdout=""
+22:52:55 INFO Executed command node=edge command="sh -c ip address replace 10.255.0.1/30 dev eth3" stdout=""
+22:52:55 INFO Executed command node=dmz-web command="sh -c ip link set eth0 down" stdout=""
+22:52:55 INFO Executed command node=edge command="sh -c ip address replace 10.255.0.9/30 dev eth4" stdout=""
+22:52:55 INFO Executed command node=fw-core command="mkdir -p /etc/rsyslog.d /etc/ssh/sshd_config.d" stdout=""
+22:52:55 INFO Executed command node=fw-core command="sysctl -w net.ipv4.ip_forward=1"
+  stdout=
+  │ net.ipv4.ip_forward = 1
+
+22:52:55 INFO Executed command node=edge command="sh -c ip route replace 172.16.50.0/24 via 10.255.0.2" stdout=""
+22:52:55 INFO Executed command node=fw-core command="sh -c ip address replace 10.255.0.2/30 dev eth1" stdout=""
+22:52:55 INFO Executed command node=fw-core command="sh -c ip address replace 10.255.0.5/30 dev eth2" stdout=""
+22:52:55 INFO Executed command node=edge command="sh -c ip route replace 192.168.0.0/16 via 10.255.0.2" stdout=""
+22:52:55 INFO Executed command node=fw-core command="sh -c ip address replace 172.16.50.254/24 dev eth3" stdout=""
+22:52:55 INFO Executed command node=edge command="sh -c ip route replace 195.1.1.160/29 via 10.255.0.10" stdout=""
+22:52:55 INFO Executed command node=fw-core command="sh -c ip route replace 0.0.0.0/0 via 10.255.0.1" stdout=""
+22:52:55 INFO Executed command node=edge command="sh -c ip route del default via 10.1.1.1 dev eth0 2>/dev/null || true" stdout=""
+22:52:55 INFO Executed command node=fw-core command="sh -c ip route replace 192.168.0.0/16 via 10.255.0.6" stdout=""
+22:52:55 INFO Executed command node=fw-core command="nft -f /etc/nftables/policy.nft" stdout=""
+22:52:55 INFO Executed command node=fw-core command="sh -c nohup python3 /opt/cxyz/nft_enforcer.py --listen 10.1.1.20 --port 9443 --cert /etc/cxyz/enforcer/tls.crt --key /etc/cxyz/enforcer/tls.key --client-ca /etc/cxyz/enforcer/ca.crt --allowed-client soc-response --table cxyz --set soc_blocklist >/var/log/cxyz-enforcer.log 2>&1 &" stdout=""
+22:52:55 INFO Executed command node=fw-dmz command="apk add --no-cache python3 rsyslog rsyslog-tls nftables"
+  stdout=
+  │ fetch https://dl-cdn.alpinelinux.org/alpine/v3.22/main/x86_64/APKINDEX.tar.gz
+  │ fetch https://dl-cdn.alpinelinux.org/alpine/v3.22/community/x86_64/APKINDEX.tar.gz
+  │ (1/13) Upgrading libexpat (2.7.3-r0 -> 2.8.5-r0)
+  │ (2/13) Installing libnftnl (1.2.9-r0)
+  │ (3/13) Installing nftables (1.1.3-r0)
+  │ (4/13) Installing mpdecimal (4.0.1-r0)
+  │ (5/13) Installing sqlite-libs (3.49.2-r1)
+  │ (6/13) Installing python3 (3.12.15-r0)
+  │ (7/13) Installing python3-pycache-pyc0 (3.12.15-r0)
+  │ (8/13) Installing pyc (3.12.15-r0)
+  │ (9/13) Installing python3-pyc (3.12.15-r0)
+  │ (10/13) Installing libestr (0.1.11-r4)
+  │ (11/13) Installing libfastjson (1.2304.0-r4)
+  │ (12/13) Installing rsyslog (8.2410.0-r1)
+  │ (13/13) Installing rsyslog-tls (8.2410.0-r1)
+  │ Executing busybox-1.37.0-r20.trigger
+  │ OK: 344 MiB in 173 packages
+
+22:52:55 INFO Executed command node=dist1 command="sysctl -w net.ipv4.ip_forward=1"
+  stdout=
+  │ net.ipv4.ip_forward = 1
+
+22:52:55 INFO Executed command node=fw-dmz command="mkdir -p /etc/rsyslog.d /etc/ssh/sshd_config.d" stdout=""
+22:52:55 INFO Executed command node=fw-dmz command="sysctl -w net.ipv4.ip_forward=1"
+  stdout=
+  │ net.ipv4.ip_forward = 1
+
+22:52:55 INFO Executed command node=dist1 command="sh -c ip rule del pref 11001 2>/dev/null || true; ip rule add pref 11001 iif eth1 to 10.1.1.0/24 prohibit" stdout=""
+22:52:55 INFO Executed command node=fw-dmz command="sh -c ip address replace 10.255.0.10/30 dev eth1" stdout=""
+22:52:55 INFO Executed command node=dist2 command="sysctl -w net.ipv4.ip_forward=1"
+  stdout=
+  │ net.ipv4.ip_forward = 1
+
+22:52:55 INFO Executed command node=dist1 command="sh -c ip rule del pref 11002 2>/dev/null || true; ip rule add pref 11002 iif eth2 to 10.1.1.0/24 prohibit" stdout=""
+22:52:55 INFO Executed command node=fw-dmz command="sh -c ip address replace 195.1.1.166/29 dev eth2" stdout=""
+22:52:55 INFO Executed command node=dist2 command="sh -c ip rule del pref 11001 2>/dev/null || true; ip rule add pref 11001 iif eth1 to 10.1.1.0/24 prohibit" stdout=""
+22:52:55 INFO Executed command node=dist1 command="sh -c ip rule del pref 11003 2>/dev/null || true; ip rule add pref 11003 iif eth3 to 10.1.1.0/24 prohibit" stdout=""
+22:52:55 INFO Executed command node=fw-dmz command="sh -c ip route replace 0.0.0.0/0 via 10.255.0.9" stdout=""
+22:52:55 INFO Executed command node=dist2 command="sh -c ip rule del pref 11002 2>/dev/null || true; ip rule add pref 11002 iif eth2 to 10.1.1.0/24 prohibit" stdout=""
+22:52:55 INFO Executed command node=dist1 command="sh -c ip address replace 10.255.1.1/31 dev eth1" stdout=""
+22:52:55 INFO Executed command node=fw-dmz command="sh -c ip route replace 172.16.0.0/16 via 10.255.0.9" stdout=""
+22:52:55 INFO Executed command node=dist2 command="sh -c ip rule del pref 11003 2>/dev/null || true; ip rule add pref 11003 iif eth3 to 10.1.1.0/24 prohibit" stdout=""
+22:52:55 INFO Executed command node=dist1 command="sh -c ip address replace 192.168.10.252/24 dev eth2" stdout=""
+22:52:55 INFO Executed command node=fw-dmz command="sh -c ip route replace 192.168.0.0/16 via 10.255.0.9" stdout=""
+22:52:55 INFO Executed command node=dist2 command="sh -c ip address replace 10.255.1.3/31 dev eth1" stdout=""
+22:52:55 INFO Executed command node=dist1 command="sh -c ip address replace 192.168.40.252/24 dev eth3" stdout=""
+22:52:55 INFO Executed command node=dist2 command="sh -c ip address replace 192.168.10.253/24 dev eth2" stdout=""
+22:52:55 INFO Executed command node=fw-dmz command="nft -f /etc/nftables/policy.nft" stdout=""
+22:52:55 INFO Executed command node=dist1 command="sh -c ip route del default via 10.1.1.1 dev eth0 2>/dev/null || true" stdout=""
+22:52:55 INFO Executed command node=dist2 command="sh -c ip address replace 192.168.40.253/24 dev eth3" stdout=""
+22:52:55 INFO Executed command node=fw-dmz command="sh -c nohup python3 /opt/cxyz/nft_enforcer.py --listen 10.1.1.30 --port 9443 --cert /etc/cxyz/enforcer/tls.crt --key /etc/cxyz/enforcer/tls.key --client-ca /etc/cxyz/enforcer/ca.crt --allowed-client soc-response --table dmz --set soc_blocklist >/var/log/cxyz-enforcer.log 2>&1 &" stdout=""
+22:52:55 INFO Executed command node=dist2 command="sh -c ip route del default via 10.1.1.1 dev eth0 2>/dev/null || true" stdout=""
+22:52:55 INFO Executed command node=pc1 command="apk add --no-cache python3 rsyslog rsyslog-tls netcat-openbsd freeradius-utils"
+  stdout=
+  │ fetch https://dl-cdn.alpinelinux.org/alpine/v3.22/main/x86_64/APKINDEX.tar.gz
+  │ fetch https://dl-cdn.alpinelinux.org/alpine/v3.22/community/x86_64/APKINDEX.tar.gz
+  │ (1/13) Upgrading libexpat (2.7.3-r0 -> 2.8.5-r0)
+  │ (2/13) Installing freeradius-lib (3.0.27-r1)
+  │ (3/13) Installing freeradius-utils (3.0.27-r1)
+  │ (4/13) Installing mpdecimal (4.0.1-r0)
+  │ (5/13) Installing sqlite-libs (3.49.2-r1)
+  │ (6/13) Installing python3 (3.12.15-r0)
+  │ (7/13) Installing python3-pycache-pyc0 (3.12.15-r0)
+  │ (8/13) Installing pyc (3.12.15-r0)
+  │ (9/13) Installing python3-pyc (3.12.15-r0)
+  │ (10/13) Installing libestr (0.1.11-r4)
+  │ (11/13) Installing libfastjson (1.2304.0-r4)
+  │ (12/13) Installing rsyslog (8.2410.0-r1)
+  │ (13/13) Installing rsyslog-tls (8.2410.0-r1)
+  │ Executing busybox-1.37.0-r20.trigger
+  │ OK: 345 MiB in 173 packages
+
+22:52:55 INFO Executed command node=pc1 command="mkdir -p /etc/rsyslog.d /etc/ssh/sshd_config.d" stdout=""
+22:52:55 INFO Executed command node=pc1 command="sh -c ip address replace 192.168.10.1/24 dev eth1" stdout=""
+22:52:55 INFO Executed command node=pc1 command="sh -c ip route replace 0.0.0.0/0 via 192.168.10.254" stdout=""
+22:52:55 INFO Executed command node=pc1 command="sh -c ip link set eth0 down" stdout=""
+22:52:55 INFO Executed command node=pc4 command="apk add --no-cache python3 rsyslog rsyslog-tls netcat-openbsd freeradius-utils"
+  stdout=
+  │ fetch https://dl-cdn.alpinelinux.org/alpine/v3.22/main/x86_64/APKINDEX.tar.gz
+  │ fetch https://dl-cdn.alpinelinux.org/alpine/v3.22/community/x86_64/APKINDEX.tar.gz
+  │ (1/13) Upgrading libexpat (2.7.3-r0 -> 2.8.5-r0)
+  │ (2/13) Installing freeradius-lib (3.0.27-r1)
+  │ (3/13) Installing freeradius-utils (3.0.27-r1)
+  │ (4/13) Installing mpdecimal (4.0.1-r0)
+  │ (5/13) Installing sqlite-libs (3.49.2-r1)
+  │ (6/13) Installing python3 (3.12.15-r0)
+  │ (7/13) Installing python3-pycache-pyc0 (3.12.15-r0)
+  │ (8/13) Installing pyc (3.12.15-r0)
+  │ (9/13) Installing python3-pyc (3.12.15-r0)
+  │ (10/13) Installing libestr (0.1.11-r4)
+  │ (11/13) Installing libfastjson (1.2304.0-r4)
+  │ (12/13) Installing rsyslog (8.2410.0-r1)
+  │ (13/13) Installing rsyslog-tls (8.2410.0-r1)
+  │ Executing busybox-1.37.0-r20.trigger
+  │ OK: 345 MiB in 173 packages
+
+22:52:55 INFO Executed command node=pc4 command="mkdir -p /etc/rsyslog.d /etc/ssh/sshd_config.d" stdout=""
+22:52:55 INFO Executed command node=pc4 command="sh -c ip address replace 192.168.40.1/24 dev eth1" stdout=""
+22:52:55 INFO Executed command node=pc4 command="sh -c ip route replace 0.0.0.0/0 via 192.168.40.254" stdout=""
+22:52:55 INFO Adding host entries path=/etc/hosts
+22:52:55 INFO Adding SSH config for nodes path=/etc/ssh/ssh_config.d/clab-companyxyz.conf
+[1m╭[0m[1m───────────────────────────────[0m[1m┬[0m[1m─────────────────────────────────────────────────────────────────────────────────────────────────[0m[1m┬[0m[1m─────────[0m[1m┬[0m[1m────────────────[0m[1m╮[0m
+[1m│[0m[1m              Name             [0m[1m│[0m[1m                                            Kind/Image                                           [0m[1m│[0m[1m  State  [0m[1m│[0m[1m IPv4/6 Address [0m[1m│[0m
+[1m├[0m[1m───────────────────────────────[0m[1m┼[0m[1m─────────────────────────────────────────────────────────────────────────────────────────────────[0m[1m┼[0m[1m─────────[0m[1m┼[0m[1m────────────────[0m[1m┤[0m
+│ clab-companyxyz-access-switch │ linux                                                                                           │ running │ 10.1.1.4       │
+│                               │ alpine@sha256:d9e853e87e55526f6b2917df91a2115c36dd7c696a35be12163d44e6e2a4b6bc                  │         │ N/A            │
+├───────────────────────────────┼─────────────────────────────────────────────────────────────────────────────────────────────────┼─────────┼────────────────┤
+│ clab-companyxyz-core          │ linux                                                                                           │ running │ 10.1.1.11      │
+│                               │ quay.io/frrouting/frr@sha256:f310c2ebb3827fa03b9674ee05e70a7d5eef2123bcc3b475eb2ef14dafcb52b4   │         │ N/A            │
+├───────────────────────────────┼─────────────────────────────────────────────────────────────────────────────────────────────────┼─────────┼────────────────┤
+│ clab-companyxyz-dist1         │ linux                                                                                           │ running │ 10.1.1.2       │
+│                               │ quay.io/frrouting/frr@sha256:f310c2ebb3827fa03b9674ee05e70a7d5eef2123bcc3b475eb2ef14dafcb52b4   │         │ N/A            │
+├───────────────────────────────┼─────────────────────────────────────────────────────────────────────────────────────────────────┼─────────┼────────────────┤
+│ clab-companyxyz-dist2         │ linux                                                                                           │ running │ 10.1.1.3       │
+│                               │ quay.io/frrouting/frr@sha256:f310c2ebb3827fa03b9674ee05e70a7d5eef2123bcc3b475eb2ef14dafcb52b4   │         │ N/A            │
+├───────────────────────────────┼─────────────────────────────────────────────────────────────────────────────────────────────────┼─────────┼────────────────┤
+│ clab-companyxyz-dmz-web       │ linux                                                                                           │ running │ 10.1.1.61      │
+│                               │ wbitt/network-multitool@sha256:db2810fe2c8d36db074eab5d98fbf861c8ed55e0786d648d3477b3de9135632e │         │ N/A            │
+├───────────────────────────────┼─────────────────────────────────────────────────────────────────────────────────────────────────┼─────────┼────────────────┤
+│ clab-companyxyz-edge          │ linux                                                                                           │ running │ 10.1.1.10      │
+│                               │ quay.io/frrouting/frr@sha256:f310c2ebb3827fa03b9674ee05e70a7d5eef2123bcc3b475eb2ef14dafcb52b4   │         │ N/A            │
+├───────────────────────────────┼─────────────────────────────────────────────────────────────────────────────────────────────────┼─────────┼────────────────┤
+│ clab-companyxyz-fw-core       │ linux                                                                                           │ running │ 10.1.1.20      │
+│                               │ wbitt/network-multitool@sha256:db2810fe2c8d36db074eab5d98fbf861c8ed55e0786d648d3477b3de9135632e │         │ N/A            │
+├───────────────────────────────┼─────────────────────────────────────────────────────────────────────────────────────────────────┼─────────┼────────────────┤
+│ clab-companyxyz-fw-dmz        │ linux                                                                                           │ running │ 10.1.1.30      │
+│                               │ wbitt/network-multitool@sha256:db2810fe2c8d36db074eab5d98fbf861c8ed55e0786d648d3477b3de9135632e │         │ N/A            │
+├───────────────────────────────┼─────────────────────────────────────────────────────────────────────────────────────────────────┼─────────┼────────────────┤
+│ clab-companyxyz-isp1          │ linux                                                                                           │ running │ 10.1.1.201     │
+│                               │ quay.io/frrouting/frr@sha256:f310c2ebb3827fa03b9674ee05e70a7d5eef2123bcc3b475eb2ef14dafcb52b4   │         │ N/A            │
+├───────────────────────────────┼─────────────────────────────────────────────────────────────────────────────────────────────────┼─────────┼────────────────┤
+│ clab-companyxyz-isp2          │ linux                                                                                           │ running │ 10.1.1.202     │
+│                               │ quay.io/frrouting/frr@sha256:f310c2ebb3827fa03b9674ee05e70a7d5eef2123bcc3b475eb2ef14dafcb52b4   │         │ N/A            │
+├───────────────────────────────┼─────────────────────────────────────────────────────────────────────────────────────────────────┼─────────┼────────────────┤
+│ clab-companyxyz-pc1           │ linux                                                                                           │ running │ 10.1.1.111     │
+│                               │ wbitt/network-multitool@sha256:db2810fe2c8d36db074eab5d98fbf861c8ed55e0786d648d3477b3de9135632e │         │ N/A            │
+├───────────────────────────────┼─────────────────────────────────────────────────────────────────────────────────────────────────┼─────────┼────────────────┤
+│ clab-companyxyz-pc4           │ linux                                                                                           │ running │ 10.1.1.144     │
+│                               │ wbitt/network-multitool@sha256:db2810fe2c8d36db074eab5d98fbf861c8ed55e0786d648d3477b3de9135632e │         │ N/A            │
+├───────────────────────────────┼─────────────────────────────────────────────────────────────────────────────────────────────────┼─────────┼────────────────┤
+│ clab-companyxyz-server1       │ linux                                                                                           │ running │ 10.1.1.50      │
+│                               │ cxyz/server1:local                                                                              │         │ N/A            │
+╰───────────────────────────────┴─────────────────────────────────────────────────────────────────────────────────────────────────┴─────────┴────────────────╯
+python scripts/isolate_path_a_management.py
+OK: untrusted Path A endpoints are physically detached from cxyz_mgmt

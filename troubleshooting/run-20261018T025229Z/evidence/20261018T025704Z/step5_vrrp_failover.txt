@@ -1,0 +1,16 @@
+PING 198.10.10.1 (198.10.10.1) 56(84) bytes of data.
+[1792292261.911898] 64 bytes from 198.10.10.1: icmp_seq=1 ttl=60 time=0.250 ms
+[1792292262.013315] 64 bytes from 198.10.10.1: icmp_seq=2 ttl=60 time=0.215 ms
+[1792292262.117336] 64 bytes from 198.10.10.1: icmp_seq=3 ttl=60 time=0.233 ms
+[1792292262.221188] 64 bytes from 198.10.10.1: icmp_seq=4 ttl=60 time=0.105 ms
+[1792292262.325334] 64 bytes from 198.10.10.1: icmp_seq=5 ttl=60 time=0.206 ms
+[1792292262.429288] 64 bytes from 198.10.10.1: icmp_seq=6 ttl=60 time=0.198 ms
+[1792292262.533320] 64 bytes from 198.10.10.1: icmp_seq=7 ttl=60 time=0.213 ms
+[1792292262.637679] 64 bytes from 198.10.10.1: icmp_seq=8 ttl=60 time=0.217 ms
+[1792292262.745377] 64 bytes from 198.10.10.1: icmp_seq=9 ttl=60 time=0.274 ms
+[1792292262.849281] 64 bytes from 198.10.10.1: icmp_seq=10 ttl=60 time=0.196 ms
+[1792292262.957287] 64 bytes from 198.10.10.1: icmp_seq=11 ttl=60 time=0.243 ms
+[1792292263.065913] 64 bytes from 198.10.10.1: icmp_seq=12 ttl=60 time=0.118 ms
+[1792292263.169085] 64 bytes from 198.10.10.1: icmp_seq=13 ttl=60 time=0.104 ms
+[1792292263.273058] From 192.168.10.254 icmp_seq=14 Destination Net Unreachable
+[1792292263.377057] From 192.168.10.254 icmp_seq=15 Destination Net Unreachable

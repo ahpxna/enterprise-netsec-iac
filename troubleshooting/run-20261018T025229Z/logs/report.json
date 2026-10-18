@@ -1,0 +1,272 @@
+{
+  "started": "2026-10-18T02:52:29+00:00",
+  "mode": "full",
+  "facts": {},
+  "git": "",
+  "results": [
+    {
+      "stage": "fabric-up",
+      "title": "Deploy the routed fabric (containerlab, 12 nodes)",
+      "status": "PASS",
+      "seconds": 16.142475708998973,
+      "message": "",
+      "command": "",
+      "rc": null,
+      "log": "logs/try-linux/20261018T025229Z/01-fabric-up.log",
+      "points": [],
+      "hints": [],
+      "diagnostics": "",
+      "tail": []
+    },
+    {
+      "stage": "fabric-verify",
+      "title": "Verify the fabric: 12 nodes, containment sets, enforcement agents",
+      "status": "PASS",
+      "seconds": 0.5393178710073698,
+      "message": "12/12 nodes running, containment sets present, enforcement agents listening",
+      "command": "",
+      "rc": null,
+      "log": "logs/try-linux/20261018T025229Z/02-fabric-verify.log",
+      "points": [],
+      "hints": [],
+      "diagnostics": "",
+      "tail": []
+    },
+    {
+      "stage": "security-up",
+      "title": "Start Wazuh, Suricata, ZTNA and the DMZ app",
+      "status": "PASS",
+      "seconds": 8.522743345994968,
+      "message": "",
+      "command": "",
+      "rc": null,
+      "log": "logs/try-linux/20261018T025229Z/03-security-up.log",
+      "points": [],
+      "hints": [],
+      "diagnostics": "",
+      "tail": []
+    },
+    {
+      "stage": "soc-up",
+      "title": "Start the SOC analytics plane (Elasticsearch, Logstash, Kibana)",
+      "status": "PASS",
+      "seconds": 11.589684658989427,
+      "message": "",
+      "command": "",
+      "rc": null,
+      "log": "logs/try-linux/20261018T025229Z/04-soc-up.log",
+      "points": [],
+      "hints": [],
+      "diagnostics": "",
+      "tail": []
+    },
+    {
+      "stage": "soc-smoke",
+      "title": "Prove ingestion: four sources, malformed input, dashboard",
+      "status": "PASS",
+      "seconds": 11.377429139989545,
+      "message": "",
+      "command": "",
+      "rc": null,
+      "log": "logs/try-linux/20261018T025229Z/05-soc-smoke.log",
+      "points": [],
+      "hints": [],
+      "diagnostics": "",
+      "tail": []
+    },
+    {
+      "stage": "demo-model",
+      "title": "Build a DEMO approved model (synthetic data; proves wiring only)",
+      "status": "PASS",
+      "seconds": 0.0657517799991183,
+      "message": "",
+      "command": "",
+      "rc": null,
+      "log": "logs/try-linux/20261018T025229Z/06-demo-model.log",
+      "points": [],
+      "hints": [],
+      "diagnostics": "",
+      "tail": []
+    },
+    {
+      "stage": "soc-ai-up",
+      "title": "Start features, inference, enrichment, decision, orchestrator (observe mode)",
+      "status": "PASS",
+      "seconds": 57.64845225799945,
+      "message": "",
+      "command": "",
+      "rc": null,
+      "log": "logs/try-linux/20261018T025229Z/07-soc-ai-up.log",
+      "points": [],
+      "hints": [],
+      "diagnostics": "",
+      "tail": []
+    },
+    {
+      "stage": "dmzlab-up",
+      "title": "Start the DMZ deception lab (OWASP Juice Shop + Cowrie honeypot behind fw-dmz)",
+      "status": "PASS",
+      "seconds": 0.9235832739941543,
+      "message": "",
+      "command": "",
+      "rc": null,
+      "log": "logs/try-linux/20261018T025229Z/08-dmzlab-up.log",
+      "points": [],
+      "hints": [],
+      "diagnostics": "",
+      "tail": []
+    },
+    {
+      "stage": "dmzlab-verify",
+      "title": "Verify the DMZ lab: reachable, counted, logged and contained",
+      "status": "PASS",
+      "seconds": 33.02528965000238,
+      "message": "Juice Shop 200 + SSH honeypot banner via fw-dmz; DMZ host cannot reach internal zones; fw-dmz counters vuln=1 honeypot=1",
+      "command": "",
+      "rc": null,
+      "log": "logs/try-linux/20261018T025229Z/09-dmzlab-verify.log",
+      "points": [],
+      "hints": [],
+      "diagnostics": "",
+      "tail": []
+    },
+    {
+      "stage": "configure",
+      "title": "Apply the Ansible hardening roles",
+      "status": "FAIL",
+      "seconds": 116.33315781300189,
+      "message": "",
+      "command": "make configure",
+      "rc": 2,
+      "log": "logs/try-linux/20261018T025229Z/10-configure.log",
+      "points": [
+        "make target 'configure' failed at Makefile:84 (exit 2)"
+      ],
+      "hints": [
+        [
+          "TIME-01 needs the HOST clock disciplined by authenticated NTS",
+          "configure chrony from host/chrony-cxyz.sources.example, then `make host-time-check`"
+        ]
+      ],
+      "diagnostics": "",
+      "tail": [
+        "changed: [clab-companyxyz-fw-core]",
+        "changed: [clab-companyxyz-fw-dmz]",
+        "PLAY RECAP *********************************************************************",
+        "clab-companyxyz-core       : ok=6    changed=2    unreachable=0    failed=1    skipped=2    rescued=0    ignored=0   ",
+        "clab-companyxyz-dist1      : ok=6    changed=2    unreachable=0    failed=1    skipped=2    rescued=0    ignored=0   ",
+        "clab-companyxyz-dist2      : ok=6    changed=2    unreachable=0    failed=1    skipped=2    rescued=0    ignored=0   ",
+        "clab-companyxyz-dmz-web    : ok=5    changed=2    unreachable=0    failed=0    skipped=2    rescued=0    ignored=0   ",
+        "clab-companyxyz-edge       : ok=6    changed=2    unreachable=0    failed=1    skipped=2    rescued=0    ignored=0   ",
+        "clab-companyxyz-fw-core    : ok=13   changed=7    unreachable=0    failed=0    skipped=2    rescued=0    ignored=0   ",
+        "clab-companyxyz-fw-dmz     : ok=13   changed=7    unreachable=0    failed=0    skipped=2    rescued=0    ignored=0   ",
+        "clab-companyxyz-pc1        : ok=5    changed=2    unreachable=0    failed=0    skipped=2    rescued=0    ignored=0   ",
+        "clab-companyxyz-pc4        : ok=5    changed=2    unreachable=0    failed=0    skipped=2    rescued=0    ignored=0   ",
+        "clab-companyxyz-server1    : ok=28   changed=14   unreachable=0    failed=0    skipped=2    rescued=0    ignored=0   ",
+        "make: *** [Makefile:84: configure] Error 2"
+      ]
+    },
+    {
+      "stage": "validate",
+      "title": "Live validation: routing, segmentation, hardening",
+      "status": "FAIL",
+      "seconds": 8.008094760007225,
+      "message": "",
+      "command": "make validate",
+      "rc": 2,
+      "log": "logs/try-linux/20261018T025229Z/11-validate.log",
+      "points": [
+        "make target 'vpn-probe' failed at Makefile:245 (exit 1)",
+        "python: pathlib.py:1311 in mkdir -> PermissionError: [Errno 13] Permission denied: '/home/phan/Documents/enterprise-netsec-iac-main/wireguard/probe'"
+      ],
+      "hints": [],
+      "diagnostics": "",
+      "tail": [
+        "FileNotFoundError: [Errno 2] No such file or directory: '/home/phan/Documents/enterprise-netsec-iac-main/wireguard/probe/wg_confs'",
+        "During handling of the above exception, another exception occurred:",
+        "Traceback (most recent call last):",
+        "  File \"/home/phan/Documents/enterprise-netsec-iac-main/scripts/prepare_vpn_probe.py\", line 67, in <module>",
+        "    raise SystemExit(main())",
+        "                     ^^^^^^",
+        "  File \"/home/phan/Documents/enterprise-netsec-iac-main/scripts/prepare_vpn_probe.py\", line 59, in main",
+        "    DEST.parent.mkdir(parents=True, exist_ok=True)",
+        "  File \"/home/phan/.local/share/uv/python/cpython-3.12.15-linux-x86_64-gnu/lib/python3.12/pathlib.py\", line 1315, in mkdir",
+        "    self.parent.mkdir(parents=True, exist_ok=True)",
+        "  File \"/home/phan/.local/share/uv/python/cpython-3.12.15-linux-x86_64-gnu/lib/python3.12/pathlib.py\", line 1311, in mkdir",
+        "    os.mkdir(self, mode)",
+        "PermissionError: [Errno 13] Permission denied: '/home/phan/Documents/enterprise-netsec-iac-main/wireguard/probe'",
+        "make: *** [Makefile:245: vpn-probe] Error 1"
+      ]
+    },
+    {
+      "stage": "attack",
+      "title": "Replay the attack chain and prove the SIEM sees it",
+      "status": "FAIL",
+      "seconds": 60.324812936989474,
+      "message": "",
+      "command": "make attack",
+      "rc": 2,
+      "log": "logs/try-linux/20261018T025229Z/12-attack.log",
+      "points": [
+        "make target 'attack' failed at Makefile:258 (exit 1)"
+      ],
+      "hints": [],
+      "diagnostics": "",
+      "tail": [
+        "EVIDENCE_DIR=evidence/runs/20261018T025704Z bash scripts/attack_chain.sh",
+        "FAIL[DET-01]: enforcement-to-Wazuh correlation failed",
+        "% Can't open configuration file /etc/frr/vtysh.conf due to 'No such file or directory'.",
+        "Configuration file[/etc/frr/frr.conf] processing failure: 11",
+        "attack replay complete: 1 critical failure(s); evidence=evidence/runs/20261018T025704Z",
+        "make: *** [Makefile:258: attack] Error 1"
+      ]
+    },
+    {
+      "stage": "soc-validate",
+      "title": "Live SOC/AI/response verifiers (enforce mode for ~10 min, then restored)",
+      "status": "FAIL",
+      "seconds": 2337.860019097003,
+      "message": "",
+      "command": "make soc-ai-validate",
+      "rc": 2,
+      "log": "logs/try-linux/20261018T025229Z/13-soc-validate.log",
+      "points": [
+        "make target 'soc-ai-validate' failed at Makefile:194 (exit 1)",
+        "pytest failed: tests/validation/test_soc_ai.py::test_ai01_feature_to_inference_event"
+      ],
+      "hints": [],
+      "diagnostics": "",
+      "tail": [
+        " Container cxyz-security-elasticsearch-1  Waiting",
+        " Container cxyz-security-elasticsearch-1  Healthy",
+        " Container cxyz-security-soc-service-init-1  Starting",
+        " Container cxyz-security-soc-service-init-1  Started",
+        " Container cxyz-security-soc-service-init-1  Waiting",
+        " Container cxyz-security-soc-service-init-1  Waiting",
+        " Container cxyz-security-soc-service-init-1  Exited",
+        " Container cxyz-security-soc-decision-1  Starting",
+        " Container cxyz-security-soc-service-init-1  Exited",
+        " Container cxyz-security-soc-response-1  Starting",
+        " Container cxyz-security-soc-decision-1  Started",
+        " Container cxyz-security-soc-response-1  Started",
+        "make[1]: Leaving directory '/home/phan/Documents/enterprise-netsec-iac-main'",
+        "make: *** [Makefile:194: soc-ai-validate] Error 1"
+      ]
+    },
+    {
+      "stage": "report",
+      "title": "Compliance report from the evidence just produced",
+      "status": "WARN",
+      "seconds": 4.8770021889940836,
+      "message": "Summary: 12 passed \u00b7 1 failed \u00b7 0 error \u00b7 13 unverified (of 26 controls applicable to this profile)  -> evidence/COMPLIANCE-REPORT.md; not passing: AI-01 (FAIL)",
+      "command": "",
+      "rc": null,
+      "log": "logs/try-linux/20261018T025229Z/14-report.log",
+      "points": [],
+      "hints": [],
+      "diagnostics": "",
+      "tail": []
+    }
+  ],
+  "viz": null
+}

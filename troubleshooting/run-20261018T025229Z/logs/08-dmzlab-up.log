@@ -1,0 +1,12 @@
+
+$ make dmzlab-up
+docker compose --profile dmzlab up -d --force-recreate dmz-vuln dmz-honeypot
+ Container cxyz-security-dmz-honeypot-1  Recreate
+ Container cxyz-security-dmz-vuln-1  Recreate
+ Container cxyz-security-dmz-vuln-1  Recreated
+ Container cxyz-security-dmz-honeypot-1  Recreated
+ Container cxyz-security-dmz-vuln-1  Starting
+ Container cxyz-security-dmz-honeypot-1  Starting
+ Container cxyz-security-dmz-vuln-1  Started
+ Container cxyz-security-dmz-honeypot-1  Started
+==> make dmzlab-status | make dmzlab-attack (generate hostile traffic from pc1)

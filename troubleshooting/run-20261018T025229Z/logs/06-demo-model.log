@@ -1,0 +1,3 @@
+
+$ /home/phan/Documents/enterprise-netsec-iac-main/.venv/bin/python scripts/soc_ai_preflight.py
+OK: SOC AI/response preflight (approved model digest, PKI, signing key, deployment files)

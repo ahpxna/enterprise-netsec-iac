@@ -1,0 +1,144 @@
+
+$ make security
+python scripts/check_authentik_migration.py
+OK: no legacy Authentik 2024.8 volume detected; fresh authentik_db_2026 is safe to create
+docker build -t cxyz/server1:local docker/server1
+#0 building with "default" instance using docker driver
+
+#1 [internal] load build definition from Dockerfile
+#1 transferring dockerfile: 1.90kB done
+#1 DONE 0.0s
+
+#2 [internal] load metadata for docker.io/library/debian@sha256:abd67ffcfa541b485a3dff59865ab629aa048a6c613e639d36e7456b0b229241
+#2 DONE 0.3s
+
+#3 [internal] load .dockerignore
+#3 transferring context: 2B 0.0s done
+#3 DONE 0.0s
+
+#4 [1/3] FROM docker.io/library/debian@sha256:abd67ffcfa541b485a3dff59865ab629aa048a6c613e639d36e7456b0b229241
+#4 DONE 0.0s
+
+#5 [internal] load build context
+#5 transferring context: 38B done
+#5 DONE 0.0s
+
+#6 [2/3] RUN rm -f /etc/apt/sources.list.d/debian.sources     && printf '%s\n'        "deb [check-valid-until=no] http://snapshot.debian.org/archive/debian/20260820T000000Z/ bookworm main"        "deb [check-valid-until=no] http://snapshot.debian.org/archive/debian/20260820T000000Z/ bookworm-updates main"        "deb [check-valid-until=no] http://snapshot.debian.org/archive/debian-security/20260820T000000Z/ bookworm-security main"        > /etc/apt/sources.list     && apt-get -o Acquire::Check-Valid-Until=false update     && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends ca-certificates     && printf '%s\n'        "deb [check-valid-until=no] https://snapshot.debian.org/archive/debian/20260820T000000Z/ bookworm main"        "deb [check-valid-until=no] https://snapshot.debian.org/archive/debian/20260820T000000Z/ bookworm-updates main"        "deb [check-valid-until=no] https://snapshot.debian.org/archive/debian-security/20260820T000000Z/ bookworm-security main"        > /etc/apt/sources.list     && apt-get -o Acquire::Check-Valid-Until=false update     && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends        dnsmasq dnsutils freeradius freeradius-utils iproute2        netcat-openbsd openssh-server python3 python3-apt rsyslog rsyslog-gnutls        supervisor tcpdump     && rm -rf /var/lib/apt/lists/*     && mkdir -p /run/sshd /var/log/supervisor /etc/ssh/sshd_config.d
+#6 CACHED
+
+#7 [3/3] COPY supervisord.conf /etc/supervisor/conf.d/cxyz.conf
+#7 CACHED
+
+#8 exporting to image
+#8 exporting layers done
+#8 writing image sha256:88e3e4c57cbe5133c21eb5bc647b02f72dacf11dfba1fe7285c92dfd7d5b2774 0.0s done
+#8 naming to docker.io/cxyz/server1:local done
+#8 DONE 0.0s
+docker build -t cxyz/syslog-relay:local docker/syslog-relay
+#0 building with "default" instance using docker driver
+
+#1 [internal] load build definition from Dockerfile
+#1 transferring dockerfile: 1.30kB done
+#1 DONE 0.0s
+
+#2 [internal] load metadata for docker.io/library/debian@sha256:abd67ffcfa541b485a3dff59865ab629aa048a6c613e639d36e7456b0b229241
+#2 DONE 0.0s
+
+#3 [internal] load .dockerignore
+#3 transferring context: 2B done
+#3 DONE 0.0s
+
+#4 [internal] load build context
+#4 transferring context: 34B done
+#4 DONE 0.0s
+
+#5 [1/3] FROM docker.io/library/debian@sha256:abd67ffcfa541b485a3dff59865ab629aa048a6c613e639d36e7456b0b229241
+#5 DONE 0.0s
+
+#6 [2/3] RUN rm -f /etc/apt/sources.list.d/debian.sources     && printf '%s\n'        "deb [check-valid-until=no] http://snapshot.debian.org/archive/debian/20260820T000000Z/ bookworm main"        "deb [check-valid-until=no] http://snapshot.debian.org/archive/debian-security/20260820T000000Z/ bookworm-security main"        > /etc/apt/sources.list     && apt-get -o Acquire::Check-Valid-Until=false update     && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends ca-certificates     && printf '%s\n'        "deb [check-valid-until=no] https://snapshot.debian.org/archive/debian/20260820T000000Z/ bookworm main"        "deb [check-valid-until=no] https://snapshot.debian.org/archive/debian-security/20260820T000000Z/ bookworm-security main"        > /etc/apt/sources.list     && apt-get -o Acquire::Check-Valid-Until=false update     && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends        rsyslog rsyslog-gnutls     && rm -rf /var/lib/apt/lists/*     && mkdir -p /var/log/cxyz
+#6 CACHED
+
+#7 [3/3] COPY rsyslog.conf /etc/rsyslog.conf
+#7 CACHED
+
+#8 exporting to image
+#8 exporting layers done
+#8 writing image sha256:dfeb5da8afa40cf4c24c6149c7811f6acf84723f34b81c57ac32bb9859a3f9a8 done
+#8 naming to docker.io/cxyz/syslog-relay:local done
+#8 DONE 0.0s
+docker build -f docker/soc-python/Dockerfile -t cxyz/soc-python:local .
+#0 building with "default" instance using docker driver
+
+#1 [internal] load build definition from Dockerfile
+#1 transferring dockerfile: 2.23kB done
+#1 DONE 0.0s
+
+#2 [internal] load metadata for docker.io/library/debian@sha256:abd67ffcfa541b485a3dff59865ab629aa048a6c613e639d36e7456b0b229241
+#2 DONE 0.0s
+
+#3 [internal] load .dockerignore
+#3 transferring context: 507B done
+#3 DONE 0.0s
+
+#4 [ 1/11] FROM docker.io/library/debian@sha256:abd67ffcfa541b485a3dff59865ab629aa048a6c613e639d36e7456b0b229241
+#4 DONE 0.0s
+
+#5 [internal] load build context
+#5 transferring context: 5.77kB 0.0s done
+#5 DONE 0.0s
+
+#6 [ 5/11] RUN useradd --uid 10001 --no-create-home --shell /usr/sbin/nologin soc     && mkdir -p /app /var/lib/soc && chown soc:soc /var/lib/soc && chmod 0700 /var/lib/soc
+#6 CACHED
+
+#7 [10/11] COPY soc/__init__.py /app/soc/__init__.py
+#7 CACHED
+
+#8 [ 2/11] RUN rm -f /etc/apt/sources.list.d/debian.sources     && printf '%s\n'        "deb [check-valid-until=no] http://snapshot.debian.org/archive/debian/20260820T000000Z/ bookworm main"        "deb [check-valid-until=no] http://snapshot.debian.org/archive/debian-security/20260820T000000Z/ bookworm-security main"        > /etc/apt/sources.list     && apt-get -o Acquire::Check-Valid-Until=false update     && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends ca-certificates     && printf '%s\n'        "deb [check-valid-until=no] https://snapshot.debian.org/archive/debian/20260820T000000Z/ bookworm main"        "deb [check-valid-until=no] https://snapshot.debian.org/archive/debian-security/20260820T000000Z/ bookworm-security main"        > /etc/apt/sources.list     && apt-get -o Acquire::Check-Valid-Until=false update     && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends        python3 python3-venv     && rm -rf /var/lib/apt/lists/*
+#8 CACHED
+
+#9 [ 8/11] COPY response /app/response
+#9 CACHED
+
+#10 [ 4/11] RUN python3 -m venv /opt/venv     && /opt/venv/bin/pip install --no-cache-dir --require-hashes -r /tmp/requirements-soc-service.lock     && rm -f /tmp/requirements-soc-service.lock
+#10 CACHED
+
+#11 [ 9/11] COPY schemas /app/schemas
+#11 CACHED
+
+#12 [ 3/11] COPY requirements-soc-service.lock /tmp/requirements-soc-service.lock
+#12 CACHED
+
+#13 [ 7/11] COPY ai /app/ai
+#13 CACHED
+
+#14 [ 6/11] WORKDIR /app
+#14 CACHED
+
+#15 [11/11] COPY soc/workers /app/soc/workers
+#15 CACHED
+
+#16 exporting to image
+#16 exporting layers done
+#16 writing image sha256:3de08080328abfef63378de56aefc193c12b6bfc27842ff7447fff6573e23ae5 done
+#16 naming to docker.io/cxyz/soc-python:local done
+#16 DONE 0.0s
+bash scripts/ensure_dc_network.sh
+cxyz_dc already matches canonical DC network
+secrets ready (values NOT shown; stored in .env and local service config)
+python scripts/check_wazuh_pki.py
+OK: Wazuh PKI chain, expiry and service DNS identities are valid
+bash scripts/render_wazuh_users.sh
+generated Wazuh internal user database + authenticated enrollment secret (values not printed)
+docker compose --profile siem --profile ids --profile ztna --profile dmz up -d
+ Container cxyz-security-ztna-demo-app-1  Running
+ Container cxyz-security-wazuh.manager-1  Running
+ Container cxyz-security-syslog-relay-1  Running
+ Container cxyz-security-authentik-postgres-1  Running
+ Container cxyz-security-traefik-1  Running
+ Container cxyz-security-authentik-server-1  Running
+ Container cxyz-security-authentik-worker-1  Running
+ Container cxyz-security-wazuh-indexer-1  Running
+ Container cxyz-security-wireguard-1  Running
+ Container cxyz-security-wazuh.dashboard-1  Running
+ Container cxyz-security-suricata-1  Starting
+ Container cxyz-security-suricata-1  Started

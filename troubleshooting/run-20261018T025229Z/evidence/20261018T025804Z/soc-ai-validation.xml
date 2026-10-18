@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="13" time="2263.438" timestamp="2026-10-17T22:58:58.539534-04:00" hostname="host"><testcase classname="tests.validation.test_soc_ai" name="test_log01_multi_source_ingestion" time="6.259" /><testcase classname="tests.validation.test_soc_ai" name="test_log02_ecs_normalization_preserves_raw" time="0.074" /><testcase classname="tests.validation.test_soc_ai" name="test_log03_ingestion_failure_is_accounted" time="70.440" /><testcase classname="tests.validation.test_soc_ai" name="test_ai01_feature_to_inference_event" time="2001.715"><failure message="AssertionError: timed out after 1500s waiting for the enriched soc-ai event for that vector">soc_run = &lt;soc_live.Run object at 0x7f7e8c0de090&gt;
+evidence = &lt;function evidence.&lt;locals&gt;._record at 0x7f7e8c04b600&gt;
+
+    def test_ai01_feature_to_inference_event(soc_run, evidence):
+&gt;       verify("AI-01", soc_run, evidence)
+
+tests/validation/test_soc_ai.py:50: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/validation/test_soc_ai.py:32: in verify
+    assertion, observed = soc_live.CHECKS[control](soc_run)
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/validation/soc_live.py:668: in check_ai01
+    result = run.ai_pipeline()
+             ^^^^^^^^^^^^^^^^^
+tests/validation/soc_live.py:472: in ai_pipeline
+    return self.once("ai_pipeline", self._run_ai_pipeline)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/validation/soc_live.py:354: in once
+    self.cache[name] = build()
+                       ^^^^^^^
+tests/validation/soc_live.py:494: in _run_ai_pipeline
+    found_inference = wait_until(lab, inference, timeout=self.timeouts.ai_pipeline, interval=15,
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+lab = &lt;soc_live.DockerLab object at 0x7f7e8c0de0c0&gt;
+probe = &lt;function Run._run_ai_pipeline.&lt;locals&gt;.inference at 0x7f7e8c04b6a0&gt;
+timeout = 1500.0, interval = 15
+what = 'the enriched soc-ai event for that vector'
+
+    def wait_until(lab: Lab, probe: Callable[[], Any], *, timeout: float, interval: float, what: str) -&gt; Any:
+        deadline = lab.now() + timedelta(seconds=timeout)
+        while True:
+            value = probe()
+            if value:
+                return value
+            if lab.now() &gt;= deadline:
+&gt;               raise AssertionError(f"timed out after {timeout:.0f}s waiting for {what}")
+E               AssertionError: timed out after 1500s waiting for the enriched soc-ai event for that vector
+
+tests/validation/soc_live.py:139: AssertionError</failure></testcase><testcase classname="tests.validation.test_soc_ai" name="test_ai02_model_provenance_is_bound_to_serving" time="0.399" /><testcase classname="tests.validation.test_soc_ai" name="test_ai03_schema_mismatch_is_rejected" time="2.345" /><testcase classname="tests.validation.test_soc_ai" name="test_ai04_five_detector_comparison_is_carried" time="0.001" /><testcase classname="tests.validation.test_soc_ai" name="test_cor01_anomaly_alone_never_requests_containment" time="89.842" /><testcase classname="tests.validation.test_soc_ai" name="test_resp01_firewall_containment_is_applied_and_verified" time="0.001" /><testcase classname="tests.validation.test_soc_ai" name="test_resp03_safeguards_ttl_rate_limit_and_audit" time="88.016" /><testcase classname="tests.validation.test_soc_ai" name="test_soc01_dashboards_show_the_attack_trace" time="2.809" /><testcase classname="tests.validation.test_soc_ai" name="test_soc02_timing_is_derived_from_immutable_records" time="0.001" /><testcase classname="tests.validation.test_soc_ai" name="test_soc03_audit_chain_links_alert_to_rollback" time="0.005" /></testsuite></testsuites>

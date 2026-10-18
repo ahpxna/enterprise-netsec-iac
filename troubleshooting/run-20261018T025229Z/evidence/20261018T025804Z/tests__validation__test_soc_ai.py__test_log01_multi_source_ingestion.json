@@ -1,0 +1,49 @@
+{
+  "assertion": "A unique marker injected for each of four sources (firewall, RADIUS, Suricata, Wazuh) reached the normalized streams with source-authentication provenance; fixtures carry the fixture provenance label, so this proves pipeline mapping per source, not the authenticity of production transports",
+  "control_catalog_sha256": "9aa1afbab98a288dd065c8008fb114eaa7585b6363503a9d1b4278d0f64cd26d",
+  "control_id": "LOG-01",
+  "counter_after": null,
+  "counter_before": null,
+  "deployment_config_sha256": "cafc092f55a3020a758605773933d843bc1a20390fbbe33115974b5fa5eec319",
+  "duration_seconds": 6.350708,
+  "ended_at": "2026-10-18T02:59:04.932552Z",
+  "enforcement_node": null,
+  "environment": "local-containerlab",
+  "failure": null,
+  "git_dirty": true,
+  "git_sha": "unknown",
+  "observed": {
+    "run_marker": "cxyz-live-fa40f335b6",
+    "sources": {
+      "firewall.syslog": {
+        "index": "soc-network-2026.10.18",
+        "ingestion_id": "b925b1202aa613c6173f130b2dfc9de4e487e691ca237bd0e3bcd25e7a134e5c",
+        "source_authentication": "operator_fixture"
+      },
+      "freeradius.auth": {
+        "index": "soc-auth-2026.10.18",
+        "ingestion_id": "54f1b21188f4fd0403861810d1288c29e329132b7bde6d6b29cf0ef3fd2d8770",
+        "source_authentication": "operator_fixture"
+      },
+      "suricata.eve": {
+        "index": "soc-alerts-2026.10.18",
+        "ingestion_id": "73e60eb03f02830f532fd4c779c15b7b0be50fa807ba6fdc538799bd9ce00687",
+        "source_authentication": "operator_fixture"
+      },
+      "wazuh.alerts": {
+        "index": "soc-alerts-2026.10.18",
+        "ingestion_id": "b607f26d155026a9670185c5d0cb319888772c46e58f966717d5229f8565f752",
+        "source_authentication": "operator_fixture"
+      }
+    }
+  },
+  "pytest_phase": "call",
+  "result": "PASS",
+  "run_id": "20261018T025804Z",
+  "schema_version": 2,
+  "source_tree_sha256": "fdf46ed0bb3c604900c350416a4c39682efcb67929721c5c76c8ed38702e375b",
+  "started_at": "2026-10-18T02:58:58.581836Z",
+  "test_id": "tests/validation/test_soc_ai.py::test_log01_multi_source_ingestion",
+  "test_suite_sha256": "69883f08da68f0dad0c6ded4adf5e731114916ef6c555c239991ae5637aa6a07",
+  "topology_sha256": "6d9d5eadf866fbfaf75766cceed735486c90beae1f6b65db1a7615f71e76579b"
+}

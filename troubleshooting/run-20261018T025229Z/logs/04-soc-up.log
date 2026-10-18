@@ -1,0 +1,37 @@
+
+$ make soc-up
+secrets ready (values NOT shown; stored in .env and local service config)
+bash scripts/ensure_dc_network.sh
+cxyz_dc already matches canonical DC network
+docker compose --profile soc up -d --wait elasticsearch
+ Container cxyz-security-elasticsearch-1  Running
+ Container cxyz-security-soc-cert-init-1  Starting
+ Container cxyz-security-soc-cert-init-1  Started
+ Container cxyz-security-soc-cert-init-1  Waiting
+ Container cxyz-security-soc-cert-init-1  Exited
+ Container cxyz-security-elasticsearch-1  Waiting
+ Container cxyz-security-soc-cert-init-1  Waiting
+ Container cxyz-security-soc-cert-init-1  Exited
+ Container cxyz-security-elasticsearch-1  Healthy
+docker compose --profile soc run --rm --no-deps soc-account-setup
+{}{"role":{"created":false}}{"created":false}{"created":true}{"role":{"created":false}}{"role":{"created":false}}{"role":{"created":false}}{"role":{"created":false}}{"acknowledged":true}{"acknowledged":true}{"acknowledged":true}{"acknowledged":true}{"acknowledged":true}{"acknowledged":true}{"acknowledged":true}{"acknowledged":true}{"acknowledged":true}{"acknowledged":true}{"acknowledged":true}{"acknowledged":true}SOC Elasticsearch roles, users, and templates are current
+docker compose --profile soc up -d --wait --no-deps logstash kibana
+ Container cxyz-security-kibana-1  Running
+ Container cxyz-security-logstash-1  Running
+ Container cxyz-security-logstash-1  Waiting
+ Container cxyz-security-kibana-1  Waiting
+ Container cxyz-security-kibana-1  Healthy
+ Container cxyz-security-logstash-1  Healthy
+docker compose --profile soc run --rm --no-deps soc-kibana-setup
+SOC Kibana data views and dashboards are current
+docker compose --profile soc run --rm --no-deps soc-kibana-bootstrap-revoke
+{"found":true}SOC Kibana bootstrap identity revoked
+
+$ make soc-health
+docker compose --profile soc ps elasticsearch logstash kibana
+NAME                            IMAGE                                                                                                                   COMMAND                  SERVICE         CREATED       STATUS                    PORTS
+cxyz-security-elasticsearch-1   docker.elastic.co/elasticsearch/elasticsearch@sha256:cb637acad8808664b7c57455a2b2ee87e30b3cab210f3ccc423ff6bcc305e0b9   "/bin/tini -- /usr/l…"   elasticsearch   9 hours ago   Up 15 minutes (healthy)   
+cxyz-security-kibana-1          docker.elastic.co/kibana/kibana@sha256:cb4056251fb4116bbfe4de272284fd3d3f43159ef7a5ffe7c18b64d21ceafb12                 "/bin/tini -- /usr/l…"   kibana          8 hours ago   Up 8 hours (healthy)      127.0.0.1:5602->5601/tcp
+cxyz-security-logstash-1        docker.elastic.co/logstash/logstash@sha256:04908aea76eb20de8d7bbaf6870db06419c7db3bbc856266c7a11c7db4972345             "/usr/local/bin/dock…"   logstash        4 hours ago   Up 4 hours (healthy)      
+docker compose exec -T elasticsearch bash -ec 'curl --silent --fail --cacert config/certs/ca.crt --user "elastic:${ELASTIC_PASSWORD}" https://localhost:9200/_cluster/health'
+{"cluster_name":"cxyz-soc","status":"green","timed_out":false,"number_of_nodes":1,"number_of_data_nodes":1,"active_primary_shards":52,"active_shards":52,"relocating_shards":0,"initializing_shards":0,"unassigned_shards":0,"unassigned_primary_shards":0,"delayed_unassigned_shards":0,"number_of_pending_tasks":0,"number_of_in_flight_fetch":0,"task_max_waiting_in_queue_millis":0,"active_shards_percent_as_number":100.0}

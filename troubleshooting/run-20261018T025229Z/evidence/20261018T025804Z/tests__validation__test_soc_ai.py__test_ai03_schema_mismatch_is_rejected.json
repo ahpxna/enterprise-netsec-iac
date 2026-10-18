@@ -1,0 +1,32 @@
+{
+  "assertion": "Requests for a different feature schema or an unknown feature set are rejected with HTTP 422 (FEATURE_SCHEMA_MISMATCH for a schema mismatch), return no score, are never mapped automatically, and leave no soc-ai record",
+  "control_catalog_sha256": "9aa1afbab98a288dd065c8008fb114eaa7585b6363503a9d1b4278d0f64cd26d",
+  "control_id": "AI-03",
+  "counter_after": null,
+  "counter_before": null,
+  "deployment_config_sha256": "cafc092f55a3020a758605773933d843bc1a20390fbbe33115974b5fa5eec319",
+  "duration_seconds": 2.403357,
+  "ended_at": "2026-10-18T03:33:40.602112Z",
+  "enforcement_node": null,
+  "environment": "local-containerlab",
+  "failure": null,
+  "git_dirty": true,
+  "git_sha": "unknown",
+  "observed": {
+    "error_counter_after": 2.0,
+    "error_counter_before": 0.0,
+    "mismatch_status": 422,
+    "probe_schema": "endpoint-window-v1",
+    "served_schema": "network-window-v1",
+    "unknown_feature_status": 422
+  },
+  "pytest_phase": "call",
+  "result": "PASS",
+  "run_id": "20261018T025804Z",
+  "schema_version": 2,
+  "source_tree_sha256": "fdf46ed0bb3c604900c350416a4c39682efcb67929721c5c76c8ed38702e375b",
+  "started_at": "2026-10-18T03:33:38.198745Z",
+  "test_id": "tests/validation/test_soc_ai.py::test_ai03_schema_mismatch_is_rejected",
+  "test_suite_sha256": "69883f08da68f0dad0c6ded4adf5e731114916ef6c555c239991ae5637aa6a07",
+  "topology_sha256": "6d9d5eadf866fbfaf75766cceed735486c90beae1f6b65db1a7615f71e76579b"
+}

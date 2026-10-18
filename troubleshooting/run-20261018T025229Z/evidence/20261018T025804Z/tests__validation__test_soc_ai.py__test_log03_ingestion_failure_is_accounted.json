@@ -1,0 +1,30 @@
+{
+  "assertion": "A malformed event is retained verbatim in both the raw and dead-letter streams, Logstash runs a persistent queue with a dead-letter queue, and an event injected while Elasticsearch was stopped was held in the queue and delivered exactly once after recovery",
+  "control_catalog_sha256": "9aa1afbab98a288dd065c8008fb114eaa7585b6363503a9d1b4278d0f64cd26d",
+  "control_id": "LOG-03",
+  "counter_after": null,
+  "counter_before": null,
+  "deployment_config_sha256": "cafc092f55a3020a758605773933d843bc1a20390fbbe33115974b5fa5eec319",
+  "duration_seconds": 70.555507,
+  "ended_at": "2026-10-18T03:00:15.745624Z",
+  "enforcement_node": null,
+  "environment": "local-containerlab",
+  "failure": null,
+  "git_dirty": true,
+  "git_sha": "unknown",
+  "observed": {
+    "dead_letter_queue": true,
+    "queue_type": "persisted",
+    "queued_events_during_outage": 242,
+    "run_marker": "cxyz-live-fa40f335b6"
+  },
+  "pytest_phase": "call",
+  "result": "PASS",
+  "run_id": "20261018T025804Z",
+  "schema_version": 2,
+  "source_tree_sha256": "fdf46ed0bb3c604900c350416a4c39682efcb67929721c5c76c8ed38702e375b",
+  "started_at": "2026-10-18T02:59:05.190107Z",
+  "test_id": "tests/validation/test_soc_ai.py::test_log03_ingestion_failure_is_accounted",
+  "test_suite_sha256": "69883f08da68f0dad0c6ded4adf5e731114916ef6c555c239991ae5637aa6a07",
+  "topology_sha256": "6d9d5eadf866fbfaf75766cceed735486c90beae1f6b65db1a7615f71e76579b"
+}

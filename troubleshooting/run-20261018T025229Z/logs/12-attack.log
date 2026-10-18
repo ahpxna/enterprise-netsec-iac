@@ -1,0 +1,10 @@
+
+$ make attack
+EVIDENCE_DIR=evidence/runs/20261018T025704Z bash scripts/attack_chain.sh
+FAIL[DET-01]: enforcement-to-Wazuh correlation failed
+% Can't open configuration file /etc/frr/vtysh.conf due to 'No such file or directory'.
+Configuration file[/etc/frr/frr.conf] processing failure: 11
+attack replay complete: 1 critical failure(s); evidence=evidence/runs/20261018T025704Z
+make: *** [Makefile:258: attack] Error 1
+
+[runner] exit code 2

@@ -1,0 +1,27 @@
+{
+  "assertion": "mapped control test exited before recording explicit observations",
+  "control_catalog_sha256": "9aa1afbab98a288dd065c8008fb114eaa7585b6363503a9d1b4278d0f64cd26d",
+  "control_id": "AI-01",
+  "counter_after": null,
+  "counter_before": null,
+  "deployment_config_sha256": "cafc092f55a3020a758605773933d843bc1a20390fbbe33115974b5fa5eec319",
+  "duration_seconds": 2001.888626,
+  "ended_at": "2026-10-18T03:33:37.670469Z",
+  "enforcement_node": null,
+  "environment": "local-containerlab",
+  "failure": "soc_run = <soc_live.Run object at 0x7f7e8c0de090>\nevidence = <function evidence.<locals>._record at 0x7f7e8c04b600>\n\n    def test_ai01_feature_to_inference_event(soc_run, evidence):\n>       verify(\"AI-01\", soc_run, evidence)\n\ntests/validation/test_soc_ai.py:50: \n_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ \ntests/validation/test_soc_ai.py:32: in verify\n    assertion, observed = soc_live.CHECKS[control](soc_run)\n                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\ntests/validation/soc_live.py:668: in check_ai01\n    result = run.ai_pipeline()\n             ^^^^^^^^^^^^^^^^^\ntests/validation/soc_live.py:472: in ai_pipeline\n    return self.once(\"ai_pipeline\", self._run_ai_pipeline)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\ntests/validation/soc_live.py:354: in once\n    self.cache[name] = build()\n                       ^^^^^^^\ntests/validation/soc_live.py:494: in _run_ai_pipeline\n    found_inference = wait_until(lab, inference, timeout=self.timeouts.ai_pipeline, interval=15,\n_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ \n\nlab = <soc_live.DockerLab object at 0x7f7e8c0de0c0>\nprobe = <function Run._run_ai_pipeline.<locals>.inference at 0x7f7e8c04b6a0>\ntimeout = 1500.0, interval = 15\nwhat = 'the enriched soc-ai event for that vector'\n\n    def wait_until(lab: Lab, probe: Callable[[], Any], *, timeout: float, interval: float, what: str) -> Any:\n        deadline = lab.now() + timedelta(seconds=timeout)\n        while True:\n            value = probe()\n            if value:\n                return value\n            if lab.now() >= deadline:\n>               raise AssertionError(f\"timed out after {timeout:.0f}s waiting for {what}\")\nE               AssertionError: timed out after 1500s waiting for the enriched soc-ai event for that vector\n\ntests/validation/soc_live.py:139: AssertionError",
+  "git_dirty": true,
+  "git_sha": "unknown",
+  "observed": {
+    "evidence_recorded": false
+  },
+  "pytest_phase": "call",
+  "result": "FAIL",
+  "run_id": "20261018T025804Z",
+  "schema_version": 2,
+  "source_tree_sha256": "fdf46ed0bb3c604900c350416a4c39682efcb67929721c5c76c8ed38702e375b",
+  "started_at": "2026-10-18T03:00:15.781833Z",
+  "test_id": "tests/validation/test_soc_ai.py::test_ai01_feature_to_inference_event",
+  "test_suite_sha256": "69883f08da68f0dad0c6ded4adf5e731114916ef6c555c239991ae5637aa6a07",
+  "topology_sha256": "6d9d5eadf866fbfaf75766cceed735486c90beae1f6b65db1a7615f71e76579b"
+}

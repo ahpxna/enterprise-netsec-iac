@@ -1,0 +1,189 @@
+
+$ make soc-ai-up
+secrets ready (values NOT shown; stored in .env and local service config)
+bash scripts/ensure_dc_network.sh
+cxyz_dc already matches canonical DC network
+docker compose --profile soc up -d --wait elasticsearch
+ Container cxyz-security-elasticsearch-1  Running
+ Container cxyz-security-soc-cert-init-1  Starting
+ Container cxyz-security-soc-cert-init-1  Started
+ Container cxyz-security-soc-cert-init-1  Waiting
+ Container cxyz-security-soc-cert-init-1  Exited
+ Container cxyz-security-elasticsearch-1  Waiting
+ Container cxyz-security-soc-cert-init-1  Waiting
+ Container cxyz-security-soc-cert-init-1  Exited
+ Container cxyz-security-elasticsearch-1  Healthy
+docker compose --profile soc run --rm --no-deps soc-account-setup
+{}{"role":{"created":false}}{"created":false}{"created":true}{"role":{"created":false}}{"role":{"created":false}}{"role":{"created":false}}{"role":{"created":false}}{"acknowledged":true}{"acknowledged":true}{"acknowledged":true}{"acknowledged":true}{"acknowledged":true}{"acknowledged":true}{"acknowledged":true}{"acknowledged":true}{"acknowledged":true}{"acknowledged":true}{"acknowledged":true}{"acknowledged":true}SOC Elasticsearch roles, users, and templates are current
+docker compose --profile soc up -d --wait --no-deps logstash kibana
+ Container cxyz-security-kibana-1  Running
+ Container cxyz-security-logstash-1  Running
+ Container cxyz-security-logstash-1  Waiting
+ Container cxyz-security-kibana-1  Waiting
+ Container cxyz-security-kibana-1  Healthy
+ Container cxyz-security-logstash-1  Healthy
+docker compose --profile soc run --rm --no-deps soc-kibana-setup
+SOC Kibana data views and dashboards are current
+docker compose --profile soc run --rm --no-deps soc-kibana-bootstrap-revoke
+{"found":true}SOC Kibana bootstrap identity revoked
+python scripts/soc_ai_preflight.py
+OK: SOC AI/response preflight (approved model digest, PKI, signing key, deployment files)
+docker build -f docker/soc-python/Dockerfile -t cxyz/soc-python:local .
+#0 building with "default" instance using docker driver
+
+#1 [internal] load build definition from Dockerfile
+#1 transferring dockerfile: 2.23kB done
+#1 DONE 0.0s
+
+#2 [internal] load metadata for docker.io/library/debian@sha256:abd67ffcfa541b485a3dff59865ab629aa048a6c613e639d36e7456b0b229241
+#2 DONE 0.0s
+
+#3 [internal] load .dockerignore
+#3 transferring context: 507B done
+#3 DONE 0.0s
+
+#4 [ 1/11] FROM docker.io/library/debian@sha256:abd67ffcfa541b485a3dff59865ab629aa048a6c613e639d36e7456b0b229241
+#4 DONE 0.0s
+
+#5 [internal] load build context
+#5 transferring context: 5.77kB 0.0s done
+#5 DONE 0.0s
+
+#6 [ 7/11] COPY ai /app/ai
+#6 CACHED
+
+#7 [ 8/11] COPY response /app/response
+#7 CACHED
+
+#8 [ 4/11] RUN python3 -m venv /opt/venv     && /opt/venv/bin/pip install --no-cache-dir --require-hashes -r /tmp/requirements-soc-service.lock     && rm -f /tmp/requirements-soc-service.lock
+#8 CACHED
+
+#9 [ 9/11] COPY schemas /app/schemas
+#9 CACHED
+
+#10 [ 6/11] WORKDIR /app
+#10 CACHED
+
+#11 [ 5/11] RUN useradd --uid 10001 --no-create-home --shell /usr/sbin/nologin soc     && mkdir -p /app /var/lib/soc && chown soc:soc /var/lib/soc && chmod 0700 /var/lib/soc
+#11 CACHED
+
+#12 [ 3/11] COPY requirements-soc-service.lock /tmp/requirements-soc-service.lock
+#12 CACHED
+
+#13 [ 2/11] RUN rm -f /etc/apt/sources.list.d/debian.sources     && printf '%s\n'        "deb [check-valid-until=no] http://snapshot.debian.org/archive/debian/20260820T000000Z/ bookworm main"        "deb [check-valid-until=no] http://snapshot.debian.org/archive/debian-security/20260820T000000Z/ bookworm-security main"        > /etc/apt/sources.list     && apt-get -o Acquire::Check-Valid-Until=false update     && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends ca-certificates     && printf '%s\n'        "deb [check-valid-until=no] https://snapshot.debian.org/archive/debian/20260820T000000Z/ bookworm main"        "deb [check-valid-until=no] https://snapshot.debian.org/archive/debian-security/20260820T000000Z/ bookworm-security main"        > /etc/apt/sources.list     && apt-get -o Acquire::Check-Valid-Until=false update     && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends        python3 python3-venv     && rm -rf /var/lib/apt/lists/*
+#13 CACHED
+
+#14 [10/11] COPY soc/__init__.py /app/soc/__init__.py
+#14 CACHED
+
+#15 [11/11] COPY soc/workers /app/soc/workers
+#15 CACHED
+
+#16 exporting to image
+#16 exporting layers done
+#16 writing image sha256:3de08080328abfef63378de56aefc193c12b6bfc27842ff7447fff6573e23ae5 done
+#16 naming to docker.io/cxyz/soc-python:local done
+#16 DONE 0.0s
+docker compose -f docker-compose.yml -f docker-compose.path-a.yml --profile soc --profile soc-ai up -d soc-service-init
+ Container cxyz-security-elasticsearch-1  Running
+ Container cxyz-security-soc-cert-init-1  Starting
+ Container cxyz-security-soc-cert-init-1  Started
+ Container cxyz-security-soc-cert-init-1  Waiting
+ Container cxyz-security-soc-cert-init-1  Exited
+ Container cxyz-security-elasticsearch-1  Waiting
+ Container cxyz-security-elasticsearch-1  Healthy
+ Container cxyz-security-soc-service-init-1  Starting
+ Container cxyz-security-soc-service-init-1  Started
+docker compose -f docker-compose.yml -f docker-compose.path-a.yml --profile soc --profile soc-ai up -d --wait soc-ai-api soc-response
+ Container cxyz-security-elasticsearch-1  Running
+ Container cxyz-security-soc-service-init-1  Running
+ Container cxyz-security-soc-ai-api-1  Recreate
+ Container cxyz-security-soc-response-1  Recreate
+ Container cxyz-security-soc-ai-api-1  Recreated
+ Container cxyz-security-soc-response-1  Recreated
+ Container cxyz-security-soc-cert-init-1  Starting
+ Container cxyz-security-soc-cert-init-1  Started
+ Container cxyz-security-soc-cert-init-1  Waiting
+ Container cxyz-security-soc-cert-init-1  Exited
+ Container cxyz-security-elasticsearch-1  Waiting
+ Container cxyz-security-elasticsearch-1  Healthy
+ Container cxyz-security-soc-service-init-1  Waiting
+ Container cxyz-security-soc-service-init-1  Waiting
+ Container cxyz-security-soc-service-init-1  Exited
+ Container cxyz-security-soc-response-1  Starting
+ Container cxyz-security-soc-service-init-1  Exited
+ Container cxyz-security-soc-ai-api-1  Starting
+ Container cxyz-security-soc-ai-api-1  Started
+ Container cxyz-security-soc-response-1  Started
+ Container cxyz-security-soc-ai-api-1  Waiting
+ Container cxyz-security-elasticsearch-1  Waiting
+ Container cxyz-security-soc-service-init-1  Waiting
+ Container cxyz-security-soc-response-1  Waiting
+ Container cxyz-security-soc-cert-init-1  Waiting
+ Container cxyz-security-soc-service-init-1  Exited
+ Container cxyz-security-soc-cert-init-1  Exited
+ Container cxyz-security-elasticsearch-1  Healthy
+ Container cxyz-security-soc-ai-api-1  Healthy
+ Container cxyz-security-soc-response-1  Healthy
+docker compose -f docker-compose.yml -f docker-compose.path-a.yml --profile soc --profile soc-ai up -d soc-feature-worker soc-enrichment-worker soc-decision
+ Container cxyz-security-elasticsearch-1  Running
+ Container cxyz-security-soc-decision-1  Recreate
+ Container cxyz-security-soc-feature-worker-1  Recreate
+ Container cxyz-security-soc-ai-api-1  Running
+ Container cxyz-security-soc-enrichment-worker-1  Running
+ Container cxyz-security-soc-decision-1  Recreated
+ Container cxyz-security-soc-feature-worker-1  Recreated
+ Container cxyz-security-soc-cert-init-1  Starting
+ Container cxyz-security-soc-cert-init-1  Started
+ Container cxyz-security-soc-cert-init-1  Waiting
+ Container cxyz-security-soc-cert-init-1  Exited
+ Container cxyz-security-elasticsearch-1  Waiting
+ Container cxyz-security-elasticsearch-1  Healthy
+ Container cxyz-security-soc-service-init-1  Starting
+ Container cxyz-security-soc-service-init-1  Started
+ Container cxyz-security-soc-service-init-1  Waiting
+ Container cxyz-security-soc-service-init-1  Waiting
+ Container cxyz-security-soc-service-init-1  Waiting
+ Container cxyz-security-soc-service-init-1  Exited
+ Container cxyz-security-soc-feature-worker-1  Starting
+ Container cxyz-security-soc-service-init-1  Exited
+ Container cxyz-security-soc-service-init-1  Exited
+ Container cxyz-security-soc-decision-1  Starting
+ Container cxyz-security-soc-service-init-1  Waiting
+ Container cxyz-security-soc-ai-api-1  Waiting
+ Container cxyz-security-soc-feature-worker-1  Started
+ Container cxyz-security-soc-decision-1  Started
+ Container cxyz-security-soc-ai-api-1  Healthy
+ Container cxyz-security-soc-service-init-1  Exited
+
+$ make soc-ai-status
+python scripts/soc_status.py
+{
+  "cluster": "green",
+  "datasets": {
+    "cowrie.honeypot": 4,
+    "firewall.syslog": 21,
+    "freeradius.auth": 7,
+    "suricata.eve": 16,
+    "wazuh.alerts": 7
+  },
+  "events": 55,
+  "streams": {
+    "ai": 30,
+    "alerts": 27,
+    "auth": 7,
+    "deadletter": 7,
+    "endpoint": 0,
+    "features": 20,
+    "network": 21,
+    "raw": 62,
+    "response": 49
+  }
+}
+docker compose -f docker-compose.yml -f docker-compose.path-a.yml --profile soc --profile soc-ai ps soc-ai-api soc-feature-worker soc-enrichment-worker soc-decision soc-response
+NAME                                    IMAGE                   COMMAND                  SERVICE                 CREATED          STATUS                    PORTS
+cxyz-security-soc-ai-api-1              cxyz/soc-python:local   "python -m ai.api.se…"   soc-ai-api              48 seconds ago   Up 40 seconds (healthy)   
+cxyz-security-soc-decision-1            cxyz/soc-python:local   "python -m response.…"   soc-decision            24 seconds ago   Up 4 seconds              
+cxyz-security-soc-enrichment-worker-1   cxyz/soc-python:local   "python -m soc.worke…"   soc-enrichment-worker   19 minutes ago   Up 19 minutes             
+cxyz-security-soc-feature-worker-1      cxyz/soc-python:local   "python -m soc.worke…"   soc-feature-worker      24 seconds ago   Up 4 seconds              
+cxyz-security-soc-response-1            cxyz/soc-python:local   "python -m response.…"   soc-response            48 seconds ago   Up 40 seconds (healthy)   
