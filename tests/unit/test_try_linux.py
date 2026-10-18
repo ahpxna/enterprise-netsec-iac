@@ -142,6 +142,18 @@ def test_dry_run_executes_nothing(run, tmp_path):
     assert code == 0 and not marker.exists() and "DRY RUN" in out
 
 
+def test_dry_run_does_not_execute_python_checks_either(run, tmp_path):
+    marker = tmp_path / "checked"
+
+    def acting_check(ctx):                       # like check_docker_access (usermod + re-exec) or viz_start
+        marker.write_text("x")
+        return tl.PASS, "acted"
+
+    tl.build_stages = lambda ctx: [tl.Stage("c", "a check that acts", "host", check=acting_check)]
+    code, out = run("--dry-run", "--no-viz")
+    assert code == 0 and not marker.exists() and "dry run: check not executed" in out
+
+
 def test_timeout_kills_the_command_and_reports_it(run, tmp_path):
     stages = [tl.Stage("slow", "sleeps forever", "host", cmds=[tl.Cmd(argv=[sys.executable, "-c", "import time; time.sleep(60)"], timeout=2)])]
     tl.build_stages = lambda ctx: stages

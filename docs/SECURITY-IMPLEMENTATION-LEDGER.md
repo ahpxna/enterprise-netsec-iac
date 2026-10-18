@@ -958,3 +958,83 @@ run on a Linux host.
   install). `gitleaks` reported five findings in history, all reviewed false positives (`curl --user name:${VAR}` variable references, Ed25519 key
   IDs, the `Ed25519PrivateKey` type name); `.gitleaks.toml` allowlists exactly those secret shapes and was checked to still report real-looking
   credentials in the same contexts.
+
+---
+
+## INC-074 — First live run of the SOC and AI planes: blocking bugs, an address collision and a credential leak
+
+**Status:** run for real on Docker Desktop (macOS, arm64) in a throwaway Compose project: SOC plane up, `soc-smoke` PASS, the pinned
+Cowrie image driven by real Telnet sessions, its events in `soc-alerts-*`, the decision runner's own signal query run against that
+Elasticsearch, then the DEMO model and `make soc-ai-up` (observe mode): features → enrichment → mTLS inference → `soc-ai-*` →
+decision records in `soc-response-*`. The containerlab fabric, Wazuh, enforcement on real firewalls and the Linux runner were not part of
+this run.
+
+- **BUG-074-A — Logstash never ran the pipeline.** `70-normalize-ecs.conf` set `tag_on_failure` on the `csv` filter, a setting the filter
+  does not have; Logstash 9.3.1 refuses the whole `soc-ingestion` pipeline and exits, Docker restarts it (16 restarts observed). Since the
+  first SOC commit no event was ever ingested. The filter now maps `_csvparsefailure` to `_firewall_parse_failure`.
+- **BUG-074-B — the healthcheck hid it.** It probed `/_node/pipelines`, which answers during every start-up of the crash loop, so
+  `docker compose up --wait` reported Logstash healthy. Compose and the Kubernetes readiness probes now require
+  `/_node/pipelines/soc-ingestion` (404 until the pipeline is loaded).
+- **BUG-074-C — template bootstrap 403.** Each `elasticsearch` output tried to install the default `ecs-logstash` template; the
+  least-privilege `cxyz_logstash` role correctly cannot, and the plugin then shuts the pipeline down. Templates and ILM are installed by
+  `soc-account-setup`, so every output now sets `manage_template => false`, `ilm_enabled => false`, `data_stream => false` (statically enforced).
+- **BUG-074-D — attacker passwords were indexed.** Only the parsed `password` field was dropped; the received line (kept as
+  `event.original` in `soc-alerts-*` and as `message`/`event.original` in `soc-raw-*`) still carried it, twice, because Cowrie repeats it in
+  `login attempt [user/password] ...`. Both occurrences are now redacted in the line itself before it is preserved or cloned. Verified live with
+  passwords containing `/`, `]`, ` failed`, `"` and `\`: 0 occurrences across raw and normalized indices; the event still parses.
+- **BUG-074-E — fixture writers.** `soc_smoke.py` and `DockerLab.inject` appended to the root-owned fixture volume as Logstash's uid 1000;
+  they now write as root (the file stays readable for the file input).
+- **Gate:** `scripts/check_logstash_config.sh` compiles both pipeline trees (Compose and Kubernetes) with the pinned Logstash image; it runs
+  in CI, before `make soc-up`, and is part of the CI contract. It fails on the pre-fix tree with the exact plugin and setting.
+- Also observed working: the pinned Cowrie image starts with `read_only`, `cap_drop: ALL` and `no-new-privileges` (SSH 2222, Telnet 2223 via
+  `COWRIE_TELNET_ENABLED`), the shared volume is initialised with Cowrie's ownership and is readable through Logstash's read-only mount, and the
+  decision runner folds the 21 events of one attacker into exactly one `honeypot` signal (severity 9) and none for an unrelated address.
+- **BUG-074-F — DC address collision (since the first commit).** `wazuh-indexer`, `wazuh.dashboard` and `soc-response` joined `cxyz_dc`
+  without a fixed address. The fabric's `server1` (172.16.50.1) and `fw-core` (.254) are configured inside containerlab nodes, invisible to
+  Docker's IPAM, so the first dynamic member is handed .1 (observed: `soc-response` got 172.16.50.1) and collides with `server1` on the same
+  bridge. They are now pinned to .13/.14/.15, `ensure_dc_network.sh` reserves .1 and .254 as aux addresses on a new network, and a static
+  check requires a unique fixed address outside the fabric's for every member.
+- **BUG-074-G — orchestrator never became healthy.** Its healthcheck connected to whatever the container hostname resolves to; with four
+  networks that was the management address, while the listener binds only the interface toward Elasticsearch. It now probes that address
+  (`address_toward`), and a static check forbids hostname-based probes on multi-homed services.
+- **BUG-074-H — the enrichment worker crash-looped.** `serve` held the outbox lock and called `drain()`, which took it again through a second
+  open file description; `flock` refuses that even inside one process ("another outbox worker is active", 10 restarts observed). The lock is
+  now re-entrant within one `Outbox` and still exclusive against another worker (regression tests fail without the fix).
+- After the fixes, live and stable (no restarts): 4 vectors pulled, scored over mTLS and written to `soc-ai-*`; the decision runner produced
+  `COR-001` records for 192.168.40.20 (AI anomaly + authentication failures from the smoke fixtures) as **alerts** (observe mode). The scores
+  come from the synthetic DEMO model and mean nothing.
+
+---
+
+## INC-075 — Live verifier run without a fabric: credential rotation, a mis-measured queue, a cascading harness failure
+
+**Status:** `make soc-ai-validate` and the new `scripts/honeypot_e2e.py` run for real on Docker Desktop (macOS, arm64) in a
+throwaway Compose project, without the containerlab fabric. Controls that need the firewall enforcement agents cannot pass
+there; the per-control results are in `docs/TEST-EVERYTHING.md` (after the fixes: LOG-01..03 and AI-01..03 PASS, AI-04 fails
+without `--with-lstm` as documented, COR-01/RESP-01/RESP-03/SOC-01..03 fail closed for lack of firewall agents).
+
+- **BUG-075-A — every `docker compose up` rotated all service API keys.** Compose re-runs the one-shot `soc-service-init`
+  whenever it starts a service that depends on it (observed: three runs in 40 s during `make soc-ai-up`/`soc-ai-validate-up`).
+  Each run invalidated every service's key, but workers that were not recreated kept the old one: the enrichment worker
+  answered `HTTP_401` for good (ES: "api key ... has been invalidated"), no anomaly was written and AI-01 timed out; the
+  feature worker crashed once on the same error. Now `provision-service-credentials.sh` keeps a key that still authenticates
+  as that service with an unchanged role (role hash next to the key); it rotates when the key is missing, rejected, expired,
+  the role changed, or on `make soc-ai-rotate-keys`, by creating the new key, renaming it into place atomically and only then
+  invalidating the old one by id. Every Elasticsearch client (workers, decision, orchestrator; Path C's `es.cred` too) reads
+  its credential through `FileAuthorization`, which re-reads the file when it changes, so a rotation needs no restart.
+  Verified live: re-runs log `API keys kept: 4, rotated: 0`; a `make soc-ai-rotate-keys` while every worker was running
+  left exactly 4 active keys and 0 requests with an invalidated key, with no restart. AI-01 then PASSED.
+- **BUG-075-B — LOG-03 measured the wrong counter.** It required `queue.events_count >= 1` during an Elasticsearch outage.
+  On Logstash 9.3 that counts only UNREAD events; a worker had already read the event into a batch the output keeps retrying
+  (raw output `in` 38 vs `out` 37, observed), so the event was held but the check reported it lost. The depth is now unread
+  plus in-flight at the outputs. LOG-03 then PASSED live: the event was held during the outage and delivered once afterwards.
+- **BUG-075-C — one failed scenario became five misleading failures.** The shared response scenario is cached per session,
+  but a failure was not: RESP-01, RESP-03 and SOC-01..03 each re-ran it, re-injected the same document ids and failed with
+  `HTTP 409 version_conflict` instead of the cause. Failures are now cached and every later check reports the original one.
+- **BUG-075-D — `--dry-run` executed Python checks.** Commands were skipped but check stages ran, and `check_docker_access`
+  can call `sudo usermod` and re-exec. Dry runs now skip them ("dry run: check not executed").
+- **New corner, automated:** runner stage `dmzlab-siem` / `make dmzlab-siem-check` (`scripts/honeypot_e2e.py`) drives a real
+  Telnet session from pc1 to the honeypot and proves: events in `soc-alerts-*` with the expected actions and severities, the
+  password nowhere in normalized or raw documents (deep scan), one `honeypot` decision signal from the decision runner's own
+  query. Run live (PASS) and against a pipeline with the redaction removed (FAIL, naming the three leaking fields).
+- **Docs:** `docs/TEST-EVERYTHING.md`, the complete test plan from offline gates to Paths B and C with the corners to check by hand.

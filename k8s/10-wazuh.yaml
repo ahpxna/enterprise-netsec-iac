@@ -136,7 +136,8 @@ spec:
             periodSeconds: 10
             failureThreshold: 60
           readinessProbe:
-            exec: { command: ["bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/9600"] }
+            # Ready only once the soc-ingestion pipeline is loaded, not merely when the API answers.
+            exec: { command: ["curl", "--silent", "--fail", "-o", "/dev/null", "http://127.0.0.1:9600/_node/pipelines/soc-ingestion"] }
             periodSeconds: 10
             failureThreshold: 6
           livenessProbe:

@@ -168,8 +168,9 @@ class DockerLab:
             raise LabNotReady(f"docker compose is unavailable: {exc}") from exc
 
     def _exec(self, service: str, *command: str, stdin: str | None = None, env: Mapping[str, str] | None = None,
-              timeout: int = 120) -> str:
+              timeout: int = 120, user: str | None = None) -> str:
         flags = [item for key, value in (env or {}).items() for item in ("-e", f"{key}={value}")]
+        flags += ["--user", user] if user else []
         result = self._compose("exec", "-T", *flags, service, *command, stdin=stdin, timeout=timeout)
         if result.returncode != 0:
             raise LabNotReady(f"{service}: {' '.join(command[:3])} failed: {result.stderr.strip()[:300]}")
@@ -214,8 +215,10 @@ class DockerLab:
     def inject(self, fixture: str, line: str) -> None:
         if fixture not in FIXTURE_DATASETS or "\n" in line:
             raise ValueError("unsupported fixture or multi-line payload")
+        # The fixture volume is created root-owned and Logstash runs as uid 1000: write as root,
+        # the default umask leaves the file readable for the file input.
         self._exec("logstash", "bash", "-ec", 'cat >> "/fixtures/${SOC_LIVE_FIXTURE}"',
-                   stdin=line + "\n", env={"SOC_LIVE_FIXTURE": fixture})
+                   stdin=line + "\n", env={"SOC_LIVE_FIXTURE": fixture}, user="0")
 
     def logstash_pipeline(self) -> dict:
         script = ('curl --silent --fail http://localhost:9600/_node/pipelines/soc-ingestion && echo && '
@@ -224,9 +227,19 @@ class DockerLab:
         return {"node": json.loads(first), "stats": json.loads(second)}
 
     def logstash_queue_depth(self) -> int:
-        stats = self.logstash_pipeline()["stats"]
-        queue = dig(stats, "pipelines.soc-ingestion.queue") or {}
-        return int(queue.get("events_count", queue.get("events", 0)) or 0)
+        """Events accepted but not yet delivered: unread in the persistent queue plus in flight at an output.
+
+        `queue.events_count` alone counts only UNREAD events. While Elasticsearch is down a worker has
+        already read the event into a batch that the output keeps retrying, so the event is held (unacked
+        in the persistent queue) but unread: 0 there, in > out at the output (observed on Logstash 9.3).
+        """
+
+        pipeline = dig(self.logstash_pipeline()["stats"], "pipelines.soc-ingestion") or {}
+        queue = pipeline.get("queue") or {}
+        unread = int(queue.get("events_count", queue.get("events", 0)) or 0)
+        in_flight = sum(max(0, int(dig(output, "events.in") or 0) - int(dig(output, "events.out") or 0))
+                        for output in dig(pipeline, "plugins.outputs") or [])
+        return unread + in_flight
 
     def elasticsearch_outage(self):
         lab = self
@@ -327,6 +340,11 @@ def _address(prefix: str, run_id: str, offset: int) -> str:
     return f"{prefix}.{1 + (int(run_id[:6], 16) + offset) % 250}"
 
 
+@dataclass(frozen=True)
+class _ScenarioFailed:
+    error: BaseException
+
+
 class Run:
     """One validation session: unique markers/addresses and a cache of executed scenarios."""
 
@@ -342,9 +360,19 @@ class Run:
         self.burst = [_address("198.51.100", self.id, 31 * n) for n in range(1, 8)]
 
     def once(self, name: str, build: Callable[[], Any]) -> Any:
+        # A shared scenario runs at most once per session. If it failed, later checks report that original
+        # failure: re-running it would re-inject the same documents and fail on a misleading 409 instead.
         if name not in self.cache:
-            self.cache[name] = build()
-        return self.cache[name]
+            try:
+                self.cache[name] = build()
+            except (AssertionError, LabNotReady) as exc:
+                self.cache[name] = _ScenarioFailed(exc)
+                raise
+        value = self.cache[name]
+        if isinstance(value, _ScenarioFailed):
+            kind = AssertionError if isinstance(value.error, AssertionError) else LabNotReady
+            raise kind(f"the shared {name!r} scenario failed in an earlier check: {value.error}")
+        return value
 
     # -- telemetry builders
     def suricata_line(self, source: str, moment: datetime, token: str, severity: int = 2) -> str:
@@ -579,7 +607,8 @@ class Run:
 
 
 # =============================================================================== checks
-def _fail_if(condition: bool, message: str) -> None:
+def _require(condition: bool, message: str) -> None:
+    """Fail the check with `message` unless `condition` holds."""
     assert condition, message
 
 
@@ -588,10 +617,10 @@ def check_log01(run: Run) -> Observation:
     observed = {}
     for fixture, dataset in FIXTURE_DATASETS.items():
         normalized = scenario[fixture]["normalized"]
-        _fail_if(dig(normalized, "event.dataset") == dataset,
+        _require(dig(normalized, "event.dataset") == dataset,
                  f"{fixture}: normalized dataset is {dig(normalized, 'event.dataset')!r}, expected {dataset!r}")
         provenance = dig(normalized, "cxyz.source_authentication")
-        _fail_if(provenance in {"mtls_relay", "read_only_volume", "operator_fixture"},
+        _require(provenance in {"mtls_relay", "read_only_volume", "operator_fixture"},
                  f"{fixture}: normalized event carries no valid source-authentication provenance ({provenance!r})")
         observed[dataset] = {"ingestion_id": dig(normalized, "cxyz.ingestion_id"),
                              "source_authentication": provenance, "index": normalized["_index"]}
@@ -606,11 +635,11 @@ def check_log02(run: Run) -> Observation:
     checked = {}
     for fixture, dataset in FIXTURE_DATASETS.items():
         raw, normalized, line = scenario[fixture]["raw"], scenario[fixture]["normalized"], scenario[fixture]["line"]
-        _fail_if(dig(raw, "event.original") == line,
+        _require(dig(raw, "event.original") == line,
                  f"{fixture}: the raw document differs from the injected payload")
-        _fail_if(dig(normalized, "event.original") == line,
+        _require(dig(normalized, "event.original") == line,
                  f"{fixture}: the normalized event no longer carries the unmodified original")
-        _fail_if(dig(raw, "cxyz.ingestion_id") == dig(normalized, "cxyz.ingestion_id"),
+        _require(dig(raw, "cxyz.ingestion_id") == dig(normalized, "cxyz.ingestion_id"),
                  f"{fixture}: raw and normalized events are not linked by ingestion ID")
         document = {key: value for key, value in normalized.items() if key not in {"_id", "_index"}}
         validate(document, "schemas/ecs/soc-event.schema.json")
@@ -623,13 +652,13 @@ def check_log02(run: Run) -> Observation:
 def check_log03(run: Run) -> Observation:
     lab, scenario = run.lab, run.ingestion()
     malformed = scenario["malformed"]
-    _fail_if(dig(malformed["raw"], "event.original") == dig(malformed["deadletter"], "event.original"),
+    _require(dig(malformed["raw"], "event.original") == dig(malformed["deadletter"], "event.original"),
              "the malformed line is not preserved identically in the raw and dead-letter streams")
     pipeline = lab.logstash_pipeline()
     queue_type = dig(pipeline["stats"], "pipelines.soc-ingestion.queue.type")
     dlq = dig(pipeline["node"], "pipelines.soc-ingestion.dead_letter_queue_enabled")
-    _fail_if(queue_type == "persisted", f"Logstash queue type is {queue_type!r}, expected 'persisted'")
-    _fail_if(dlq is True, "Logstash dead_letter_queue is not enabled")
+    _require(queue_type == "persisted", f"Logstash queue type is {queue_type!r}, expected 'persisted'")
+    _require(dlq is True, "Logstash dead_letter_queue is not enabled")
 
     # Unavailable-output scenario: stop Elasticsearch, inject, prove the event is held in the
     # persistent queue, restart, prove it is delivered exactly once to raw and normalized.
@@ -639,7 +668,7 @@ def check_log03(run: Run) -> Observation:
         lab.inject("firewall.log", line)
         lab.sleep(run.timeouts.interval * 3)
         depth = lab.logstash_queue_depth()
-    _fail_if(depth >= 1, "the event was not retained by the Logstash queue while Elasticsearch was down")
+    _require(depth >= 1, "the event was not retained by the Logstash queue while Elasticsearch was down")
 
     def delivered() -> bool:
         raws = lab.es_search("soc-raw-*", {"size": 5, "query": {"wildcard": {"event.original": {"value": f"*{token}*"}}}})
@@ -662,8 +691,8 @@ def check_ai01(run: Run) -> Observation:
     document = {k: v for k, v in inference.items() if k not in {"_id", "_index"}}
     validate(document, "schemas/events/anomaly-event-v1.schema.json")
     for key in ("model_id", "model_sha256", "inference_ms"):
-        _fail_if(dig(inference, f"ai.{key}") not in (None, ""), f"inference event lacks ai.{key}")
-    _fail_if(dig(inference, "feature_vector.id") == vector["vector_id"], "inference is not bound to the vector")
+        _require(dig(inference, f"ai.{key}") not in (None, ""), f"inference event lacks ai.{key}")
+    _require(dig(inference, "feature_vector.id") == vector["vector_id"], "inference is not bound to the vector")
     latency = parse_time(inference["@timestamp"]) - parse_time(vector["generated_at"])
     return ("Activity injected through the real ingestion path produced a versioned feature vector, which the "
             "enrichment worker scored through the mTLS inference API into a schema-valid soc-ai event with model "
@@ -677,24 +706,24 @@ def check_ai02(run: Run) -> Observation:
     lab = run.lab
     registry = lab.registry_dir()
     metadata_path, approval_path = registry / "metadata.json", registry / "approval.json"
-    _fail_if(metadata_path.is_file() and approval_path.is_file(),
+    _require(metadata_path.is_file() and approval_path.is_file(),
              "no approved registry (ai/registry/active) is present; run make soc-ai-promote")
     metadata = json.loads(metadata_path.read_text())
     approval = json.loads(approval_path.read_text())
     validate(metadata, "schemas/events/model-provenance-v1.schema.json")
-    _fail_if(metadata["status"] == "approved", "the active model is not approved")
+    _require(metadata["status"] == "approved", "the active model is not approved")
     for dotted in ("dataset.sha256", "feature_schema.sha256", "artifact.sha256", "git_sha",
                    "training.random_seed", "training.hyperparameters", "threshold"):
-        _fail_if(dig(metadata, dotted) not in (None, "", {}), f"provenance lacks {dotted}")
+        _require(dig(metadata, dotted) not in (None, "", {}), f"provenance lacks {dotted}")
     artifact = registry / metadata["artifact"]["path"]
-    _fail_if(artifact.is_file() and file_sha256(artifact) == metadata["artifact"]["sha256"],
+    _require(artifact.is_file() and file_sha256(artifact) == metadata["artifact"]["sha256"],
              "the artifact on disk does not match its recorded SHA-256")
     digest = file_sha256(metadata_path)
-    _fail_if(approval["metadata_sha256"] == digest, "approval.json does not bind this metadata")
+    _require(approval["metadata_sha256"] == digest, "approval.json does not bind this metadata")
     deployed = lab.deployed_metadata_digest()
-    _fail_if(deployed == digest, "the independently supplied SOC_AI_METADATA_SHA256 does not match the registry")
+    _require(deployed == digest, "the independently supplied SOC_AI_METADATA_SHA256 does not match the registry")
     status, served = lab.ai_request("GET", "/model")
-    _fail_if(status == 200 and served["model_metadata_sha256"] == digest and served["model_sha256"] == metadata["artifact"]["sha256"],
+    _require(status == 200 and served["model_metadata_sha256"] == digest and served["model_sha256"] == metadata["artifact"]["sha256"],
              "the running inference API serves a model other than the approved registry")
     return ("The active registry validates against model-provenance-v1, records dataset/feature-schema/artifact "
             "hashes, Git SHA, seed, hyperparameters and threshold, is bound by the independent deployment digest, "
@@ -706,7 +735,7 @@ def check_ai02(run: Run) -> Observation:
 def check_ai03(run: Run) -> Observation:
     lab = run.lab
     status, served = lab.ai_request("GET", "/model")
-    _fail_if(status == 200, "the inference API has no ready model")
+    _require(status == 200, "the inference API has no ready model")
     served_schema = served["feature_schema"]
     other = "endpoint-window-v1" if served_schema == "network-window-v1" else "network-window-v1"
     names = [n for n in json.loads((ROOT / f"schemas/features/{other}.schema.json").read_text())
@@ -715,20 +744,20 @@ def check_ai03(run: Run) -> Observation:
     errors_before = _error_counter(lab)
     mismatch_status, mismatch = lab.ai_request("POST", "/v1/infer", {
         "feature_schema": other, "entity": entity, "features": {name: 0 for name in names}})
-    _fail_if(mismatch_status == 422 and isinstance(mismatch, dict)
+    _require(mismatch_status == 422 and isinstance(mismatch, dict)
              and dig(mismatch, "detail.code") == "FEATURE_SCHEMA_MISMATCH",
              f"a request for {other} was not rejected as FEATURE_SCHEMA_MISMATCH (HTTP {mismatch_status})")
-    _fail_if("score" not in json.dumps(mismatch), "the rejected response still contains a score")
+    _require("score" not in json.dumps(mismatch), "the rejected response still contains a score")
     bad_status, bad = lab.ai_request("POST", "/v1/infer", {
         "feature_schema": served_schema, "entity": "198.51.100.250" if served_schema == "network-window-v1" else "live-validation-host",
         "features": {"unexpected_feature": 1}})
-    _fail_if(bad_status == 422 and "score" not in json.dumps(bad),
+    _require(bad_status == 422 and "score" not in json.dumps(bad),
              "a request with an unknown feature set was not rejected without a score")
     scored = lab.es_count("soc-ai-*", {"term": {"feature_vector.entity": "198.51.100.250"}})
-    _fail_if(scored == 0, "a rejected probe left a soc-ai record")
+    _require(scored == 0, "a rejected probe left a soc-ai record")
     errors_after = _error_counter(lab)
     if errors_before is not None and errors_after is not None:
-        _fail_if(errors_after >= errors_before + 2, "the API did not account for both rejected requests")
+        _require(errors_after >= errors_before + 2, "the API did not account for both rejected requests")
     return ("Requests for a different feature schema or an unknown feature set are rejected with HTTP 422 "
             "(FEATURE_SCHEMA_MISMATCH for a schema mismatch), return no score, are never mapped automatically, "
             "and leave no soc-ai record",
@@ -750,23 +779,23 @@ def _error_counter(lab: Lab) -> float | None:
 def check_ai04(run: Run) -> Observation:
     registry = run.lab.registry_dir()
     comparison_path = registry / "comparison.json"
-    _fail_if(comparison_path.is_file(),
+    _require(comparison_path.is_file(),
              "the active registry carries no five-detector comparison (python -m ai.evaluation.compare, "
              "then promote with --comparison)")
     report = json.loads(comparison_path.read_text())
     metadata = json.loads((registry / "metadata.json").read_text())
     names = [row["detector"] for row in report["rows"]]
     expected = ["static-rules", "isolation-forest", "static+isolation-forest", "lstm-autoencoder", "static+lstm-autoencoder"]
-    _fail_if(names == expected, f"comparison detectors are {names}, expected {expected}")
+    _require(names == expected, f"comparison detectors are {names}, expected {expected}")
     for row in report["rows"]:
         missing = [m for m in REQUIRED_BENCHMARK_METRICS if m not in row]
-        _fail_if(not missing, f"{row['detector']} lacks metrics {missing}")
-    _fail_if("accuracy" not in json.dumps(report).lower(), "accuracy must not appear as an evaluation metric")
-    _fail_if(report["threshold_policy"]["selected_on"] == "validation", "thresholds were not selected on validation")
-    _fail_if(metadata["artifact"]["sha256"] in {m["model_sha256"] for m in report["models"].values()},
+        _require(not missing, f"{row['detector']} lacks metrics {missing}")
+    _require("accuracy" not in json.dumps(report).lower(), "accuracy must not appear as an evaluation metric")
+    _require(report["threshold_policy"]["selected_on"] == "validation", "thresholds were not selected on validation")
+    _require(metadata["artifact"]["sha256"] in {m["model_sha256"] for m in report["models"].values()},
              "the comparison does not include the promoted artifact")
     binding = json.loads((registry / "evaluation.json").read_text())
-    _fail_if(binding["model_sha256"] == metadata["artifact"]["sha256"]
+    _require(binding["model_sha256"] == metadata["artifact"]["sha256"]
              and binding["dataset_manifest_sha256"] == report["dataset_manifest_sha256"],
              "the comparison and the bound evaluation describe different datasets or artifacts")
     return ("The active registry carries a reproducible five-detector comparison (static rules, Isolation Forest, "
@@ -780,18 +809,18 @@ def check_ai04(run: Run) -> Observation:
 def check_cor01(run: Run) -> Observation:
     scenario = run.response()
     solo, attacker = run.solo, run.attacker
-    _fail_if(not scenario["solo_decisions"] and not scenario["solo_audits"],
+    _require(not scenario["solo_decisions"] and not scenario["solo_audits"],
              f"anomaly-only evidence for {solo} produced a decision or response request")
     chain = scenario["chain"]
-    _fail_if(any(d["state"] == "REQUESTED" for d in chain), "the corroborated anomaly produced no request")
+    _require(any(d["state"] == "REQUESTED" for d in chain), "the corroborated anomaly produced no request")
     decision = scenario["decision"]
     kinds = [signal["kind"] for signal in decision["signals"]]
-    _fail_if(kinds[0] == "ai_anomaly" and "suricata_alert" in kinds[1:],
+    _require(kinds[0] == "ai_anomaly" and "suricata_alert" in kinds[1:],
              f"the decision is not hybrid (signals: {kinds})")
-    _fail_if(dig(decision, "anomaly.event_id") not in {s["reference"] for s in decision["signals"][1:]},
+    _require(dig(decision, "anomaly.event_id") not in {s["reference"] for s in decision["signals"][1:]},
              "the AI event corroborated itself")
     blocklists = run.lab.blocklists()
-    _fail_if(not any(solo in members for members in blocklists.values()),
+    _require(not any(solo in members for members in blocklists.values()),
              f"anomaly-only target {solo} appears on a firewall blocklist")
     return ("An injected AI anomaly with score >= 0.90 and no other evidence produced no decision record and no "
             "response request, while the same score with an independent Suricata alert produced a hybrid decision "
@@ -807,13 +836,13 @@ def _states(chain: Sequence[Mapping[str, Any]]) -> list[str]:
 def check_resp01(run: Run) -> Observation:
     scenario = run.response()
     states = _states(scenario["chain"])
-    _fail_if(states[:3] == ["REQUESTED", "APPLIED", "VERIFIED"], f"lifecycle states were {states}")
-    _fail_if(len({d["response_id"] for d in scenario["chain"]}) == 1, "the lifecycle spans several response IDs")
+    _require(states[:3] == ["REQUESTED", "APPLIED", "VERIFIED"], f"lifecycle states were {states}")
+    _require(len({d["response_id"] for d in scenario["chain"]}) == 1, "the lifecycle spans several response IDs")
     peers = scenario["blocked_during"]
-    _fail_if(len(peers) >= 2 and all(peers.values()),
+    _require(len(peers) >= 2 and all(peers.values()),
              f"the target was not present on every firewall peer while VERIFIED: {peers}")
     verified = next(d for d in scenario["chain"] if d["state"] == "VERIFIED")
-    _fail_if(dig(verified, "verification.verified") is True and dig(verified, "verification.evidence_refs"),
+    _require(dig(verified, "verification.verified") is True and dig(verified, "verification.evidence_refs"),
              "the VERIFIED event carries no verification evidence")
     adapter = {d["adapter"] for d in scenario["chain"]}
     return ("The orchestrator added the target to the scoped SOC_BLOCKLIST on every firewall peer, independently "
@@ -826,25 +855,25 @@ def check_resp01(run: Run) -> Observation:
 def check_resp03(run: Run) -> Observation:
     scenario = run.response()
     protected = scenario["protected_decision"]
-    _fail_if(dig(protected, "decision.outcome") == "denied" and not scenario["protected_audits"],
+    _require(dig(protected, "decision.outcome") == "denied" and not scenario["protected_audits"],
              f"the protected target {PROTECTED_TARGET} was not denied before any request "
              f"(outcome {dig(protected, 'decision.outcome')!r})")
-    _fail_if(not any(scenario["protected_during"].values()),
+    _require(not any(scenario["protected_during"].values()),
              f"the protected target appears on a firewall blocklist: {scenario['protected_during']}")
     states = _states(scenario["chain"])
-    _fail_if("EXPIRED" in states, f"the eligible target was not recovered after its TTL (states {states})")
-    _fail_if(not any(scenario["blocked_after"].values()),
+    _require("EXPIRED" in states, f"the eligible target was not recovered after its TTL (states {states})")
+    _require(not any(scenario["blocked_after"].values()),
              f"the eligible target is still blocked after expiry: {scenario['blocked_after']}")
     requested = next(d for d in scenario["chain"] if d["state"] == "REQUESTED")
     expired = next(d for d in scenario["chain"] if d["state"] == "EXPIRED")
     elapsed = (parse_time(expired["@timestamp"]) - parse_time(requested["@timestamp"])).total_seconds()
-    _fail_if(elapsed >= requested["ttl_seconds"] - 2, f"expiry came {elapsed:.0f}s after the request, before the TTL")
+    _require(elapsed >= requested["ttl_seconds"] - 2, f"expiry came {elapsed:.0f}s after the request, before the TTL")
     limited = run.rate_limit()
-    _fail_if(limited["limited"], "no RATE_LIMITED audit event after exceeding the policy rate limit")
-    _fail_if(not any(a in members for a in limited["limited"] for members in limited["blocklists"].values()),
+    _require(limited["limited"], "no RATE_LIMITED audit event after exceeding the policy rate limit")
+    _require(not any(a in members for a in limited["limited"] for members in limited["blocklists"].values()),
              "a rate-limited target reached a firewall blocklist")
     transitions = [d["transition_number"] for d in scenario["chain"]]
-    _fail_if(transitions == sorted(set(transitions)) and transitions[0] == 1,
+    _require(transitions == sorted(set(transitions)) and transitions[0] == 1,
              f"audit transitions are not an append-only sequence: {transitions}")
     return ("A protected infrastructure target was denied by policy and never blocked; an eligible target was blocked "
             "on every peer and recovered (EXPIRED, removed everywhere) after its TTL; targets beyond the policy rate "
@@ -865,13 +894,13 @@ def check_resp02(run: Run) -> Observation:
     result = run.once("isolation", lambda: _run_isolation(run, host))
     chain = result["chain"]
     states = _states(chain)
-    _fail_if(states[:3] == ["REQUESTED", "APPLIED", "VERIFIED"] and "EXPIRED" in states,
+    _require(states[:3] == ["REQUESTED", "APPLIED", "VERIFIED"] and "EXPIRED" in states,
              f"isolation lifecycle states were {states}")
-    _fail_if(result["reachable_before"] is True, f"{host} was not reachable before the scenario")
-    _fail_if(result["reachable_during"] is False, f"{host} stayed reachable while isolated")
-    _fail_if(result["reachable_after"] is True, f"{host} did not recover after the TTL")
+    _require(result["reachable_before"] is True, f"{host} was not reachable before the scenario")
+    _require(result["reachable_during"] is False, f"{host} stayed reachable while isolated")
+    _require(result["reachable_after"] is True, f"{host} did not recover after the TTL")
     adapters = {d["adapter"] for d in chain}
-    _fail_if(adapters == {"wazuh"}, f"the isolation used adapters {adapters}, expected only wazuh")
+    _require(adapters == {"wazuh"}, f"the isolation used adapters {adapters}, expected only wazuh")
     return ("A Wazuh-corroborated anomaly for the enrolled endpoint triggered only the allowlisted Wazuh Active "
             "Response isolation, verified by the orchestrator, observed from outside as unreachable, and the endpoint "
             "was restored and reachable again after the TTL",
@@ -929,14 +958,14 @@ def check_soc01(run: Run) -> Observation:
         "response audit (soc-response)": len(run.audit_docs(target=run.attacker)),
     }
     empty = [name for name, count in traces.items() if count < 1]
-    _fail_if(not empty, f"the controlled attack trace is missing from: {empty}")
+    _require(not empty, f"the controlled attack trace is missing from: {empty}")
     present = {}
     for dashboard in DASHBOARDS:
         saved = lab.kibana_object("dashboard", dashboard)
-        _fail_if(saved is not None, f"Kibana dashboard {dashboard} is not installed")
+        _require(saved is not None, f"Kibana dashboard {dashboard} is not installed")
         present[dashboard] = dig(saved, "attributes.title")
     secrets = [name for name, title in present.items() if re.search(r"password|secret|api[_ -]?key", str(title), re.I)]
-    _fail_if(not secrets, f"dashboards expose secret-looking titles: {secrets}")
+    _require(not secrets, f"dashboards expose secret-looking titles: {secrets}")
     return ("The controlled attack trace is present in the network/alert, AI and response data views, and the "
             "four dashboards (SOC overview, network/NIDS, AI, response) are installed in Kibana; the dashboards use "
             "only the non-secret normalized, AI and response-audit indices",
@@ -951,11 +980,11 @@ def check_soc02(run: Run) -> Observation:
     by_state = {d["state"]: parse_time(d["@timestamp"]) for d in scenario["chain"]}
     slack = timedelta(seconds=2)
     order = [alert, decision, by_state["REQUESTED"], by_state["APPLIED"], by_state["VERIFIED"], by_state["EXPIRED"]]
-    _fail_if(all(order[i] <= order[i + 1] + slack for i in range(len(order) - 1)),
+    _require(all(order[i] <= order[i + 1] + slack for i in range(len(order) - 1)),
              "event, decision and response timestamps are not causally ordered")
     mttd = (decision - alert).total_seconds()
     contained = (by_state["VERIFIED"] - alert).total_seconds()
-    _fail_if(0 <= mttd < 600 and 0 <= contained < 900,
+    _require(0 <= mttd < 600 and 0 <= contained < 900,
              f"implausible timing (MTTD {mttd:.1f}s, containment {contained:.1f}s)")
     report = {
         "run_marker": run.marker, "target": run.attacker, "alert_event_id": dig(scenario["alert"], "event.id"),
@@ -978,21 +1007,21 @@ def check_soc03(run: Run) -> Observation:
     for event in chain:
         validate({k: v for k, v in event.items() if k not in {"_id", "_index"}},
                  "response/schemas/response-audit-event-v1.schema.json")
-    _fail_if(all(e["decision_event_id"] == decision["event"]["id"] for e in chain),
+    _require(all(e["decision_event_id"] == decision["event"]["id"] for e in chain),
              "audit events are not linked to the decision event")
-    _fail_if(all(e["correlation_id"] == decision["correlation_id"] for e in chain),
+    _require(all(e["correlation_id"] == decision["correlation_id"] for e in chain),
              "audit events do not share the decision's correlation ID")
     ordered = sorted(chain, key=lambda e: e["transition_number"])
-    _fail_if([e["transition_number"] for e in ordered] == list(range(1, len(ordered) + 1)),
+    _require([e["transition_number"] for e in ordered] == list(range(1, len(ordered) + 1)),
              "audit transition numbers are not consecutive")
-    _fail_if(all(later["previous_state"] == earlier["state"] for earlier, later in zip(ordered, ordered[1:])),
+    _require(all(later["previous_state"] == earlier["state"] for earlier, later in zip(ordered, ordered[1:])),
              "audit previous_state links are broken")
     alert_id = dig(scenario["alert"], "event.id")
-    _fail_if(any(signal["reference"] == alert_id for signal in decision["signals"]),
+    _require(any(signal["reference"] == alert_id for signal in decision["signals"]),
              "the decision does not reference the source alert event")
-    _fail_if(dig(decision, "anomaly.event_id") == scenario["attacker_anomaly"]["event"]["id"],
+    _require(dig(decision, "anomaly.event_id") == scenario["attacker_anomaly"]["event"]["id"],
              "the decision does not reference the anomaly event")
-    _fail_if(dig(ordered[-1], "state") == "EXPIRED", "the chain does not end in rollback/expiry")
+    _require(dig(ordered[-1], "state") == "EXPIRED", "the chain does not end in rollback/expiry")
     return ("One queryable chain links source alert, anomaly, policy decision, action, verification and expiry: "
             "the decision cites the alert and anomaly, every audit event cites the decision and correlation ID, "
             "transitions are consecutive with matching previous_state, and all documents validate against their "

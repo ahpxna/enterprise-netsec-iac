@@ -67,6 +67,9 @@ jobs:
           docker build --pull=false -t cxyz/syslog-relay:ci docker/syslog-relay
           docker build --pull=false -f docker/soc-python/Dockerfile -t cxyz/soc-python:ci .
 
+      - name: Compile the Logstash pipelines with the pinned Logstash
+        run: scripts/check_logstash_config.sh
+
       - name: Render Kubernetes manifests with default Kustomize restrictions
         run: kubectl kustomize k8s/ >/tmp/cxyz-k8s-rendered.yaml
 

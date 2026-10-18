@@ -8,6 +8,7 @@ import ssl
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlsplit
 from urllib.request import HTTPRedirectHandler, HTTPSHandler, ProxyHandler, Request, build_opener
+from typing import Callable
 
 
 class DeliveryError(RuntimeError):
@@ -23,7 +24,7 @@ class NoRedirect(HTTPRedirectHandler):
 
 class JsonHTTPS:
     def __init__(self, origin: str, *, ca: str, cert: str | None = None,
-                 key: str | None = None, authorization: str | None = None):
+                 key: str | None = None, authorization: str | Callable[[], str] | None = None):
         parsed = urlsplit(origin)
         if (parsed.scheme != "https" or not parsed.hostname or parsed.username or parsed.password
                 or parsed.query or parsed.fragment or parsed.path not in ("", "/")):
@@ -38,7 +39,7 @@ class JsonHTTPS:
         self._opener = build_opener(ProxyHandler({}), NoRedirect(), HTTPSHandler(context=context))
         self._authorization = authorization
 
-    def with_authorization(self, authorization: str | None) -> "JsonHTTPS":
+    def with_authorization(self, authorization: str | Callable[[], str] | None) -> "JsonHTTPS":
         """Same verified origin and TLS context, different ``Authorization`` value."""
 
         import copy
@@ -55,8 +56,10 @@ class JsonHTTPS:
         if payload is not None:
             headers["Content-Type"] = "application/json"
             data = json.dumps(payload, allow_nan=False).encode()
-        if self._authorization:
-            headers["Authorization"] = self._authorization
+        # A callable is asked on every request, so a rotated credential file takes effect without a restart.
+        authorization = self._authorization() if callable(self._authorization) else self._authorization
+        if authorization:
+            headers["Authorization"] = authorization
         request = Request(self.origin + path, data=data, method=method, headers=headers)
         try:
             with self._opener.open(request, timeout=15) as reply:

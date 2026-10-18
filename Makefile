@@ -109,7 +109,7 @@ image-lock-check: ## Offline: require every audited external image to match supp
 verify-image-platforms: ## Online: verify locked OCI index digests and amd64/arm64 coverage with Docker buildx
 	python scripts/verify_image_platforms.py --strict
 
-.PHONY: soc-certs soc-contracts soc-up soc-health soc-status soc-smoke soc-down
+.PHONY: soc-certs soc-contracts soc-logstash-check soc-up soc-health soc-status soc-smoke soc-down
 soc-certs: ## Generate ignored TLS identities for the SOC analytics plane
 	bash scripts/gen_soc_certs.sh
 
@@ -117,7 +117,10 @@ soc-contracts: ## Validate SOC architecture and schema invariants
 	python scripts/check_soc_static.py
 	python -m pytest tests/soc -q
 
-soc-up: secrets dc-network ## Start TLS-protected Elasticsearch, Logstash, and Kibana
+soc-logstash-check: ## Compile the Logstash pipelines with the pinned image (fails fast, names the setting)
+	bash scripts/check_logstash_config.sh
+
+soc-up: secrets dc-network soc-logstash-check ## Start TLS-protected Elasticsearch, Logstash, and Kibana
 	docker compose --profile soc up -d --wait elasticsearch
 	docker compose --profile soc run --rm --no-deps soc-account-setup
 	docker compose --profile soc up -d --wait --no-deps logstash kibana
@@ -146,7 +149,7 @@ SOC_POLICY ?= $(if $(filter path-b,$(SOC_PATH)),lab-path-b,default)
 export SOC_PATH SOC_POLICY
 SOC_COMPOSE = docker compose $(if $(filter path-a,$(SOC_PATH)),-f docker-compose.yml -f docker-compose.path-a.yml,) --profile soc --profile soc-ai
 
-.PHONY: soc-ai-contracts soc-ai-preflight soc-ai-up soc-ai-down soc-ai-status soc-ai-promote soc-ai-wazuh-user soc-ai-validate-up soc-ai-restore soc-live-deps soc-ai-validate soc-ai-dataset
+.PHONY: soc-ai-contracts soc-ai-preflight soc-ai-up soc-ai-rotate-keys soc-ai-down soc-ai-status soc-ai-promote soc-ai-wazuh-user soc-ai-validate-up soc-ai-restore soc-live-deps soc-ai-validate soc-ai-dataset
 soc-ai-contracts: ## Offline AI + response contract gates (static checks and the full unit suite)
 	python scripts/check_soc_ai_static.py
 	python -m pytest tests/soc tests/unit -q
@@ -159,6 +162,9 @@ soc-ai-up: soc-up soc-ai-preflight ## Start features, inference, enrichment, dec
 	$(SOC_COMPOSE) up -d soc-service-init
 	$(SOC_COMPOSE) up -d --wait soc-ai-api soc-response
 	$(SOC_COMPOSE) up -d soc-feature-worker soc-enrichment-worker soc-decision
+
+soc-ai-rotate-keys: ## Rotate every SOC service API key (running services re-read the key file on their next request)
+	SOC_ROTATE_SERVICE_KEYS=1 $(SOC_COMPOSE) run --rm --no-deps soc-service-init
 
 soc-ai-down: ## Stop the AI/response services (state and credentials volumes are kept)
 	$(SOC_COMPOSE) stop soc-decision soc-enrichment-worker soc-feature-worker soc-response soc-ai-api soc-service-init
@@ -393,7 +399,7 @@ audit: lint batfish validate attack soc-ai-validate report ## Everything an audi
 # ---------------------------------------------------------------- DMZ deception lab
 # A vulnerable web app (OWASP Juice Shop) and an SSH/Telnet honeypot (Cowrie) that share the dmz-web node's
 # network namespace behind fw-dmz. Path A only; restart them after any `make net` (the namespace is recreated).
-.PHONY: dmzlab-up dmzlab-down dmzlab-status dmzlab-attack
+.PHONY: dmzlab-up dmzlab-down dmzlab-status dmzlab-attack dmzlab-siem-check
 dmzlab-up: ## DMZ lab: OWASP Juice Shop + Cowrie honeypot behind fw-dmz (needs the fabric: make net)
 	@docker inspect clab-companyxyz-dmz-web >/dev/null 2>&1 || { echo "dmz-web is not running: bring the fabric up first (make net)" >&2; exit 1; }
 	docker compose --profile dmzlab up -d --force-recreate dmz-vuln dmz-honeypot
@@ -408,6 +414,9 @@ dmzlab-status: ## Containers and fw-dmz hit counters of the DMZ lab
 
 dmzlab-attack: ## Send controlled hostile traffic from pc1 to the DMZ lab (SQLi/XSS/traversal, telnet) and check isolation
 	bash scripts/dmzlab_attack.sh
+
+dmzlab-siem-check: ## Honeypot session from pc1 -> SIEM (cowrie.honeypot) -> password redacted (raw too) -> one decision signal
+	python scripts/honeypot_e2e.py
 
 # ---------------------------------------------------------------- try it / explore it
 .PHONY: try-linux try-linux-quick try-linux-offline netviz netviz-stop

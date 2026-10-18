@@ -61,12 +61,40 @@ def test_the_honeypot_log_path_is_consistent_between_compose_logstash_and_the_pi
 
 def test_normalization_maps_honeypot_fields_and_never_indexes_attacker_passwords():
     normalize = (ROOT / "soc/logstash/pipelines/70-normalize-ecs.conf").read_text()
-    branch = normalize.split('[@metadata][source_type] == "cowrie"', 1)[1].split('} else {\n      if [@metadata][source_type] == "network_syslog"', 1)[0]
+    branch = normalize.split('} else if [@metadata][source_type] == "cowrie"', 1)[1].split('} else {\n      if [@metadata][source_type] == "network_syslog"', 1)[0]
     assert 'remove_field => ["password"]' in branch
     for token in ('"src_ip" => "[source][ip]"', '"dst_port" => "[destination][port]"', '"username" => "[user][name]"',
                   '"[event][dataset]" => "cowrie.honeypot"', '"[@metadata][index_family]" => "alerts"', "cowrie.login.success", "file_(download|upload)"):
         assert token in branch, token
     assert "[password]" not in branch.replace('remove_field => ["password"]', "")       # never renamed or copied elsewhere
+
+
+def cowrie_redactions() -> tuple[str, list[tuple[re.Pattern, str]]]:
+    """The gsub pairs the pipeline applies to Cowrie's received line (Ruby and Python agree on these regexes)."""
+
+    normalize = (ROOT / "soc/logstash/pipelines/70-normalize-ecs.conf").read_text()
+    block = normalize.split("filter {", 1)[1].split('if [@metadata][source_type] == "cowrie" {', 1)[1].split("\n  }\n", 1)[0]
+    gsub = re.search(r"gsub => \[(.*?)\n\s*\]", block, flags=re.S).group(1)
+    return normalize, [(re.compile(pattern), replacement) for pattern, replacement in re.findall(r"\"message\", '(.*?)', '(.*?)'", gsub)]
+
+
+def test_attacker_passwords_are_redacted_in_the_received_line_before_it_is_preserved_or_cloned():
+    normalize, redactions = cowrie_redactions()
+    assert len(redactions) == 2
+    # Before event.original is copied and before the raw clone: soc-raw-* must not keep the secret either.
+    assert normalize.index("gsub => [") < normalize.index('copy => { "message" => "[event][original]" }') < normalize.index("clone {")
+    secret = 'p/w] failed"x\\y'                       # a slash, a fake "] failed", a quote and a backslash
+    for event in ("cowrie.login.success", "cowrie.login.failed"):
+        outcome = event.rsplit(".", 1)[1].replace("success", "succeeded")
+        line = json.dumps({"eventid": event, "username": "root", "password": secret, "src_ip": "198.51.100.7",
+                           "message": f"login attempt [root/{secret}] {outcome}", "session": "4e1258b56dbd"})
+        for pattern, replacement in redactions:
+            line = pattern.sub(replacement, line)
+        parsed = json.loads(line)                     # still valid JSON for the json filter
+        assert parsed["password"] == "[REDACTED]" and parsed["message"] == f"login attempt [REDACTED] {outcome}"
+        assert "p/w" not in line and parsed["username"] == "root" and parsed["src_ip"] == "198.51.100.7"
+    command = json.dumps({"eventid": "cowrie.command.input", "input": "uname -a", "message": "CMD: uname -a"})
+    assert all(pattern.sub(replacement, command) == command for pattern, replacement in redactions)
 
 
 def test_the_new_images_are_in_the_audited_lock_with_both_platforms():

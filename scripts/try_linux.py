@@ -93,6 +93,12 @@ GLOBAL_HINTS: list[Hint] = [
     (r"SOC_AI_METADATA_SHA256 is unset|does not match ai/registry/active/metadata.json|metadata.json is missing",
      "no approved model digest in .env", "./scripts/try-on-linux.sh --only demo-model"),
     (r"Wazuh PKI directory is missing|missing docker/wazuh/certs", "the Wazuh certificates were not generated", "./scripts/try-on-linux.sh --only wazuh-config"),
+    (r"Unknown setting '[^']+' for [a-z_]+|Something is wrong with your configuration",
+     "a Logstash pipeline does not compile on the pinned Logstash (Logstash crash-loops)",
+     "scripts/check_logstash_config.sh   # names the plugin and the setting"),
+    (r"Failed to install template|_index_template/[^ ]*'.*403|Got response code '403' contacting Elasticsearch",
+     "a Logstash output tries to manage index templates its least-privilege role cannot write",
+     "every elasticsearch output needs manage_template => false (python scripts/check_soc_static.py)"),
     (r"is unhealthy|dependency failed to start|container .* exited \((1|137|139)\)",
      "a container started but never became healthy", "see the container logs captured below (the same lines are in the log file)"),
     (r"test_ntp_authenticated|TIME-01|chronyc|NTS", "TIME-01 needs the HOST clock disciplined by authenticated NTS",
@@ -112,6 +118,7 @@ DIAGNOSTICS = {
     "fabric-up": [["containerlab", "inspect", "-t", "clab/companyxyz.clab.yml"], ["docker", "ps", "-a", "--filter", "name=clab-", "--format", "{{.Names}}\t{{.Status}}"]],
     "fabric-verify": [["docker", "ps", "-a", "--filter", "name=clab-", "--format", "{{.Names}}\t{{.Status}}"]],
     "dmzlab-up": [["docker", "compose", "--profile", "dmzlab", "ps", "-a"], ["docker", "compose", "--profile", "dmzlab", "logs", "--tail", "40", "dmz-vuln", "dmz-honeypot"]],
+    "dmzlab-siem": [["docker", "compose", "--profile", "soc", "--profile", "dmzlab", "logs", "--tail", "60", "logstash", "dmz-honeypot"]],
     "security-up": [["docker", "compose", "--profile", "siem", "--profile", "ids", "--profile", "ztna", "--profile", "dmz", "ps", "-a"],
                     ["docker", "compose", "--profile", "siem", "logs", "--tail", "40", "wazuh.manager", "wazuh-indexer"]],
 }
@@ -345,7 +352,11 @@ class Runner:
         started = time.monotonic()
         result = Result(stage=stage.id, title=stage.title, status=PASS, log=str(logfile.relative_to(ctx.root)))
         try:
-            if stage.check is not None:
+            if stage.check is not None and ctx.args.dry_run:
+                # Checks are code, not commands: some act (join the docker group and re-exec, start the explorer).
+                result.status, result.message = SKIP, "dry run: check not executed"
+                logfile.write_text(f"{stage.id}: dry run, check not executed\n", encoding="utf-8")
+            elif stage.check is not None:
                 status, message = stage.check(ctx)
                 result.status, result.message = status, message
                 if stage.id == "host-sudo" and status == PASS:
@@ -793,6 +804,12 @@ def build_stages(ctx: Ctx) -> list[Stage]:
           cmds=lambda c: [make(c, "dmzlab-up", timeout=1800)], needs=("fabric-verify", "images"), modes=("full",)),
         S("dmzlab-verify", "Verify the DMZ lab: reachable, counted, logged and contained", "live", check=dmzlab_verify, needs=("dmzlab-up",), modes=("full",),
           hints=[(r"ISOLATION BROKEN", "a deliberately vulnerable host can pivot into the internal network", "inspect clab/configs/fw-dmz.nft (pivot deny) and `nft list ruleset` on fw-dmz")]),
+        S("dmzlab-siem", "Honeypot session reaches the SIEM, its password is redacted, it becomes one decision signal", "live",
+          cmds=lambda c: [make(c, "dmzlab-siem-check", timeout=600)], needs=("dmzlab-verify", "soc-smoke"), modes=("full",), finding=True,
+          hints=[(r"ATTACKER PASSWORD INDEXED", "an attacker-supplied honeypot password reached Elasticsearch",
+                  "check the Cowrie redaction at the top of soc/logstash/pipelines/70-normalize-ecs.conf (tests/soc/test_dmz_lab.py)"),
+                 (r"no cowrie\.[a-z.]+ event in soc-alerts", "honeypot events do not reach the SIEM",
+                  "docker compose logs logstash; the dmzlab_cowrie_var volume must be mounted read-only into Logstash")]),
         S("configure", "Apply the Ansible hardening roles", "audit", cmds=lambda c: [make(c, "configure", timeout=3600)], needs=("fabric-verify", "security-up"), modes=("full",), finding=True),
         S("validate", "Live validation: routing, segmentation, hardening", "audit", cmds=lambda c: [make(c, "validate", timeout=2400)], needs=("configure",), modes=("full",), finding=True),
         S("attack", "Replay the attack chain and prove the SIEM sees it", "audit", cmds=lambda c: [make(c, "attack", timeout=1800)], needs=("validate",), modes=("full",), finding=True),

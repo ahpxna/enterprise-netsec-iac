@@ -10,6 +10,7 @@ from jsonschema import Draft202012Validator, FormatChecker
 from response.decision import DecisionEngine
 from response.errors import PolicyError
 from response.policy import PolicyCatalog, SignalRequirement
+from soc.workers.common import ElasticClient
 
 from test_response_service import ATTACKER, NOW, anomaly, decisions, ts, world  # noqa: F401  (world is a fixture)
 
@@ -98,3 +99,19 @@ def test_the_engine_emits_a_schema_valid_action_request_for_a_honeypot_corrobora
     schema("schemas/response/action-request.schema.json").validate(result.action_request)
     schema("schemas/events/correlation-decision-event-v1.schema.json").validate(result.decision_event)
     assert {"type": "honeypot", "reference": "honeypot:abc"} in result.action_request["signals"]
+
+
+def test_the_live_honeypot_check_uses_the_decision_runners_own_evidence_query(world):
+    # scripts/honeypot_e2e.py builds a bare observe-mode DecisionRunner and calls its evidence gathering;
+    # keep that coupling honest so the live check cannot silently drift from the real decision code.
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location("honeypot_e2e", ROOT / "scripts/honeypot_e2e.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    for index, severity in enumerate((3, 8, 9)):
+        world.fake.add("soc-alerts-2026.09.07", f"hp-{index}", honeypot_event(f"hp-{index}", severity, minutes_before=3 - index))
+    world.fake.add("soc-alerts-2026.09.07", "hp-other", honeypot_event("hp-other", 10, source="198.51.100.77"))
+    (signal,) = module.honeypot_signals(ElasticClient(world.fake), ATTACKER, NOW - timedelta(minutes=10), NOW)
+    assert signal["severity"] == 9 and signal["count"] == 3
+    assert module.protected("10.255.0.2") and not module.protected(ATTACKER)
