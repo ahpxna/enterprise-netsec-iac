@@ -42,12 +42,17 @@ def test_ospf_md5_and_bgp_ttl(evidence):
     dist2_routes = _show("dist2", "show ip route")
 
     expected_peers = {"198.10.10.1", "197.10.10.1"}
+    # A peer is Established when State/PfxRcd is a prefix count. Locate that column from the
+    # header: FRR 10 appends PfxSnt and Desc, so the last field is no longer the count.
+    header = next((line.split() for line in bgp_summary.splitlines() if "State/PfxRcd" in line), [])
+    state_column = header.index("State/PfxRcd") if header else -1
     established_peers = {
         fields[0]
         for line in bgp_summary.splitlines()
         if (fields := line.split())
         and fields[0] in expected_peers
-        and fields[-1].isdigit()
+        and len(fields) > state_column
+        and fields[state_column].isdigit()
     }
     bgp_established = len(established_peers)
     ospf_full = sum("Full" in line for line in core_neighbors.splitlines())

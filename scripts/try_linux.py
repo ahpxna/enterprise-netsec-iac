@@ -45,6 +45,7 @@ VENV = ROOT / ".venv"
 STATE = ROOT / ".cxyz-state"
 VIZ_PORT_DEFAULT = 8088
 MIN_PYTHON = (3, 11)
+MAX_PYTHON = (3, 13)                             # the pinned scikit-learn/numpy publish no wheels for newer
 
 PASS, FAIL, SKIP, BLOCKED, WARN = "PASS", "FAIL", "SKIP", "BLOCKED", "WARN"
 COLORS = {PASS: "32", FAIL: "31", SKIP: "90", BLOCKED: "33", WARN: "33"}
@@ -95,7 +96,10 @@ GLOBAL_HINTS: list[Hint] = [
     (r"Wazuh PKI directory is missing|missing docker/wazuh/certs", "the Wazuh certificates were not generated", "./scripts/try-on-linux.sh --only wazuh-config"),
     (r"is unhealthy|dependency failed to start|container .* exited \((1|137|139)\)",
      "a container started but never became healthy", "see the container logs captured below (the same lines are in the log file)"),
-    (r"test_ntp_authenticated|TIME-01|chronyc|NTS", "TIME-01 needs the HOST clock disciplined by authenticated NTS",
+    (r"metadata-generation-failed|Failed to build (scikit-learn|numpy|torch)|Building wheel for (scikit-learn|numpy) ",
+     "pip is compiling a pinned package from source: this Python is too new for the pinned wheels (CI runs 3.12)",
+     "rm -rf .venv && ./scripts/try-on-linux.sh --only deps-python   # recreates the venv with Python 3.12 (uv-managed if needed)"),
+    (r"test_ntp_authenticated|TIME-01|chronyc|(?-i:\bNTS\b)", "TIME-01 needs the HOST clock disciplined by authenticated NTS",
      "configure chrony from host/chrony-cxyz.sources.example, then `make host-time-check`"),
     (r"nft: command not found|nftables.*not found", "nftables is not installed on the host", "sudo apt-get install -y nftables"),
     (r"Operation not permitted.*sysctl|sysctl: permission denied", "sysctl is not writable here (container/WSL/restricted host)", "set the sysctl on the real host kernel"),
@@ -477,6 +481,16 @@ def check_sudo(ctx: Ctx) -> tuple[str, str]:
     return (PASS, "sudo authenticated") if subprocess.run(["sudo", "-v"]).returncode == 0 else (FAIL, "sudo authentication failed")
 
 
+def drop_bad_docker_source() -> Cmd:
+    """get.docker.com on Kali/Parrot writes a download.docker.com source for a codename that does not exist (kali-rolling),
+    which breaks every later `apt-get update`; remove such a leftover."""
+
+    codename = os_release().get("VERSION_CODENAME", "")
+    return Cmd(shell=f"! grep -qs 'download.docker.com/linux/debian {codename} ' /etc/apt/sources.list.d/docker.list || "
+                     "sudo rm -f /etc/apt/sources.list.d/docker.list",
+               label="remove a docker.list for an unsupported codename", interactive=True)
+
+
 def pkg_install(ctx: Ctx) -> list[Cmd]:
     fam = family(ctx)
     if ctx.args.no_install:
@@ -484,7 +498,8 @@ def pkg_install(ctx: Ctx) -> list[Cmd]:
     want = ["ca-certificates", "curl", "git", "make", "jq", "openssl", "iproute2", "python3", "python3-venv", "python3-pip", "nftables"]
     if fam == "debian":
         missing = [p for p in want]
-        return [Cmd(argv=["apt-get", "update", "-y"], sudo=True, env={"DEBIAN_FRONTEND": "noninteractive"}, label="apt update", interactive=True),
+        cleanup = [drop_bad_docker_source()] if os_release().get("ID") in ("kali", "parrot") else []
+        return [*cleanup, Cmd(argv=["apt-get", "update", "-y"], sudo=True, env={"DEBIAN_FRONTEND": "noninteractive"}, label="apt update", interactive=True),
                 Cmd(argv=["apt-get", "install", "-y", "--no-install-recommends", *missing], sudo=True,
                     env={"DEBIAN_FRONTEND": "noninteractive"}, label="apt install base packages", interactive=True)]
     if fam == "redhat":
@@ -504,6 +519,12 @@ def docker_install(ctx: Ctx) -> list[Cmd]:
         if family(ctx) == "debian" and rel.get("ID") == "ubuntu" and rel.get("VERSION_ID", "0") >= "24.04":
             cmds.append(Cmd(argv=["apt-get", "install", "-y", "docker.io", "docker-compose-v2"], sudo=True, env={"DEBIAN_FRONTEND": "noninteractive"},
                             label="install Docker from the distribution", interactive=True))
+        elif rel.get("ID") in ("kali", "parrot"):
+            # get.docker.com does not support these codenames: use the distribution's own Docker + Compose v2 + buildx.
+            cmds.append(drop_bad_docker_source())
+            cmds.append(Cmd(argv=["apt-get", "update", "-y"], sudo=True, env={"DEBIAN_FRONTEND": "noninteractive"}, label="apt update", interactive=True))
+            cmds.append(Cmd(argv=["apt-get", "install", "-y", "docker.io", "docker-compose", "docker-buildx"], sudo=True,
+                            env={"DEBIAN_FRONTEND": "noninteractive"}, label="install Docker from the distribution", interactive=True))
         else:
             cmds.append(Cmd(shell="d=$(mktemp -d) && curl -fsSL https://get.docker.com -o \"$d/get-docker.sh\" && sudo sh \"$d/get-docker.sh\"",
                             label="install Docker with the official convenience script", interactive=True, timeout=900))
@@ -534,17 +555,80 @@ def check_docker_access(ctx: Ctx) -> tuple[str, str]:
     return FAIL, "the Docker daemon is not usable: " + (err.splitlines()[0][:200] if err else "docker info failed")
 
 
+def depends_on(chosen: Sequence[Stage], stages: Sequence[Stage], target: str) -> bool:
+    """True when a chosen stage depends (transitively) on stage `target`."""
+
+    by_id = {s.id: s for s in stages}
+    seen: set[str] = set()
+    todo = [d for s in chosen for d in s.needs]
+    while todo:
+        dep = todo.pop()
+        if dep == target:
+            return True
+        if dep not in seen and dep in by_id:
+            seen.add(dep)
+            todo.extend(by_id[dep].needs)
+    return False
+
+
+def rejoin_docker_group(chosen: Sequence[Stage], stages: Sequence[Stage], ctx: Ctx) -> None:
+    """A shell started before `usermod -aG docker` lacks the group. deps-docker-access re-execs under `sg docker`, but a
+    --from/--only run that skips it would fail on every docker call, so do the same re-exec up front (same arguments)."""
+
+    if ctx.is_root or ctx.args.dry_run or os.environ.get("CXYZ_SG_DONE"):
+        return
+    if any(s.id == "deps-docker-access" for s in chosen) or not depends_on(chosen, stages, "deps-docker-access"):
+        return
+    if shutil.which("docker") is None or shutil.which("sg") is None:
+        return
+    try:
+        import grp
+        group = grp.getgrnam("docker")
+    except (ImportError, KeyError):
+        return
+    user = os.environ.get("USER", "")
+    if group.gr_gid in os.getgroups() or user not in group.gr_mem:
+        return
+    if subprocess.run(["docker", "info"], capture_output=True).returncode == 0:
+        return
+    print("   this shell predates your 'docker' group membership; re-running inside that group …", flush=True)
+    argv = ["sg", "docker", "-c", " ".join(shlex.quote(a) for a in [sys.executable, str(ROOT / "scripts/try_linux.py"), *sys.argv[1:]])]
+    os.execvpe("sg", argv, {**os.environ, "CXYZ_SG_DONE": "1"})
+
+
+def authenticate_sudo_up_front(chosen: Sequence[Stage], stages: Sequence[Stage], ctx: Ctx, runner: "Runner") -> None:
+    """host-sudo asks for the password once and keeps the ticket alive. A --from/--only run that skips it would otherwise
+    hit sudo's prompt in the middle of a stage, where the progress ticker overwrites it and the run looks hung."""
+
+    if ctx.is_root or ctx.args.dry_run or shutil.which("sudo") is None or any(s.id == "host-sudo" for s in chosen):
+        return
+    if not depends_on(chosen, stages, "host-sudo"):
+        return
+    if subprocess.run(["sudo", "-n", "true"], capture_output=True).returncode != 0:
+        if not sys.stdin.isatty():
+            return                                   # the stage will fail with the "sudo needs a password" hint
+        print("   sudo password needed once (kept alive while the script runs):", flush=True)
+        if subprocess.run(["sudo", "-v"]).returncode != 0:
+            return
+    runner.keep_sudo_alive()
+
+
 def find_python() -> str | None:
     for name in ("python3.12", "python3.13", "python3.11"):   # 3.12 is what CI runs; newer/older only if absent
         found = shutil.which(name)
         if found:
             return found
     current = shutil.which("python3")
-    if current:
-        out = subprocess.run([current, "-c", "import sys;print(sys.version_info[:2]>=%s)" % (MIN_PYTHON,)], capture_output=True, text=True)
-        if out.stdout.strip() == "True":
-            return current
+    if current and python_supported(current):
+        return current
     return None
+
+
+def python_supported(python: str) -> bool:
+    """MIN_PYTHON <= version <= MAX_PYTHON; outside that pip builds the pinned packages from source (and Cython may crash)."""
+
+    out = subprocess.run([python, "-c", "import sys;print(%s<=sys.version_info[:2]<=%s)" % (MIN_PYTHON, MAX_PYTHON)], capture_output=True, text=True)
+    return out.stdout.strip() == "True"
 
 
 def python_env_cmds(ctx: Ctx) -> list[Cmd]:
@@ -552,12 +636,16 @@ def python_env_cmds(ctx: Ctx) -> list[Cmd]:
         return [Cmd(argv=[ctx.py, "-c", "import yaml, pytest, jsonschema, fastapi, sklearn; print('dependencies already present')"], label="verify dependencies")]
     python = find_python()
     cmds: list[Cmd] = []
-    if not (VENV / "bin" / "python").exists():
+    venv_python = VENV / "bin" / "python"
+    stale = venv_python.exists() and not python_supported(str(venv_python))
+    if stale:
+        cmds.append(Cmd(argv=["rm", "-rf", str(VENV)], label="remove .venv built on an unsupported Python"))
+    if stale or not venv_python.exists():
         if python:
             cmds.append(Cmd(argv=[python, "-m", "venv", str(VENV)], label="create .venv"))
         else:
             cmds.append(Cmd(shell=f"python3 -m pip install --user --break-system-packages uv >/dev/null 2>&1 || python3 -m pip install --user uv; "
-                                  f"~/.local/bin/uv venv --python 3.12 {shlex.quote(str(VENV))}", label="create .venv with uv-managed Python 3.12", timeout=900))
+                                  f"~/.local/bin/uv venv --seed --python 3.12 {shlex.quote(str(VENV))}", label="create .venv with uv-managed Python 3.12", timeout=900))
     pip = [str(VENV / "bin" / "python"), "-m", "pip"]
     cmds.append(Cmd(argv=[*pip, "install", "--upgrade", "pip"], label="upgrade pip"))
     requirements = ["requirements-ci.txt", "requirements-soc-test.txt", "requirements-soc-live.txt"]
@@ -654,6 +742,8 @@ def viz_start(ctx: Ctx) -> tuple[str, str]:
 
 
 def make(ctx: Ctx, target: str, *extra: str, timeout: int = 1800, interactive: bool = False, label: str = "") -> Cmd:
+    # interactive=True for any target that (transitively) runs `sudo`, e.g. via dc-network -> ensure_dc_network.sh:
+    # sudo's cached ticket is bound to this terminal, so a detached child cannot use it.
     return Cmd(argv=["make", target, *extra], timeout=timeout, interactive=interactive, label=label or f"make {target}")
 
 
@@ -781,14 +871,14 @@ def build_stages(ctx: Ctx) -> list[Stage]:
         S("fabric-up", "Deploy the routed fabric (containerlab, 12 nodes)", "live", cmds=lambda c: [make(c, "net", interactive=True, timeout=2400)],
           needs=("deps-containerlab", "dc-network", "deps-sysctl"), modes=("full",)),
         S("fabric-verify", "Verify the fabric: 12 nodes, containment sets, enforcement agents", "live", check=fabric_verify, needs=("fabric-up",), modes=("full",)),
-        S("security-up", "Start Wazuh, Suricata, ZTNA and the DMZ app", "live", cmds=lambda c: [make(c, "security", timeout=3000)], needs=("wazuh-config", "fabric-verify"), modes=("full",)),
-        S("soc-up", "Start the SOC analytics plane (Elasticsearch, Logstash, Kibana)", "live", cmds=lambda c: [make(c, "soc-up", timeout=2400), make(c, "soc-health")],
+        S("security-up", "Start Wazuh, Suricata, ZTNA and the DMZ app", "live", cmds=lambda c: [make(c, "security", timeout=3000, interactive=True)], needs=("wazuh-config", "fabric-verify"), modes=("full",)),
+        S("soc-up", "Start the SOC analytics plane (Elasticsearch, Logstash, Kibana)", "live", cmds=lambda c: [make(c, "soc-up", timeout=2400, interactive=True), make(c, "soc-health")],
           needs=("images", "dc-network", "deps-sysctl"), modes=("full", "quick")),
-        S("soc-smoke", "Prove ingestion: four sources, malformed input, dashboard", "live", cmds=lambda c: [make(c, "soc-smoke", timeout=900)], needs=("soc-up",), modes=("full", "quick")),
+        S("soc-smoke", "Prove ingestion: four sources, malformed input, dashboard", "live", cmds=lambda c: [make(c, "soc-smoke", timeout=900, interactive=True)], needs=("soc-up",), modes=("full", "quick")),
         S("mgmt-network", "Management network for the orchestrator (quick mode only)", "live", cmds=mgmt_network_cmds, needs=("deps-docker-access",), modes=("quick",)),
         S("demo-model", "Build a DEMO approved model (synthetic data; proves wiring only)", "live", cmds=demo_model_cmds, needs=("deps-python", "secrets"), modes=("full", "quick")),
         S("soc-ai-up", "Start features, inference, enrichment, decision, orchestrator (observe mode)", "live",
-          cmds=lambda c: [make(c, "soc-ai-up", timeout=2400), make(c, "soc-ai-status")], needs=("soc-smoke", "demo-model", "mgmt-network"), modes=("full", "quick")),
+          cmds=lambda c: [make(c, "soc-ai-up", timeout=2400, interactive=True), make(c, "soc-ai-status")], needs=("soc-smoke", "demo-model", "mgmt-network"), modes=("full", "quick")),
         S("dmzlab-up", "Start the DMZ deception lab (OWASP Juice Shop + Cowrie honeypot behind fw-dmz)", "live",
           cmds=lambda c: [make(c, "dmzlab-up", timeout=1800)], needs=("fabric-verify", "images"), modes=("full",)),
         S("dmzlab-verify", "Verify the DMZ lab: reachable, counted, logged and contained", "live", check=dmzlab_verify, needs=("dmzlab-up",), modes=("full",),
@@ -869,7 +959,7 @@ def write_report(ctx: Ctx, results: list[Result], started: datetime) -> pathlib.
     return path
 
 
-def summarize(ctx: Ctx, results: list[Result], report: pathlib.Path) -> int:
+def summarize(ctx: Ctx, results: list[Result], report: pathlib.Path, interrupted: bool = False) -> int:
     counts: dict[str, int] = {}
     print("\n" + "=" * 78)
     for r in results:
@@ -883,12 +973,14 @@ def summarize(ctx: Ctx, results: list[Result], report: pathlib.Path) -> int:
     print(f"  report : {report.relative_to(ROOT)}  (+ report.json and one log per stage)")
     if ctx.viz_url:
         print(f"  explorer: {ctx.viz_url}   (remote host? ssh -L {ctx.viz_url.rsplit(':', 1)[1]}:127.0.0.1:{ctx.viz_url.rsplit(':', 1)[1]} user@host)")
-    if ctx.mode != "offline" and not failed:
+    if ctx.mode != "offline" and not failed and not interrupted:
         print("  Kibana : https://127.0.0.1:5602   Wazuh: https://127.0.0.1:5601   (passwords: ELASTIC_PASSWORD / WAZUH_DASHBOARD_PASSWORD in .env)")
     if failed:
         print("\n" + paint(f"  {len(failed)} stage(s) failed:", "31;1") + " " + ", ".join(r.stage for r in failed))
         print(f"  fix the first one and re-run:  {SCRIPT} --only {failed[0].stage}   (or just {SCRIPT} --from {failed[0].stage})")
         return 1
+    if interrupted:
+        return 130
     print("\n" + paint("  ALL STAGES PASSED" + (" (with warnings)" if counts.get(WARN) else ""), "32;1"))
     return 0
 
@@ -948,12 +1040,14 @@ def main(argv: Sequence[str] | None = None) -> int:
     if args.teardown:
         return teardown(ctx)
     chosen = select(stages, ctx)
+    rejoin_docker_group(chosen, stages, ctx)
     logdir.mkdir(parents=True, exist_ok=True)
     started = datetime.now(timezone.utc)
     print(paint(f"CompanyXYZ lab — try-on-linux  [{ctx.mode}]  {len(chosen)} stages   logs: {logdir.relative_to(ROOT)}", "1"))
     if args.dry_run:
         print("DRY RUN: nothing is executed, nothing is installed")
     runner = Runner(ctx)
+    authenticate_sudo_up_front(chosen, stages, ctx, runner)
     results: list[Result] = []
     selected_ids = {s.id for s in chosen}
     by_id = {s.id: s for s in stages}
@@ -977,6 +1071,13 @@ def main(argv: Sequence[str] | None = None) -> int:
                 break
     except KeyboardInterrupt:
         print("\ninterrupted: partial results below (stages already done are kept; re-run with --from <stage>)")
+        report = write_report(ctx, results, started)
+        summarize(ctx, results, report, interrupted=True)
+        not_run = [s.id for s in chosen if s.id not in ctx.results]
+        if not_run:
+            print(paint(f"\n  INTERRUPTED: {len(not_run)} of {len(chosen)} stage(s) did not run", "33;1")
+                  + f"   continue with:  {SCRIPT} --from {not_run[0]}")
+        return 130
     report = write_report(ctx, results, started)
     return summarize(ctx, results, report)
 

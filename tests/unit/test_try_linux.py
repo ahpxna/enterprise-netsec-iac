@@ -142,6 +142,18 @@ def test_dry_run_executes_nothing(run, tmp_path):
     assert code == 0 and not marker.exists() and "DRY RUN" in out
 
 
+def test_ctrl_c_is_never_reported_as_all_stages_passed(run):
+    def interrupt(ctx):
+        raise KeyboardInterrupt
+    stages = [tl.Stage("first", "runs", "host", check=lambda ctx: (tl.PASS, "")),
+              tl.Stage("second", "user presses Ctrl+C", "host", check=interrupt),
+              tl.Stage("third", "never starts", "host", check=lambda ctx: (tl.PASS, ""))]
+    tl.build_stages = lambda ctx: stages
+    code, out = run("--no-viz")
+    assert code == 130 and "ALL STAGES PASSED" not in out
+    assert "INTERRUPTED: 2 of 3 stage(s) did not run" in out and "--from second" in out
+
+
 def test_timeout_kills_the_command_and_reports_it(run, tmp_path):
     stages = [tl.Stage("slow", "sleeps forever", "host", cmds=[tl.Cmd(argv=[sys.executable, "-c", "import time; time.sleep(60)"], timeout=2)])]
     tl.build_stages = lambda ctx: stages
@@ -299,3 +311,12 @@ def test_dmz_lab_is_a_full_mode_stage_ordered_after_the_fabric():
     stages = {s.id: s for s in tl.build_stages(ctx)}
     assert ids.index("fabric-verify") < ids.index("dmzlab-up") < ids.index("dmzlab-verify")
     assert stages["dmzlab-up"].modes == ("full",) and "fabric-verify" in stages["dmzlab-up"].needs
+
+
+def test_partial_runs_know_which_stages_need_sudo_and_docker(tmp_path):
+    ctx = tl.Ctx(args("--from", "wazuh-config"), tmp_path)
+    stages = tl.build_stages(ctx)
+    by_id = {s.id: s for s in stages}
+    assert tl.depends_on([by_id["fabric-up"]], stages, "host-sudo")
+    assert tl.depends_on([by_id["soc-up"]], stages, "deps-docker-access")
+    assert not tl.depends_on([by_id["host-os"]], stages, "host-sudo")

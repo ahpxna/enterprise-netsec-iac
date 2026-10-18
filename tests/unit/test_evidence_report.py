@@ -267,3 +267,17 @@ def test_endpoint_isolation_is_scoped_to_path_b_and_reported_as_not_applicable(t
     monkeypatch.setattr(sys, "argv", ["generate_report", "--profile", "path-b", "--out", str(out), "--run", str(run_dir)])
     report_module.main()
     assert "| RESP-02 |" in out.read_text()
+
+
+def test_archive_checkout_never_hashes_gitignored_secrets():
+    """Without .git the source-tree hash walks the tree; it must skip what .gitignore keeps out of Git."""
+
+    from compliance import provenance
+
+    rules = provenance._gitignore_rules()
+    assert provenance._gitignored("docker/wazuh/certs/root-ca-manager.key", rules)
+    assert provenance._gitignored("soc/certs/ca.crt", rules)
+    assert provenance._gitignored(".env", rules)
+    assert provenance._gitignored("ops/site.tfvars", rules)
+    assert not provenance._gitignored("ops/site.tfvars.example", rules)
+    assert not provenance._gitignored("compliance/provenance.py", rules)

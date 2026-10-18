@@ -121,7 +121,8 @@ services:
       - ./docker/wazuh/certs/admin-key.pem:/usr/share/wazuh-indexer/config/certs/admin-key.pem:ro
       - ./docker/wazuh/indexer.yml:/usr/share/wazuh-indexer/config/opensearch.yml:ro
       - ./docker/wazuh/generated/internal_users.yml:/usr/share/wazuh-indexer/config/opensearch-security/internal_users.yml:ro
-    networks: [cxyz_dc]
+    # Fixed: Docker's dynamic pool starts at .1, which containerlab gives server1.
+    networks: { cxyz_dc: { ipv4_address: 172.16.50.13 } }
 
   wazuh.dashboard:
     profiles: ["siem"]
@@ -144,7 +145,7 @@ services:
       - ./docker/wazuh/opensearch_dashboards.yml:/usr/share/wazuh-dashboard/config/opensearch_dashboards.yml:ro
       - wazuh_dashboard_config:/usr/share/wazuh-dashboard/data/wazuh/config
       - wazuh_dashboard_custom:/usr/share/wazuh-dashboard/plugins/wazuh/public/assets/custom
-    networks: [cxyz_dc]
+    networks: { cxyz_dc: { ipv4_address: 172.16.50.14 } }
 
   # -------------------- IDS: Suricata (AF-PACKET) ------------------
   suricata:
@@ -178,7 +179,8 @@ services:
         install -o 1000 -g 0 -m 0640 /source/kibana.key /kibana/kibana.key;
         install -o 1000 -g 0 -m 0644 /source/ca.crt /logstash/ca.crt;
         install -o 1000 -g 0 -m 0644 /source/logstash.crt /logstash/logstash.crt;
-        install -o 1000 -g 0 -m 0640 /source/logstash.key /logstash/logstash.key
+        install -o 1000 -g 0 -m 0640 /source/logstash.key /logstash/logstash.key;
+        install -d -o 1000 -g 0 -m 0750 /fixtures
     volumes:
       # Never mount the local CA signing key. The init job receives only the
       # public CA and the minimum leaf material it must distribute.
@@ -193,6 +195,9 @@ services:
       - elasticsearch_certs:/es
       - kibana_certs:/kibana
       - logstash_certs:/logstash
+      # Docker creates the fixture volume root-owned; Logstash (uid 1000) and the
+      # smoke/live verifiers append fixture lines into it as that user.
+      - soc_fixtures:/fixtures
     networks: [cxyz_soc_backend]
 
   elasticsearch:
@@ -272,7 +277,8 @@ services:
       - dmzlab_cowrie_var:/honeypot/cowrie:ro
       - soc_fixtures:/fixtures
     healthcheck:
-      test: ["CMD-SHELL", "curl --silent --fail http://localhost:9600/_node/pipelines >/dev/null"]
+      # Healthy only once the soc-ingestion pipeline is running, not merely when the API answers.
+      test: ["CMD-SHELL", "curl --silent --fail http://localhost:9600/_node/pipelines/soc-ingestion | grep -q '\"soc-ingestion\"'"]
       interval: 10s
       timeout: 10s
       retries: 60
@@ -474,7 +480,9 @@ services:
       - soc_run_response:/run/soc:ro
       - soc_state_response:/var/lib/soc
     healthcheck:
-      test: ["CMD", "python", "-c", "import socket;socket.create_connection((socket.gethostbyname(socket.gethostname()),8443),3)"]
+      # Multi-homed: probe the address the orchestrator binds (listen.host: toward-elasticsearch),
+      # not whichever network's /etc/hosts entry the hostname happens to resolve to first.
+      test: ["CMD", "python", "-c", "import socket;from soc.workers.common import address_toward;socket.create_connection((address_toward('elasticsearch'),8443),3)"]
       interval: 15s
       timeout: 5s
       retries: 10
@@ -483,7 +491,7 @@ services:
     networks:
       cxyz_soc_backend: {}
       cxyz_response_egress: {}
-      cxyz_dc: {}
+      cxyz_dc: { ipv4_address: 172.16.50.15 }
 
   # -------------------- Zero-Trust gateway -------------------------
   traefik:

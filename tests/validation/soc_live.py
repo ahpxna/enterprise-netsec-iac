@@ -224,9 +224,17 @@ class DockerLab:
         return {"node": json.loads(first), "stats": json.loads(second)}
 
     def logstash_queue_depth(self) -> int:
+        """Events the pipeline accepted but has not delivered: unread in the persistent queue plus
+        read-but-unacknowledged. While an output is down a worker holds its batch in retry, so
+        `queue.events_count` (unread only) drops to 0 although the event is still in the PQ."""
+
         stats = self.logstash_pipeline()["stats"]
-        queue = dig(stats, "pipelines.soc-ingestion.queue") or {}
-        return int(queue.get("events_count", queue.get("events", 0)) or 0)
+        pipeline = dig(stats, "pipelines.soc-ingestion") or {}
+        queue = pipeline.get("queue") or {}
+        events = pipeline.get("events") or {}
+        unread = int(queue.get("events_count", queue.get("events", 0)) or 0)
+        in_flight = max(0, int(events.get("in", 0) or 0) - int(events.get("filtered", 0) or 0))
+        return unread + in_flight
 
     def elasticsearch_outage(self):
         lab = self

@@ -140,6 +140,10 @@ def test_kibana_object_and_logstash_pipeline_parsing(script):
     assert lab.logstash_pipeline()["node"]["pipelines"]["soc-ingestion"]["dead_letter_queue_enabled"] is True
     script.queue('{"x":1}\n{"pipelines":{"soc-ingestion":{"queue":{"type":"persisted","events_count":4}}}}')
     assert lab.logstash_queue_depth() == 4
+    # Output down: the worker has read the event (unread 0) but not delivered it (in > filtered).
+    script.queue('{"x":1}\n{"pipelines":{"soc-ingestion":{"queue":{"type":"persisted","events_count":0},'
+                 '"events":{"in":42,"filtered":41,"out":82}}}}')
+    assert lab.logstash_queue_depth() == 1
 
 
 def test_outage_stops_then_always_restarts_elasticsearch(script):

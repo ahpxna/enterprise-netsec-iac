@@ -121,3 +121,24 @@ def test_history_fetcher_returns_the_preceding_windows_oldest_first_with_gaps_as
     assert [item is None for item in history] == [False, False, False, True, False]   # the +15..+20 window is a gap
     other = fetch(vectors_for(8, 25)[0])
     assert sum(item is not None for item in other) == 1          # only entity .8's own window counts
+
+
+def test_outbox_lock_is_reentrant_for_serve_but_exclusive_across_workers(tmp_path):
+    """`serve` holds the lock around pull + drain(), and drain() locks again; a second worker must still be refused."""
+
+    state = tmp_path / "state"
+    state.mkdir(mode=0o700)
+    first = Outbox(state / "outbox.sqlite")
+    second = Outbox(state / "outbox.sqlite")
+    try:
+        with first.exclusive():
+            with first.exclusive():
+                pass
+            with pytest.raises(RuntimeError, match="another outbox worker is active"):
+                with second.exclusive():
+                    pass
+        with second.exclusive():
+            pass
+    finally:
+        first.close()
+        second.close()

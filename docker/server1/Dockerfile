@@ -18,7 +18,7 @@ RUN rm -f /etc/apt/sources.list.d/debian.sources \
     && apt-get -o Acquire::Check-Valid-Until=false update \
     && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
        dnsmasq dnsutils freeradius freeradius-utils iproute2 \
-       netcat-openbsd openssh-server python3 rsyslog rsyslog-gnutls \
+       netcat-openbsd openssh-server python3 python3-apt rsyslog rsyslog-gnutls \
        supervisor tcpdump \
     && rm -rf /var/lib/apt/lists/* \
     && mkdir -p /run/sshd /var/log/supervisor /etc/ssh/sshd_config.d

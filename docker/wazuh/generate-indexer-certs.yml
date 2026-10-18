@@ -2,8 +2,11 @@
 services:
   generator:
     image: wazuh/wazuh-certs-generator@sha256:369b4d58509aab074b188596870c81584f7120e653d9ef83c591f0f785dcf325
+    # certs-entrypoint.sh lets the tool issue the dotless `wazuh-indexer` SAN (see the script).
+    entrypoint: ["/bin/bash", "/cxyz-certs-entrypoint.sh"]
     environment:
       CERT_TOOL_VERSION: "4.14"
     volumes:
       - ./certs:/certificates
       - ./certs.yml:/config/certs.yml:ro
+      - ./certs-entrypoint.sh:/cxyz-certs-entrypoint.sh:ro
