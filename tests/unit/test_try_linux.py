@@ -330,3 +330,59 @@ def test_partial_runs_know_which_stages_need_sudo_and_docker(tmp_path):
     assert tl.depends_on([by_id["fabric-up"]], stages, "host-sudo")
     assert tl.depends_on([by_id["soc-up"]], stages, "deps-docker-access")
     assert not tl.depends_on([by_id["host-os"]], stages, "host-sudo")
+
+
+def test_one_runner_session_writes_one_evidence_run():
+    # The first Linux run wrote routing, attack and SOC evidence into three directories (one per `make`), and the
+    # report, which reads one run, showed RTR-01, HA-01 and DET-01 as UNVERIFIED although they had evidence.
+    ctx = tl.Ctx(args(), ROOT / "logs" / "try-linux" / "20261018T025229Z")
+    for stage in tl.build_stages(ctx):
+        for cmd in (stage.cmds(ctx) if callable(stage.cmds) else stage.cmds):
+            if cmd.argv and cmd.argv[0] == "make":
+                assert cmd.argv[-1] == "TS=20261018T025229Z", (stage.id, cmd.argv)
+
+
+def test_the_report_reads_this_sessions_evidence_run(tmp_path, monkeypatch):
+    runs = tmp_path / "evidence" / "runs"
+    for name in ("20261018T025229Z", "20261018T030000Z"):          # a later, unrelated run exists too
+        (runs / name).mkdir(parents=True)
+    seen = []
+
+    def fake_run(argv, **kwargs):
+        seen.append(argv[argv.index("--run") + 1])
+        (tmp_path / "evidence" / "COMPLIANCE-REPORT.md").write_text("**Summary:** 1 passed\n")
+        return __import__("subprocess").CompletedProcess(argv, 0, "", "")
+
+    monkeypatch.setattr(tl, "ROOT", tmp_path)
+    monkeypatch.setattr(tl.subprocess, "run", fake_run)
+    tl.report_summary(tl.Ctx(args(), tmp_path / "logs" / "try-linux" / "20261018T025229Z"))
+    tl.report_summary(tl.Ctx(args(), tmp_path / "logs" / "try-linux" / "20261018T040000Z"))   # --only report later
+    assert seen == [str(runs / "20261018T025229Z"), str(runs / "20261018T030000Z")]
+
+
+def test_hints_come_from_the_failure_not_from_steps_that_worked():
+    # Excerpt of the first Linux `make configure`: rsyslog could not be installed on the routers, but the
+    # report blamed TIME-01 because a role that ran fine mentions the control in its task names.
+    log = "\n".join([
+        "TASK [ntp_secure : Render the NTS configuration (TIME-01)] ***",
+        "ok: [clab-companyxyz-server1]",
+        *[f"ok: [clab-companyxyz-node{n}]" for n in range(40)],
+        "TASK [syslog_tls : Install rsyslog and the platform TLS driver] ****************",
+        "fatal: [clab-companyxyz-edge]: FAILED! => ",
+        "    msg: failed to install ['rsyslog', 'rsyslog-tls']",
+        "        WARNING: updating and opening https://dl-cdn.alpinelinux.org/alpine/v3.18/main: temporary error (try again later)",
+        "        ERROR: unable to select packages:",
+        *[f"changed: [clab-companyxyz-node{n}]" for n in range(40)],
+        "PLAY RECAP *********************************************************************",
+        "clab-companyxyz-edge       : ok=6    changed=2    unreachable=0    failed=1",
+        "make: *** [Makefile:84: configure] Error 2",
+    ])
+    causes = [cause for cause, _ in (tl.match_hints(tl.failure_focus(log)) or tl.match_hints(log))]
+    assert causes and "package mirror" in causes[0] and not any("TIME-01" in cause for cause in causes)
+    assert any("TIME-01" in cause for cause, _ in tl.match_hints(log))          # what the whole output suggested
+
+
+def test_a_root_owned_wireguard_directory_is_named():
+    log = "PermissionError: [Errno 13] Permission denied: '/home/phan/lab/wireguard/probe'\nmake: *** [Makefile:245: vpn-probe] Error 1"
+    (cause, fix), *_ = tl.match_hints(tl.failure_focus(log))
+    assert "wireguard" in cause and "chown" in fix

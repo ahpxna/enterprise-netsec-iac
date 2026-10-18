@@ -60,6 +60,12 @@ def paint(text: str, code: str) -> str:
 # (regex over the command output, cause, fix).  First matches win; a stage may add its own first.
 Hint = tuple[str, str, str]
 GLOBAL_HINTS: list[Hint] = [
+    (r"dl-cdn\.alpinelinux\.org[^\n]*temporary error|unable to select packages|apk[^\n]*(network|DNS) error",
+     "a lab node cannot reach its package mirror: routers reach the Internet only through management table 100",
+     "docker exec clab-companyxyz-core sh -c 'ip rule; ip route show table 100; wget -qO /dev/null https://dl-cdn.alpinelinux.org && echo egress ok'"),
+    (r"Permission denied: '[^']*/wireguard",
+     "Docker created ./wireguard as root (bind-mount source), so this user cannot write the VPN probe config",
+     "sudo chown -R \"$(id -u):$(id -g)\" wireguard   # make security now creates these directories as you"),
     (r"permission denied while trying to connect to the (Docker|docker) daemon|got permission denied.*docker\.sock",
      "your user cannot talk to the Docker daemon (not in the 'docker' group yet)",
      "sudo usermod -aG docker $USER && newgrp docker   # then re-run this script"),
@@ -178,6 +184,10 @@ class Result:
 class Ctx:
     def __init__(self, args: argparse.Namespace, logdir: pathlib.Path) -> None:
         self.args, self.logdir = args, logdir
+        # One evidence run per runner session: every `make` gets TS=<this>, so validate, attack and
+        # soc-validate write into evidence/runs/<run_id> instead of one directory per make call
+        # (the report reads a single run, and showed controls with evidence elsewhere as UNVERIFIED).
+        self.run_id = logdir.name
         self.mode = "offline" if args.offline else "quick" if args.quick else "full"
         self.root = ROOT
         self.is_root = hasattr(os, "geteuid") and os.geteuid() == 0
@@ -240,6 +250,24 @@ def extract_failure_points(text: str, limit: int = 8) -> list[str]:
         if p not in seen:
             seen.append(p)
     return seen[:limit]
+
+
+ERROR_MARK = re.compile(r"fatal:|FAILED!|\bERROR\b|\berror:|Traceback|Permission denied|No such file|\*\*\* \[", re.I)
+
+
+def failure_focus(text: str, context: int = 12, tail: int = 30) -> str:
+    """The part of a log that explains a failure: the lines around error markers, plus the end.
+
+    Hints matched against the whole output pick up words from steps that worked: an Ansible run whose
+    rsyslog install failed was blamed on TIME-01 because a later, successful task names that control.
+    """
+
+    lines = text.splitlines()
+    keep = set(range(max(0, len(lines) - tail), len(lines)))
+    for index, line in enumerate(lines):
+        if ERROR_MARK.search(line):
+            keep.update(range(max(0, index - 2), min(len(lines), index + context)))
+    return "\n".join(lines[index] for index in sorted(keep))
 
 
 def match_hints(text: str, extra: Iterable[Hint] = ()) -> list[tuple[str, str]]:
@@ -381,7 +409,7 @@ class Runner:
                         result.status, result.rc, result.command = FAIL, rc, cmd.display()
                         text = output
                         result.points = extract_failure_points(text)
-                        result.hints = match_hints(text, stage.hints)
+                        result.hints = match_hints(failure_focus(text), stage.hints) or match_hints(text, stage.hints)
                         result.tail = [line for line in text.splitlines() if line.strip()][-14:]
                         result.diagnostics = self.diagnose(stage, logfile)
                         break
@@ -755,7 +783,8 @@ def viz_start(ctx: Ctx) -> tuple[str, str]:
 def make(ctx: Ctx, target: str, *extra: str, timeout: int = 1800, interactive: bool = False, label: str = "") -> Cmd:
     # interactive=True for any target that (transitively) runs `sudo`, e.g. via dc-network -> ensure_dc_network.sh:
     # sudo's cached ticket is bound to this terminal, so a detached child cannot use it.
-    return Cmd(argv=["make", target, *extra], timeout=timeout, interactive=interactive, label=label or f"make {target}")
+    return Cmd(argv=["make", target, *extra, f"TS={ctx.run_id}"], timeout=timeout, interactive=interactive,
+               label=label or f"make {target}")
 
 
 def demo_model_cmds(ctx: Ctx) -> list[Cmd]:
@@ -842,11 +871,13 @@ def dmzlab_verify(ctx: Ctx) -> tuple[str, str]:
 
 
 def report_summary(ctx: Ctx) -> tuple[str, str]:
+    this_run = ROOT / "evidence" / "runs" / ctx.run_id
     runs = sorted((ROOT / "evidence" / "runs").glob("*")) if (ROOT / "evidence" / "runs").is_dir() else []
     if not runs:
         return WARN, "no evidence run found (validation stages did not produce evidence)"
+    run = this_run if this_run.is_dir() else runs[-1]     # --only report: the latest earlier run
     out = ROOT / "evidence" / "COMPLIANCE-REPORT.md"
-    done = subprocess.run([ctx.py, "-m", "compliance.generate_report", "--profile", "path-a", "--run", str(runs[-1]), "--out", str(out)],
+    done = subprocess.run([ctx.py, "-m", "compliance.generate_report", "--profile", "path-a", "--run", str(run), "--out", str(out)],
                           cwd=ROOT, env=ctx.env(), capture_output=True, text=True)
     if done.returncode != 0:
         return FAIL, (done.stdout + done.stderr).strip().splitlines()[-1][:200]
