@@ -14,7 +14,7 @@ explains what each step proves, how to run any piece on its own, and which corne
 | Honeypot path: Cowrie → Logstash → `soc-alerts-*`, redaction, decision signal (`honeypot_e2e.py`) | yes, including a negative test | same |
 | AI/response plane: demo model, `soc-ai-up` (observe), features → inference → decisions | yes | same |
 | Live SOC/AI verifiers (`make soc-ai-validate`) | partly; see the results table at the end | same, without a fabric |
-| Path A fabric (containerlab, FRR, nftables), Wazuh, ZTNA, VPN, hardening, attack chain, enforcement on firewalls | **no** | needs Linux x86-64 |
+| Path A fabric (containerlab, FRR, nftables), Wazuh, ZTNA, VPN, hardening, attack chain, enforcement on firewalls | **partly**: one full run on Kali Linux (2026-10-18): fabric, DMZ lab, RTR-01 and enforcement (COR-01, RESP-01/03, SOC-01..03) PASS; `configure`, the VPN probe, DET-01 and the VRRP failover failed (ledger INC-076) | Linux x86-64 |
 | Path B (Terraform/libvirt/VyOS) | **no** | needs a KVM host |
 | Path C (Kubernetes) | **no** (manifests are schema-validated offline only) | needs a cluster |
 
