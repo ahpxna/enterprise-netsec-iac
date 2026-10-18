@@ -89,19 +89,19 @@ try:
 except json.JSONDecodeError:
     raise SystemExit(1)
 
-numbers = []
-def visit(value, path=""):
-    if isinstance(value, dict):
-        for key, item in value.items():
-            visit(item, f"{path}.{key}".lower())
-    elif isinstance(value, list):
-        for item in value:
-            visit(item, path)
-    elif isinstance(value, (int, float)) and "advert" in path and ("tx" in path or "rx" in path):
-        numbers.append(value)
-
-visit(values)
-raise SystemExit(0 if numbers and all(value > 0 for value in numbers) else 1)
+# Per IPv4 VRRP group: the Master must be sending advertisements and the Backup
+# receiving them. The unused IPv6 instance and the Backup's own (zero) transmit
+# counter say nothing about VRRP health, so they are not part of the check.
+groups = values if isinstance(values, list) else [values]
+checked = 0
+for group in groups:
+    v4 = (group or {}).get("v4") or {}
+    stats = v4.get("stats") or {}
+    counter = {"Master": "adverTx", "Backup": "adverRx"}.get(v4.get("status"))
+    if counter is None or not stats.get(counter, 0) > 0:
+        raise SystemExit(1)
+    checked += 1
+raise SystemExit(0 if checked else 1)
 PY
 }
 

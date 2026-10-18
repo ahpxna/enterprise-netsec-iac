@@ -5,6 +5,10 @@ umask 077
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
+# Bind-mount sources that Docker would otherwise create as root on first `up`,
+# leaving this user unable to write next to them (e.g. wireguard/probe for vpn-probe).
+(umask 022; mkdir -p wireguard/config wireguard/probe docker/ids/logs)
+
 [ -f .env ] || { cp .env.example .env; echo "created .env from template"; }
 chmod 600 .env
 

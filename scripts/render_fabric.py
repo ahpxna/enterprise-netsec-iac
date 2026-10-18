@@ -93,7 +93,31 @@ def enforcer_command(name: str, mgmt_ip: str) -> str:
     )
 
 
-def node_definition(name: str, node: dict, management_subnet: str) -> dict:
+MANAGEMENT_TABLE = 100
+
+
+def drop_management_default(node: dict, management_gateway: str) -> list[str]:
+    """Routers must not forward user traffic via Docker's eth0 default.
+
+    Docker installs `default via <mgmt gateway> dev eth0` in every container. As a
+    kernel route it beats any OSPF/BGP default, so routed user traffic would leave
+    through the OOB management bridge (and the host's NAT) instead of the fabric.
+    Move it to a table only the router's own traffic (`iif lo`) may use, after the
+    main table's specific routes, so package installs still work and forwarded
+    traffic follows the routing protocol.
+    """
+    # Also for routers with a static fabric default (core): their own DNS and package
+    # traffic needs management egress too; `del` is a no-op once the static route replaced it.
+    table = MANAGEMENT_TABLE
+    return [
+        f"sh -c 'ip route replace default via {management_gateway} dev eth0 table {table} "
+        f"&& {{ ip route del default via {management_gateway} dev eth0 2>/dev/null || true; }}'",
+        "sh -c 'ip rule del pref 10900 2>/dev/null || true; ip rule del pref 10901 2>/dev/null || true; "
+        f"ip rule add pref 10900 iif lo lookup main suppress_prefixlength 0 && ip rule add pref 10901 iif lo lookup {table}'",
+    ]
+
+
+def node_definition(name: str, node: dict, management_subnet: str, management_gateway: str = "") -> dict:
     role = node["role"]
     rendered: dict = {
         "kind": "linux",
@@ -110,6 +134,8 @@ def node_definition(name: str, node: dict, management_subnet: str) -> dict:
             *management_forward_guards(node, management_subnet),
             *shell_commands(node),
         ]
+        if role == "router" and management_gateway:
+            rendered["exec"].extend(drop_management_default(node, management_gateway))
         if name in {"dist1", "dist2"}:
             # FRR requires its VRRP macvlan interfaces before vrrpd starts.
             rendered["binds"].append(
@@ -170,7 +196,7 @@ def render(intent: dict) -> str:
     links = topology["topology"]["links"]
 
     for name, node in intent["nodes"].items():
-        nodes[name] = node_definition(name, node, intent["management"]["subnet"])
+        nodes[name] = node_definition(name, node, intent["management"]["subnet"], intent["management"]["gateway"])
 
     # An isolated namespace hosts both user broadcast domains. The bridge
     # objects are created by containerlab inside this namespace.

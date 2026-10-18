@@ -150,6 +150,10 @@ def test_kibana_object_and_logstash_pipeline_parsing(script):
         {"id": "soc-deadletter-output", "events": {}}]}}}}
     script.queue('{"x":1}\n' + json.dumps(held))
     assert lab.logstash_queue_depth() == 1
+    # The same outage seen through the pipeline counters on Linux: read (unread 0) but not done (in > filtered).
+    script.queue('{"x":1}\n{"pipelines":{"soc-ingestion":{"queue":{"type":"persisted","events_count":0},'
+                 '"events":{"in":42,"filtered":41,"out":82}}}}')
+    assert lab.logstash_queue_depth() == 1
 
 
 def test_outage_stops_then_always_restarts_elasticsearch(script):

@@ -8,6 +8,9 @@ bridge_name="br-cxyz-dc"
 subnet="172.16.50.0/24"
 gateway="172.16.50.253"
 firewall_gateway="172.16.50.254"
+# containerlab hosts (server1 .1, fw-core .254) sit outside Docker IPAM; Compose services use
+# fixed .10-.15. Keep Docker's dynamic pool away from both.
+dynamic_range="172.16.50.128/26"
 state_dir="$ROOT/.cxyz-state"
 state_file="$state_dir/dc-network.env"
 mkdir -p "$state_dir"
@@ -30,6 +33,10 @@ capture_state_once() {
   } > "$state_file"
 }
 
+record_state_once() {   # key value: keep the first observed value (pre-lab) for cleanup_dc_network.sh
+  grep -q "^$1=" "$state_file" 2>/dev/null || { umask 077; printf '%s=%q\n' "$1" "$2" >> "$state_file"; }
+}
+
 ensure_return_routes() {
   # Docker Desktop owns the Linux bridge and forwarding state inside its VM;
   # macOS has neither Linux net.ipv4.ip_forward nor the `ip` route utility.
@@ -40,6 +47,12 @@ ensure_return_routes() {
   fi
   capture_state_once
   "${SUDO[@]}" sysctl -w net.ipv4.ip_forward=1 >/dev/null
+  # The firewalls' nftables `log` rules run in container network namespaces; the kernel drops
+  # those messages unless this is on, so no CXYZ-* drop ever reaches rsyslog/Wazuh (DET-01).
+  if [[ -e /proc/sys/net/netfilter/nf_log_all_netns ]]; then
+    record_state_once NF_LOG_ALL_NETNS_BEFORE "$(cat /proc/sys/net/netfilter/nf_log_all_netns)"
+    "${SUDO[@]}" sysctl -w net.netfilter.nf_log_all_netns=1 >/dev/null
+  fi
   "${SUDO[@]}" ip route replace 10.255.0.0/16 via "$firewall_gateway" dev "$bridge_name"
   "${SUDO[@]}" ip route replace 192.168.0.0/16 via "$firewall_gateway" dev "$bridge_name"
 }
@@ -64,6 +77,7 @@ docker network create \
   --gateway "$gateway" \
   --aux-address "server1=172.16.50.1" \
   --aux-address "fw-core=$firewall_gateway" \
+  --ip-range "$dynamic_range" \
   --opt "com.docker.network.bridge.name=$bridge_name" \
   --opt "com.docker.network.bridge.enable_ip_masquerade=false" \
   "$network_name" >/dev/null

@@ -181,7 +181,8 @@ services:
         install -o 1000 -g 0 -m 0640 /source/kibana.key /kibana/kibana.key;
         install -o 1000 -g 0 -m 0644 /source/ca.crt /logstash/ca.crt;
         install -o 1000 -g 0 -m 0644 /source/logstash.crt /logstash/logstash.crt;
-        install -o 1000 -g 0 -m 0640 /source/logstash.key /logstash/logstash.key
+        install -o 1000 -g 0 -m 0640 /source/logstash.key /logstash/logstash.key;
+        install -d -o 1000 -g 0 -m 0750 /fixtures
     volumes:
       # Never mount the local CA signing key. The init job receives only the
       # public CA and the minimum leaf material it must distribute.
@@ -196,6 +197,9 @@ services:
       - elasticsearch_certs:/es
       - kibana_certs:/kibana
       - logstash_certs:/logstash
+      # Docker creates the fixture volume root-owned; Logstash (uid 1000) and the
+      # smoke/live verifiers append fixture lines into it as that user.
+      - soc_fixtures:/fixtures
     networks: [cxyz_soc_backend]
 
   elasticsearch:
