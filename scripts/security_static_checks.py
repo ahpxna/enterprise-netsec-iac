@@ -606,7 +606,9 @@ if "templatefile(" not in legacy_main or "var.ssh_public_key" not in legacy_main
 if "deployment_config_sha256" not in text("compliance/provenance.py") or "deployment_config_sha256" not in text("compliance/generate_report.py"):
     fail("evidence provenance must bind non-secret deployment behavior knobs")
 ha_script = text("scripts/attack_chain.sh")
-for token in ('-c "interface eth1" -c "shutdown"', "restore_vrrp_master", "d2_failover_state", "sleep 5"):
+for token in ('-c "interface eth1" -c "shutdown"', "restore_vrrp_master", "d2_failover_state", "sleep 5",
+              # traffic must flow WHILE the master is down (a capture with no reply after the failover passed before)
+              "scripts/vrrp_failover_check.py", "failover_at=", "restored_at="):
     if token not in ha_script:
         fail(f"HA-01 Path A failure injection lost VLAN10/master-takeover proof: {token}")
 for token in ("server1", "edge", "core", "dist1", "dist2", "fw-core", "fw-dmz", "configured_nodes", "relay_received"):

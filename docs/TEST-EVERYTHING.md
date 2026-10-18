@@ -99,7 +99,7 @@ The stages, in order, and what each proves:
 | `dmzlab-siem` | a real Telnet session from pc1 reaches `soc-alerts-*` as `cowrie.honeypot`, the password appears nowhere (normalized and raw), and the decision runner turns it into one `honeypot` signal |
 | `configure` | Ansible hardening applies |
 | `validate` | routing health (RTR-01) then SEG-01/02, IDM-01/02, DET-02, HRD-01/02, TIME-01, VPN-01, ZTNA-01 |
-| `attack` | DET-01 (a scan from pc1 is detected), HA-01 (VRRP failover keeps traffic flowing) |
+| `attack` | DET-01 (a scan from pc1 is detected and alerts in Wazuh), HA-01 (routed traffic keeps flowing through dist2 while dist1 is down; no interruption of 5 s or more) |
 | `soc-validate` | LOG-01..03, AI-01..04, COR-01, RESP-01, RESP-03, SOC-01..03 with lab enforcement for ~10 min, then observe mode again |
 | `report` | `evidence/COMPLIANCE-REPORT.md` from the evidence just written |
 
