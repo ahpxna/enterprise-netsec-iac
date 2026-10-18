@@ -67,6 +67,7 @@ for module in ("libvirt", "vyos-fabric"):
 for label, token in {
     "Python syntax gate": "python -m compileall -q scripts compliance tests",
     "Bash syntax gate": "bash -n",
+    "shellcheck gate": "xargs -0 shellcheck -S warning",
 }.items():
     if token not in lint_body:
         fail(f"make lint lost {label}")

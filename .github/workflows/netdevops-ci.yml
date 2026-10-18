@@ -44,6 +44,9 @@ jobs:
           python -m compileall -q scripts compliance tests ai response soc
           find scripts clab/configs -type f -name '*.sh' -print0 | xargs -0 -n1 bash -n
 
+      - name: shellcheck (warnings and errors)
+        run: find scripts clab docker soc k8s -name '*.sh' -print0 | xargs -0 shellcheck -S warning
+
       - name: Test evidence and SOC architecture contracts
         run: pytest tests/unit tests/soc -q
 

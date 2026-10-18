@@ -89,24 +89,25 @@ try:
 except json.JSONDecodeError:
     raise SystemExit(1)
 
-numbers = []
-def visit(value, path=""):
-    if isinstance(value, dict):
-        for key, item in value.items():
-            visit(item, f"{path}.{key}".lower())
-    elif isinstance(value, list):
-        for item in value:
-            visit(item, path)
-    elif isinstance(value, (int, float)) and "advert" in path and ("tx" in path or "rx" in path):
-        numbers.append(value)
-
-visit(values)
-raise SystemExit(0 if numbers and all(value > 0 for value in numbers) else 1)
+# Per IPv4 VRRP group: the Master must be sending advertisements and the Backup
+# receiving them. The unused IPv6 instance and the Backup's own (zero) transmit
+# counter say nothing about VRRP health, so they are not part of the check.
+groups = values if isinstance(values, list) else [values]
+checked = 0
+for group in groups:
+    v4 = (group or {}).get("v4") or {}
+    stats = v4.get("stats") or {}
+    counter = {"Master": "adverTx", "Backup": "adverRx"}.get(v4.get("status"))
+    if counter is None or not stats.get(counter, 0) > 0:
+        raise SystemExit(1)
+    checked += 1
+raise SystemExit(0 if checked else 1)
 PY
 }
 
 step5_vrrp_failover() {
-  local started d1_state d2_state d1_json d2_json d2_failover_state bootstrap_ready advertisements_ready gap result ping_file
+  local started d1_state d2_state d1_json d2_json d2_failover_state bootstrap_ready advertisements_ready result ping_file
+  local failover_at restored_at failover failover_ok
   started="$(utc_now)"
   ping_file="$EV/step5_vrrp_failover.txt"
   d1_state="$(docker exec "$(n dist1)" vtysh -c "show vrrp" 2>/dev/null || true)"
@@ -129,43 +130,36 @@ step5_vrrp_failover() {
   docker exec "$(n pc1)" sh -c \
     "ping -D -i 0.1 -c 170 198.10.10.1 > /tmp/cxyz-ha01-ping.txt 2>&1 &"
   sleep 1
+  failover_at="$(python3 -c 'import time; print(f"{time.time():.6f}")')"
   docker exec "$(n dist1)" vtysh \
     -c "configure terminal" -c "interface eth1" -c "shutdown" >/dev/null
   sleep 5
   d2_failover_state="$(docker exec "$(n dist2)" vtysh -c "show vrrp" 2>/dev/null || true)"
   sleep 1
+  restored_at="$(python3 -c 'import time; print(f"{time.time():.6f}")')"
   restore_vrrp_master
   trap - EXIT
   sleep 10
   docker exec "$(n pc1)" cat /tmp/cxyz-ha01-ping.txt > "$ping_file"
 
-  gap="$(python3 - "$ping_file" <<'PY'
-import re, sys
-values = []
-for line in open(sys.argv[1]):
-    match = re.match(r"\[([0-9.]+)\]", line)
-    if match and "bytes from" in line:
-        values.append(float(match.group(1)))
-print(f"{max((b-a for a, b in zip(values, values[1:])), default=999):.3f}")
-PY
-)"
+  # Traffic must keep flowing while dist1 is down, not merely have flowed before it went down.
+  failover_ok=false
+  if failover="$(python3 scripts/vrrp_failover_check.py "$ping_file" "$failover_at" "$restored_at")"; then
+    failover_ok=true
+  fi
 
   result="FAIL"
   if [[ "$bootstrap_ready" == true && "$advertisements_ready" == true ]] \
       && grep -qi master <<<"$d1_state" \
       && grep -qi backup <<<"$d2_state" \
       && grep -qi master <<<"$d2_failover_state" \
-      && python3 - "$gap" <<'PY'
-import sys
-raise SystemExit(0 if float(sys.argv[1]) < 5.0 else 1)
-PY
-  then
+      && [[ "$failover_ok" == true ]]; then
     result="PASS"
   fi
   record \
     --test-id "attack_chain.sh::step5_vrrp_failover" \
     --control HA-01 --result "$result" \
-    --assertion "VRRP state is healthy and routed user traffic through the backup gateway recovers within 5 seconds" \
+    --assertion "VRRP state is healthy and routed user traffic keeps flowing through the backup gateway while the master is down (no interruption of 5 seconds or more)" \
     --enforcement-node dist1,dist2 \
     --started-at "$started" \
     --observed "dist1_master=$(grep -qi master <<<"$d1_state" && echo true || echo false)" \
@@ -173,7 +167,7 @@ PY
     --observed "dist2_took_master_after_vlan10_failure=$(grep -qi master <<<"$d2_failover_state" && echo true || echo false)" \
     --observed "macvlan_bootstrap_ready=$bootstrap_ready" \
     --observed "vrrp_advertisements_seen=$advertisements_ready" \
-    --observed "max_reply_gap_seconds=$gap"
+    --observed "failover_traffic=${failover:-none}"
   [[ "$result" == PASS ]]
 }
 

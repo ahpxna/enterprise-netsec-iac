@@ -227,18 +227,22 @@ class DockerLab:
         return {"node": json.loads(first), "stats": json.loads(second)}
 
     def logstash_queue_depth(self) -> int:
-        """Events accepted but not yet delivered: unread in the persistent queue plus in flight at an output.
+        """Events accepted but not yet delivered: unread in the persistent queue plus read but unacknowledged.
 
-        `queue.events_count` alone counts only UNREAD events. While Elasticsearch is down a worker has
-        already read the event into a batch that the output keeps retrying, so the event is held (unacked
-        in the persistent queue) but unread: 0 there, in > out at the output (observed on Logstash 9.3).
+        `queue.events_count` alone counts only UNREAD events. While Elasticsearch is down a worker has already
+        read the event into a batch that the output keeps retrying, so the event is held (unacked in the
+        persistent queue) but unread. Two counters show it and both were observed live: an output's
+        `in` > `out` (Docker Desktop) and the pipeline's `in` > `filtered` (Linux). The larger one counts.
         """
 
         pipeline = dig(self.logstash_pipeline()["stats"], "pipelines.soc-ingestion") or {}
         queue = pipeline.get("queue") or {}
+        events = pipeline.get("events") or {}
         unread = int(queue.get("events_count", queue.get("events", 0)) or 0)
-        in_flight = sum(max(0, int(dig(output, "events.in") or 0) - int(dig(output, "events.out") or 0))
-                        for output in dig(pipeline, "plugins.outputs") or [])
+        at_outputs = sum(max(0, int(dig(output, "events.in") or 0) - int(dig(output, "events.out") or 0))
+                         for output in dig(pipeline, "plugins.outputs") or [])
+        in_pipeline = max(0, int(events.get("in", 0) or 0) - int(events.get("filtered", 0) or 0))
+        in_flight = max(at_outputs, in_pipeline)
         return unread + in_flight
 
     def elasticsearch_outage(self):

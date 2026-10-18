@@ -1,10 +1,13 @@
-<!-- Decode the nftables log prefixes emitted by fw-core / fw-dmz -->
+<!-- Decode the nftables log prefixes emitted by fw-core / fw-dmz.
+     PCRE2: Wazuh's default OS_Regex has no (?:...) groups or optional
+     captures, and a decoder it cannot compile stops wazuh-analysisd.
+     Kernel lines relayed by rsyslog imklog may keep the "[uptime] " stamp. -->
 <decoder name="cxyz-nft">
-  <prematch>^CXYZ-</prematch>
+  <prematch type="pcre2">^(?:\[\s*\d+\.\d+\]\s*)?CXYZ-</prematch>
 </decoder>
 
 <decoder name="cxyz-nft-fields">
   <parent>cxyz-nft</parent>
-  <regex>SRC=(\S+) DST=(\S+).*PROTO=(\S+)(?: SPT=(\d+) DPT=(\d+))?</regex>
+  <regex type="pcre2">SRC=(\S+) DST=(\S+).*?PROTO=(\S+)(?: SPT=(\d+) DPT=(\d+))?</regex>
   <order>srcip,dstip,protocol,srcport,dstport</order>
 </decoder>

@@ -6,6 +6,7 @@ that was never committed.
 """
 from __future__ import annotations
 
+import fnmatch
 import hashlib
 import os
 import pathlib
@@ -24,6 +25,41 @@ def sha256_file(path: pathlib.Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+def _gitignore_rules() -> list[tuple[str, bool, bool]]:
+    """(pattern, negated, directory_only) from the top-level .gitignore."""
+
+    path = ROOT / ".gitignore"
+    rules: list[tuple[str, bool, bool]] = []
+    if not path.is_file():
+        return rules
+    for line in path.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        negated = line.startswith("!")
+        line = line[1:] if negated else line
+        directory_only = line.endswith("/")
+        rules.append((line.strip("/"), negated, directory_only))
+    return rules
+
+
+def _gitignored(rel: str, rules: list[tuple[str, bool, bool]]) -> bool:
+    """The subset of gitignore matching this repository's .gitignore uses; the last matching rule wins."""
+
+    parts = rel.split("/")
+    prefixes = ["/".join(parts[: i + 1]) for i in range(len(parts))]     # ancestors..., the file itself
+    ignored = False
+    for pattern, negated, directory_only in rules:
+        candidates = prefixes[:-1] if directory_only else prefixes
+        if "/" in pattern:
+            hit = any(fnmatch.fnmatchcase(c, pattern) for c in candidates)
+        else:
+            hit = any(fnmatch.fnmatchcase(c.rsplit("/", 1)[-1], pattern) for c in candidates)
+        if hit:
+            ignored = not negated
+    return ignored
+
+
 def _tracked_files() -> list[pathlib.Path]:
     try:
         result = subprocess.run(
@@ -35,12 +71,17 @@ def _tracked_files() -> list[pathlib.Path]:
         names = result.stdout.decode(errors="surrogateescape").split("\0")
         return sorted(ROOT / name for name in names if name and (ROOT / name).is_file())
 
+    # No Git metadata (e.g. a source archive): approximate `git ls-files` by honouring .gitignore, so keys,
+    # certificates and generated secrets are never read or hashed into evidence.
+    rules = _gitignore_rules()
     files: list[pathlib.Path] = []
     for path in ROOT.rglob("*"):
         if not path.is_file():
             continue
         rel = path.relative_to(ROOT).as_posix()
         if any(rel == item or rel.startswith(item + "/") for item in FALLBACK_EXCLUDES):
+            continue
+        if _gitignored(rel, rules):
             continue
         if path.name in {".env", "terraform.tfvars", "routing.auto.tfvars.json", "bootstrap.auto.tfvars.json", "known_hosts"}:
             continue

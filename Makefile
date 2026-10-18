@@ -77,6 +77,8 @@ authentik-preflight: ## Block unsafe reuse of a legacy Authentik database volume
 
 .PHONY: security
 security: authentik-preflight images dc-network wazuh-config ## Deploy SIEM + IDS + Zero-Trust gateway + DMZ app
+	@# Bind-mount sources Docker would otherwise create as root (then `make vpn-probe` cannot write the probe config).
+	@mkdir -p wireguard/config wireguard/probe
 	docker compose --profile siem --profile ids --profile ztna --profile dmz up -d
 
 .PHONY: configure
@@ -222,6 +224,7 @@ lint: ## Static checks: yamllint, ansible-lint, terraform, gitleaks
 	python scripts/check_k8s_schema.py
 	python -m compileall -q scripts compliance tests ai response soc
 	find scripts clab/configs -type f -name '*.sh' -print0 | xargs -0 -n1 bash -n
+	find scripts clab docker soc k8s -name '*.sh' -print0 | xargs -0 shellcheck -S warning
 	python compliance/check_wiring.py
 	python -m pytest tests/unit tests/soc -q
 	docker compose --env-file .env.example --profile siem --profile ids --profile ztna --profile dmz --profile soc --profile soc-ai --profile dmzlab config --quiet

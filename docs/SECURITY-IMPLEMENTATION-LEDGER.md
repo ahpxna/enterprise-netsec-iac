@@ -1038,3 +1038,38 @@ without `--with-lstm` as documented, COR-01/RESP-01/RESP-03/SOC-01..03 fail clos
   password nowhere in normalized or raw documents (deep scan), one `honeypot` decision signal from the decision runner's own
   query. Run live (PASS) and against a pipeline with the redaction removed (FAIL, naming the three leaking fields).
 - **Docs:** `docs/TEST-EVERYTHING.md`, the complete test plan from offline gates to Paths B and C with the corners to check by hand.
+
+---
+
+## INC-076 — First full Path A run on Linux (Kali, kernel 6.16): what passed, what was mis-reported
+
+**Status:** the one-command runner ran the full lab on a real x86-64 Linux host (2026-10-18, from a source download
+without `.git`, before the fixes of PR #4 were available there). The fixes made on that host are integrated as
+"Fix Linux lab bring-up on Kali / kernel 6.16" (runner on Kali, VRRP bootstrap and ARP/linkdown sysctls, management
+egress via table 100 for routers, edge ISP default import, Wazuh rules/decoders, nf_log_all_netns, Kibana 403 retry,
+provenance without `.git`, RTR-01/HA-01 parsers). Its run logs were reviewed for secrets (none found) and are not
+part of `main`.
+
+- **Real results:** 12/12 nodes, DMZ lab reachable/counted/contained, `soc-smoke` PASS. With the real nftables agents,
+  **COR-01, RESP-01, RESP-03, SOC-01, SOC-02, SOC-03 PASS** (containment applied, verified and expired on both
+  firewalls), LOG-01..03, AI-02..04 PASS, RTR-01 PASS. AI-01 failed with the same symptom as BUG-075-A (vector built,
+  never scored): the service API keys were rotated under the running workers, fixed in PR #4.
+- **BUG-076-A — HA-01 passed without traffic.** pc1 got 13 replies, "Destination Net Unreachable" right after dist1 was
+  shut, then nothing; the check measured the largest gap between successful replies anywhere in the capture (0.109 s)
+  and passed. `scripts/vrrp_failover_check.py` now requires traffic while the master is down: the longest
+  interruption from shutdown through the replies to the restore must stay under 5 s, with at least 5 replies. HA-01
+  will FAIL honestly until the failover itself works. (Path B already required 35 of 70 replies.)
+- **BUG-076-B — controls with evidence reported UNVERIFIED.** Every `make` created its own evidence run; the report
+  reads one. The runner now uses one run id (`TS`) for the whole session.
+- **BUG-076-C — wrong cause.** `configure` failed because the routers could not install rsyslog (their default route
+  had moved into the fabric; fixed on that host by management table 100, mechanism re-checked in a container), but
+  the report said TIME-01, matched in a task that had succeeded. Hints now come from the failure region first.
+- **BUG-076-D — `make validate` stopped at the VPN probe:** Docker had created `./wireguard` as root. `make security`
+  creates the bind-mount sources as the user; the script explains the chown fix.
+- **BUG-076-E — shell scripts were never linted in CI.** A malformed shellcheck directive (on `main` since the DC
+  network script) disabled analysis of that file, and a new arithmetic test used bare names. Both fixed; every
+  shell script is now shellcheck-clean and CI runs `shellcheck -S warning`.
+- **Still open from that run:** DET-01 (the scan was enforced, counter +4, but no Wazuh rule 100201 alert; the Wazuh
+  rule/decoder and `nf_log_all_netns` fixes target it but have not been re-run), the VRRP failover itself (dist2
+  answered "Net Unreachable"), and the network controls SEG/IDM/HRD/DET-02/VPN-01/ZTNA-01, which never ran because
+  `configure` and `vpn-probe` failed. TIME-01 needs the host clock on NTS.

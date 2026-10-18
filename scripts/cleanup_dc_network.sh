@@ -6,7 +6,8 @@ state_file="$ROOT/.cxyz-state/dc-network.env"
 bridge_name="br-cxyz-dc"
 firewall_gateway="172.16.50.254"
 [[ -f "$state_file" ]] || exit 0
-# shellcheck disable=SC1090 -- file is generated locally by ensure_dc_network.sh with %q
+# The state file is generated locally by ensure_dc_network.sh with %q.
+# shellcheck disable=SC1090
 source "$state_file"
 if (( EUID == 0 )); then SUDO=(); else SUDO=(sudo); fi
 
@@ -27,5 +28,8 @@ restore_route() {
 restore_route 10.255.0.0/16 "${ROUTE_INFRA_BEFORE_B64:-}"
 restore_route 192.168.0.0/16 "${ROUTE_CAMPUS_BEFORE_B64:-}"
 "${SUDO[@]}" sysctl -w "net.ipv4.ip_forward=${IP_FORWARD_BEFORE:-0}" >/dev/null
+if [[ -n "${NF_LOG_ALL_NETNS_BEFORE:-}" ]]; then
+  "${SUDO[@]}" sysctl -w "net.netfilter.nf_log_all_netns=${NF_LOG_ALL_NETNS_BEFORE}" >/dev/null
+fi
 rm -f "$state_file"
 rmdir "$ROOT/.cxyz-state" 2>/dev/null || true
