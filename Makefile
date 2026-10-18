@@ -77,6 +77,8 @@ authentik-preflight: ## Block unsafe reuse of a legacy Authentik database volume
 
 .PHONY: security
 security: authentik-preflight images dc-network wazuh-config ## Deploy SIEM + IDS + Zero-Trust gateway + DMZ app
+	@# Bind-mount sources Docker would otherwise create as root (then `make vpn-probe` cannot write the probe config).
+	@mkdir -p wireguard/config wireguard/probe
 	docker compose --profile siem --profile ids --profile ztna --profile dmz up -d
 
 .PHONY: configure

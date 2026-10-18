@@ -43,7 +43,12 @@ def main() -> int:
         print("WG_SERVER_PORT must be between 1 and 65535", file=sys.stderr)
         return 1
 
-    text = SOURCE.read_text()
+    try:
+        text = SOURCE.read_text()
+    except PermissionError:
+        print(f"cannot read {SOURCE.relative_to(ROOT)}: the WireGuard container writes it as uid 1000 (PUID); "
+              'run as that user or fix it with: sudo chown -R "$(id -u):$(id -g)" wireguard', file=sys.stderr)
+        return 1
     if "[Interface]" not in text or "[Peer]" not in text:
         print("peer1.conf does not look like a WireGuard client profile", file=sys.stderr)
         return 1
@@ -56,9 +61,16 @@ def main() -> int:
     if endpoint_count != 1 or allowed_count != 1:
         print("peer1.conf is missing Endpoint or AllowedIPs", file=sys.stderr)
         return 1
-    DEST.parent.mkdir(parents=True, exist_ok=True)
-    DEST.write_text(text)
-    DEST.chmod(0o600)
+    try:
+        DEST.parent.mkdir(parents=True, exist_ok=True)
+        DEST.write_text(text)
+        DEST.chmod(0o600)
+    except PermissionError as exc:
+        # Docker creates a missing bind-mount source (./wireguard/...) as root.
+        print(f"cannot write {DEST.relative_to(ROOT)}: {exc.strerror} ({exc.filename}). The directory was "
+              'probably created by Docker as root; fix it with: sudo chown -R "$(id -u):$(id -g)" wireguard',
+              file=sys.stderr)
+        return 1
     print(f"rendered ignored VPN probe config: {DEST.relative_to(ROOT)}")
     return 0
 
